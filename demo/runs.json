@@ -1,0 +1,61 @@
+{
+ "runs": [
+  {
+   "id": "run-3",
+   "kind": "action",
+   "display": "sr relay vote --json --source ui -- 'Pick a one-word theme for the harvest supper.'",
+   "started": "2026-10-19T11:03:00+00:00",
+   "pid": 41003,
+   "running": false,
+   "exit": 2,
+   "envelope": {
+    "task_id": null,
+    "n": null,
+    "status": null,
+    "waiting_on": null,
+    "outcome": null,
+    "reason_code": "slot_refused",
+    "exit": 2,
+    "message": "Refused: vote can't run now: slot c (Grok Bot): Grok Bot isn't set up: no inbox repo in settings; no other agent can vote there (ChatGPT is in slot b; Claude is in slot a). Nothing was logged or sent."
+   },
+   "message": "Refused: vote can't run now: slot c (Grok Bot): Grok Bot isn't set up: no inbox repo in settings; no other agent can vote there (ChatGPT is in slot b; Claude is in slot a). Nothing was logged or sent.",
+   "stderr": "",
+   "task_id": null
+  },
+  {
+   "id": "run-2",
+   "kind": "action",
+   "display": "sr relay versus --json --source ui -- '@claude hi'",
+   "started": "2026-10-19T11:02:00+00:00",
+   "pid": 41002,
+   "running": false,
+   "exit": 2,
+   "envelope": {
+    "task_id": null,
+    "n": null,
+    "status": null,
+    "waiting_on": null,
+    "outcome": null,
+    "reason_code": "override_refused",
+    "exit": 2,
+    "message": "Refused: an override prefix on a relay task is refused (@claude); the preset already names the agents. Nothing was logged or sent."
+   },
+   "message": "Refused: an override prefix on a relay task is refused (@claude); the preset already names the agents. Nothing was logged or sent.",
+   "stderr": "",
+   "task_id": null
+  },
+  {
+   "id": "run-1",
+   "kind": "check",
+   "display": "sr check --json",
+   "started": "2026-10-19T11:01:00+00:00",
+   "pid": null,
+   "running": false,
+   "exit": 0,
+   "envelope": null,
+   "message": "Nothing to check.",
+   "stderr": "",
+   "task_id": null
+  }
+ ]
+}

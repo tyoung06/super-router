@@ -1,0 +1,1 @@
+Beans on poles, a row of kale and two tomato cages.

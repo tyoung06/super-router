@@ -1,0 +1,152 @@
+{
+  "version": 3.3,
+  "updated": "2026-10-13",
+  "status": "Version 3.3. Media (SUPER-ROUTER.md v2.10): read_media and make_media are routed again. Nothing Jev sees changed since version 3, which Jev passed round 2 on (28 of 30) and the 30-task trial on (29 of 30); tests/test_jev_payload_v3_1.py proves the payload equals version 3.1's.",
+  "models": [
+    "claude",
+    "chatgpt",
+    "grok",
+    "muse"
+  ],
+  "labeler": {
+    "jev_model": "jev-1.13.0",
+    "jev_model_note": "Pinned on purpose. The alias jev-latest moves when TypeSafe ships a release, which would shift scores without warning.",
+    "api_key_env": "JEV_API_KEY",
+    "api_key_note": "TypeSafe's Python SDK reads TYPESAFE_API_KEY by default. Pass the key in explicitly: TypeSafeClient(api_key=os.environ['JEV_API_KEY']).",
+    "question": "Which one skill does this task mainly need?",
+    "fallback_label": "none_of_these",
+    "fallback_description": "The task fits none of the other skills: a reminder or alarm, small talk, a personal decision, or a message too unclear to label.",
+    "second_question": {
+      "id": "needs_split",
+      "type": "noul",
+      "instructions": "Does this task need two or more of the listed skills to finish?",
+      "note": "Logged only, not scored. In round 1 the median answer was 0.53, so it does not separate tasks cleanly. The owner has not decided whether to keep it."
+    },
+    "shuffle_options": true,
+    "shuffle_note": "TypeSafe's docs say Jev 1.13 can lean toward the first option in a list. Shuffle the option order on every call.",
+    "min_confidence": 0.8,
+    "min_confidence_note": "Provisional. Below it, the router asks the owner instead of routing. Recheck after round 2.",
+    "criteria_format_note": "When a skill has a not_for field, send Jev an object for that option: {\"what\": description, \"not_for\": not_for}. Otherwise send the description string."
+  },
+  "skills": {
+    "x_social_pulse": {
+      "description": "Find out what people on X (Twitter) are saying right now: sentiment, breaking news, memecoin chatter.",
+      "best": "grok",
+      "second": "chatgpt",
+      "confidence": "medium",
+      "note": "Verifier opens the source links and cross-checks on the open web. It has no X feed.",
+      "interim": null
+    },
+    "meta_social_trends": {
+      "description": "Find trends or posts on Instagram, Threads or Facebook.",
+      "best": "grok",
+      "second": "chatgpt",
+      "confidence": "low",
+      "note": "Neither has a Meta feed; both have the open web, and Grok also has X as a proxy for what is trending. The owner's pair, 2026-10-13, low confidence. Muse (deferred) was the best agent in versions 3 and 3.1.",
+      "interim": null
+    },
+    "read_media": {
+      "description": "Describe or pull information out of an image, screenshot or video that the task provides.",
+      "best": "claude",
+      "second": "chatgpt",
+      "confidence": "medium",
+      "note": "The router copies the file to both. Video goes as still frames. ChatGPT gets images through Codex's image flag (found 13 Oct, live test pending); a PDF it cannot view, so its check of a PDF is a sanity check only.",
+      "interim": null
+    },
+    "web_research": {
+      "description": "Look up facts on the open web or check whether a claim is true, with source links. Not social media chatter.",
+      "best": "chatgpt",
+      "second": "claude",
+      "confidence": "low",
+      "note": "Results must come back with source links.",
+      "not_for": "Questions that can be answered from general knowledge with no lookup, such as math, unit conversions or definitions.",
+      "interim": null
+    },
+    "code": {
+      "description": "Write, fix or explain code, bots or scripts.",
+      "best": "claude",
+      "second": "chatgpt",
+      "confidence": "low",
+      "note": "Near tie. Claude builds because the repos and files live in its workspace. Never send code to Muse's contributor tier: Meta trains on it.",
+      "interim": null
+    },
+    "writing": {
+      "description": "Write, edit or translate text for people to read: copy, newsletters, posts, docs.",
+      "best": "claude",
+      "second": "chatgpt",
+      "confidence": "low",
+      "note": "Sources split.",
+      "interim": null
+    },
+    "planning": {
+      "description": "Break a goal into steps or split a big task into smaller tasks, without doing the steps.",
+      "best": "claude",
+      "second": "chatgpt",
+      "confidence": "low",
+      "note": "",
+      "interim": null
+    },
+    "computer_use": {
+      "description": "Carry out actions in a browser or on a computer: click, fill in forms, log in, navigate a site.",
+      "best": "chatgpt",
+      "second": "claude",
+      "confidence": "medium",
+      "note": "",
+      "interim": null
+    },
+    "make_media": {
+      "description": "Create a new image or video.",
+      "best": "grok",
+      "second": "claude",
+      "confidence": "medium",
+      "note": "Grok Imagine on the Grok plan, committed to the inbox repo: proven 13 Oct. Claude checks by viewing the image. Images only: Grok Bot has no video generation.",
+      "interim": null
+    },
+    "bulk_text": {
+      "description": "Apply the same simple step to many items: tag, sort or summarize a large batch of posts or rows.",
+      "best": "claude",
+      "second": "grok",
+      "confidence": "medium",
+      "note": "Claude does it, Grok spot-checks a sample. Task #6 (2026-10-13) is the evidence: Claude did it, Grok passed it.",
+      "interim": null
+    },
+    "quick_answer": {
+      "description": "Answer a simple question from general knowledge: math, unit conversions, definitions.",
+      "not_for": "Anything that needs today's facts, prices, dates or a source link.",
+      "best": "claude",
+      "second": null,
+      "verify": false,
+      "confidence": "medium",
+      "note": "The one skill with no verifier. See SUPER-ROUTER.md, Checking.",
+      "interim": null
+    }
+  },
+  "changes_from_v2": [
+    "Added an 11th skill, quick_answer. Claude answers alone with no verifier. The owner's decision, 6 Oct.",
+    "Added not_for lines to quick_answer and web_research so Jev can tell them apart.",
+    "writing now names translation. The owner's second look put a translation task there.",
+    "The none_of_these wording now names reminders, small talk and personal decisions.",
+    "min_confidence set to 0.8 from round 1: Jev was right 41 of 44 times at 0.8 and up, 2 of 5 below."
+  ],
+  "changes_from_v3": [
+    "Added an interim field to each skill: the live agent that does the work until the best agent is switched on. null means the task comes back to the owner.",
+    "Fixed the quick_answer note to point at SUPER-ROUTER.md, Checking.",
+    "No description, not_for line or pair changed. Nothing Jev sees is different."
+  ],
+  "interim_note": "All null since 2026-10-13: every best agent is live. If an agent is switched off, its skills come back to the owner rather than silently going to a stand-in.",
+  "changes_from_v3_1": [
+    "Muse deferred (SUPER-ROUTER.md v2.9). Nothing names it as best, second or interim. It stays in models and in agents.json (live false) so the door stays open.",
+    "bulk_text: best claude, second grok (was muse / grok). Evidence: task #6, 2026-10-13.",
+    "meta_social_trends: best grok, second chatgpt (was muse / grok). The owner's pair; low confidence.",
+    "read_media: not routed in v2 (agents.json skills_not_routed). best claude and second null are placeholders the validator needs; the router sends text only.",
+    "make_media: second null (was muse).",
+    "Every interim set to null: every best agent is live. If an agent is switched off, its skills come back to the owner instead of silently going to a stand-in.",
+    "No description, not_for line, skill name or option count changed. tests/test_jev_payload_v3_1.py proves the Jev payload equals version 3.1's."
+  ],
+  "changes_from_v3_2": [
+    "read_media: best claude, second chatgpt, medium (was claude / null, not routed). The router copies the file to both; video goes as still frames.",
+    "make_media: best grok, second claude, medium (was chatgpt / null, not routed). Grok Imagine on the plan, committed to the inbox repo; Claude checks by viewing the image.",
+    "Both leave skills_not_routed in agents.json (rules v2.10). computer_use stays not routed.",
+    "Nothing Jev sees is different."
+  ]
+}

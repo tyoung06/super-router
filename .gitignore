@@ -1,0 +1,39 @@
+.env
+.env.*
+!.env.example
+router.db
+router.db-journal
+workspace/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.DS_Store
+router.db*
+backups/
+.worktrees/
+media/
+
+# sr probe: the Claude Code version the search check passed on (build brief 8)
+probe_state.json
+
+# sr project: the registry of project folders, with this machine's paths (build brief 18)
+config/projects.json
+
+# sr project add super-router: the router's project memory, written by the router (rules v2.25); never Claude Code's handoff
+HANDOFF.md
+
+# Build brief 21 (the owner's B1 amendment): this Mac's own settings over config/settings.json, key by key (report_path)
+config/settings.local.json
+
+# Build brief 21, C1 (rules v2.30, Round outputs): every call's output as its own file, beside the log; never committed
+tasks/
+
+# Build brief 22: a run's notes, locks and waits, beside the log; never committed
+run/
+
+# Build brief 23 (decision 15): the demo's invented documents and sample files are committed, so a fresh clone shows
+# `sr serve --demo`; the real media/ and tasks/ above stay ignored
+!/demo/tasks/
+!/demo/files/tasks/
+!/demo/files/media/

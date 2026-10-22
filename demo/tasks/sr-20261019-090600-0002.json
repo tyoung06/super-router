@@ -1,0 +1,212 @@
+{
+ "api_version": 1,
+ "task_id": "sr-20261019-090600-0002",
+ "n": 2,
+ "created_at": "2026-10-19T09:06:06+00:00",
+ "updated_at": "2026-10-19T09:06:24+00:00",
+ "sent_at": null,
+ "source": "cli",
+ "text": "Draft a 40-word notice that the garden's tool shed now opens at 7 am.",
+ "status": "done",
+ "waiting_on": null,
+ "outcome": "fixed",
+ "reason_code": null,
+ "mode": "route",
+ "preset": null,
+ "parent": null,
+ "project": null,
+ "chat": "garden",
+ "tag": "chat:garden",
+ "skill": "writing",
+ "skill_source": "jev",
+ "agent": "claude",
+ "checker": "chatgpt",
+ "check_state": "fixed",
+ "check_note": null,
+ "route_reason": "best",
+ "failed_stage": null,
+ "web": false,
+ "files": [],
+ "result": "From Monday, the tool shed opens at 7 am on weekdays.",
+ "result_url": null,
+ "jev": {
+  "status": "ok",
+  "label": "writing",
+  "confidence": 0.94,
+  "tokens": 640,
+  "needs_split": 0.08,
+  "error": null
+ },
+ "slots": null,
+ "working": null,
+ "fallback": {
+  "ok": false,
+  "agent": null,
+  "reason": "not a double fail: it passed after one fix"
+ },
+ "resume": {
+  "ok": false,
+  "substitute": null,
+  "agent": null,
+  "checker": null,
+  "reason": "it is done; only a task stopped by a plan limit or by a process that ended can be resumed"
+ },
+ "pid": null,
+ "run_started_at": null,
+ "answered_by": null,
+ "stand_in": null,
+ "filled": null,
+ "card_line": null,
+ "takeover": null,
+ "late": null,
+ "calls": [
+  {
+   "call_id": "sr-20261019-090600-0002",
+   "order": 1,
+   "kind": "do",
+   "stage": null,
+   "role": null,
+   "agent": "claude",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T09:06:12+00:00",
+   "finished_at": "2026-10-19T09:06:12+00:00",
+   "round_file": "tasks/sr-20261019-090600-0002/01-do-claude.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "off (probe not passed)",
+    "count": null
+   },
+   "memory": {
+    "state": "sent",
+    "sent": 1,
+    "found": 1,
+    "from": null,
+    "with": null,
+    "limit": null
+   }
+  },
+  {
+   "call_id": "sr-20261019-090600-0002-c1",
+   "order": 2,
+   "kind": "check",
+   "stage": null,
+   "role": null,
+   "agent": "chatgpt",
+   "status": "done",
+   "verdict": "FIX",
+   "sent_at": "2026-10-19T09:06:15+00:00",
+   "finished_at": "2026-10-19T09:06:15+00:00",
+   "round_file": "tasks/sr-20261019-090600-0002/02-check-chatgpt.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "allowed",
+    "count": null
+   },
+   "memory": {
+    "state": "sent",
+    "sent": 1,
+    "found": 1,
+    "from": "sr-20261019-090600-0002",
+    "with": null,
+    "limit": null
+   }
+  },
+  {
+   "call_id": "sr-20261019-090600-0002-f1",
+   "order": 3,
+   "kind": "fix",
+   "stage": null,
+   "role": null,
+   "agent": "claude",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T09:06:18+00:00",
+   "finished_at": "2026-10-19T09:06:18+00:00",
+   "round_file": "tasks/sr-20261019-090600-0002/03-fix-claude.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "off (probe not passed)",
+    "count": null
+   },
+   "memory": {
+    "state": "sent",
+    "sent": 1,
+    "found": 1,
+    "from": "sr-20261019-090600-0002",
+    "with": null,
+    "limit": null
+   }
+  },
+  {
+   "call_id": "sr-20261019-090600-0002-c2",
+   "order": 4,
+   "kind": "recheck",
+   "stage": null,
+   "role": null,
+   "agent": "chatgpt",
+   "status": "done",
+   "verdict": "PASS",
+   "sent_at": "2026-10-19T09:06:21+00:00",
+   "finished_at": "2026-10-19T09:06:21+00:00",
+   "round_file": "tasks/sr-20261019-090600-0002/04-recheck-chatgpt.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "allowed",
+    "count": null
+   },
+   "memory": {
+    "state": "sent",
+    "sent": 1,
+    "found": 1,
+    "from": "sr-20261019-090600-0002",
+    "with": null,
+    "limit": null
+   }
+  }
+ ],
+ "handoff": null,
+ "memory_stored": [
+  {
+   "document_id": "task-sr-20261019-090600-0002",
+   "chars": 124,
+   "state": "done/fixed/4",
+   "at": "2026-10-19T09:06:27+00:00"
+  }
+ ],
+ "memory_given": [
+  {
+   "n": 1,
+   "date": "2026-10-19",
+   "kind": "writing",
+   "doer": "claude",
+   "status": null,
+   "text": "Write a two-sentence welcome for the Maple Street community garden newsletter.\n\nWelcome to the Maple Street garden! Bring gloves, bring friends, and take home what you grow."
+  }
+ ],
+ "candidates": null,
+ "pick": null,
+ "votes": null,
+ "tally": null,
+ "attacks": null,
+ "pieces": null,
+ "join": null,
+ "original_file": "tasks/sr-20261019-090600-0002/01-do-claude.md",
+ "result_file": "tasks/sr-20261019-090600-0002/03-fix-claude.md"
+}

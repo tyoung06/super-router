@@ -1,0 +1,11 @@
+{
+  "note": "Only the owner changes a live flag. Rule 12: a new agent goes live only after its send test, its return test and 3 real tasks.",
+  "agents": {
+    "claude": {"live": true},
+    "grok": {"live": true},
+    "chatgpt": {"live": true, "model": "gpt-6.1-sol"},
+    "cursor": {"live": true, "model": "grok-4.7-high"},
+    "muse": {"live": false}
+  },
+  "skills_not_routed": ["computer_use"]
+}

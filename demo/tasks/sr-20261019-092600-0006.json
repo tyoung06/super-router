@@ -1,0 +1,230 @@
+{
+ "api_version": 1,
+ "task_id": "sr-20261019-092600-0006",
+ "n": 6,
+ "created_at": "2026-10-19T09:26:03+00:00",
+ "updated_at": "2026-10-19T09:29:03+00:00",
+ "sent_at": null,
+ "source": "cli",
+ "text": "A one-line slogan for a bike repair cafe.",
+ "status": "done",
+ "waiting_on": null,
+ "outcome": "picked",
+ "reason_code": null,
+ "mode": "relay",
+ "preset": "versus",
+ "parent": null,
+ "project": null,
+ "chat": null,
+ "tag": null,
+ "skill": null,
+ "skill_source": null,
+ "agent": "claude",
+ "checker": "chatgpt",
+ "check_state": "passed",
+ "check_note": "picked a; review by chatgpt: pass",
+ "route_reason": "relay",
+ "failed_stage": null,
+ "web": false,
+ "files": [],
+ "result": "Fix it over coffee.",
+ "result_url": null,
+ "jev": {
+  "status": "not_asked",
+  "label": null,
+  "confidence": null,
+  "tokens": 0,
+  "needs_split": null,
+  "error": null
+ },
+ "slots": {
+  "a": "claude",
+  "b": "chatgpt"
+ },
+ "working": null,
+ "fallback": {
+  "ok": false,
+  "agent": null,
+  "reason": "not eligible: a versus task; run it again"
+ },
+ "resume": {
+  "ok": false,
+  "substitute": null,
+  "agent": null,
+  "checker": null,
+  "reason": "it is done; only a task stopped by a plan limit or by a process that ended can be resumed"
+ },
+ "pid": null,
+ "run_started_at": null,
+ "answered_by": null,
+ "stand_in": null,
+ "filled": null,
+ "card_line": null,
+ "takeover": null,
+ "late": null,
+ "calls": [
+  {
+   "call_id": "sr-20261019-092600-0006-s1",
+   "order": 1,
+   "kind": "stage",
+   "stage": 1,
+   "role": "build",
+   "agent": "claude",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T09:26:09+00:00",
+   "finished_at": "2026-10-19T09:26:09+00:00",
+   "round_file": "tasks/sr-20261019-092600-0006/01-build-a-claude.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "off (probe not passed)",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null
+   }
+  },
+  {
+   "call_id": "sr-20261019-092600-0006-s2",
+   "order": 2,
+   "kind": "stage",
+   "stage": 2,
+   "role": "build",
+   "agent": "chatgpt",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T09:26:12+00:00",
+   "finished_at": "2026-10-19T09:26:12+00:00",
+   "round_file": "tasks/sr-20261019-092600-0006/02-build-b-chatgpt.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "allowed",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null
+   }
+  },
+  {
+   "call_id": "sr-20261019-092600-0006-s3",
+   "order": 3,
+   "kind": "stage",
+   "stage": 3,
+   "role": "review",
+   "agent": "chatgpt",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T09:26:15+00:00",
+   "finished_at": "2026-10-19T09:26:15+00:00",
+   "round_file": "tasks/sr-20261019-092600-0006/03-review-a-chatgpt.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "allowed",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null
+   }
+  },
+  {
+   "call_id": "sr-20261019-092600-0006-s4",
+   "order": 4,
+   "kind": "stage",
+   "stage": 4,
+   "role": "review",
+   "agent": "claude",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T09:26:18+00:00",
+   "finished_at": "2026-10-19T09:26:18+00:00",
+   "round_file": "tasks/sr-20261019-092600-0006/04-review-b-claude.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "off (probe not passed)",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null
+   }
+  }
+ ],
+ "handoff": null,
+ "memory_stored": [],
+ "memory_given": [],
+ "candidates": [
+  {
+   "letter": "a",
+   "stage": 1,
+   "builder": "claude",
+   "text": "Fix it over coffee.",
+   "missing": null,
+   "round_file": "tasks/sr-20261019-092600-0006/01-build-a-claude.md",
+   "review": {
+    "stage": 3,
+    "reviewer": "chatgpt",
+    "verdict": "pass",
+    "notes": "- Wrong: nothing.\n- Strong: short and concrete.",
+    "round_file": "tasks/sr-20261019-092600-0006/03-review-a-chatgpt.md"
+   }
+  },
+  {
+   "letter": "b",
+   "stage": 2,
+   "builder": "chatgpt",
+   "text": "Bring a flat, leave with a smile.",
+   "missing": null,
+   "round_file": "tasks/sr-20261019-092600-0006/02-build-b-chatgpt.md",
+   "review": {
+    "stage": 4,
+    "reviewer": "claude",
+    "verdict": "pass",
+    "notes": "- Wrong: nothing.\n- Strong: short and concrete.",
+    "round_file": "tasks/sr-20261019-092600-0006/04-review-b-claude.md"
+   }
+  }
+ ],
+ "pick": "a",
+ "votes": null,
+ "tally": null,
+ "attacks": null,
+ "pieces": null,
+ "join": null,
+ "original_file": "tasks/sr-20261019-092600-0006/01-build-a-claude.md",
+ "result_file": "tasks/sr-20261019-092600-0006/01-build-a-claude.md"
+}

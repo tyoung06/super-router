@@ -1,0 +1,1448 @@
+{
+ "agents": [
+  {
+   "name": "claude",
+   "live": true,
+   "configured": true,
+   "online": true,
+   "checked_at": "2026-10-19T11:39:48+00:00",
+   "reason": null,
+   "model": "sonnet",
+   "served_model": null,
+   "version": "2.1.306",
+   "probe": {
+    "passed_on": "2.1.306",
+    "current": "2.1.306",
+    "state": "passed",
+    "web_files": "passed"
+   },
+   "calls_this_week": 31,
+   "available": true,
+   "why": null,
+   "why_code": null
+  },
+  {
+   "name": "chatgpt",
+   "live": true,
+   "configured": true,
+   "online": false,
+   "checked_at": "2026-10-19T11:39:48+00:00",
+   "reason": "not signed in with ChatGPT (codex login)",
+   "model": "gpt-6.1-sol",
+   "served_model": null,
+   "version": "0.162.1",
+   "probe": {
+    "passed_on": null,
+    "current": "0.162.1",
+    "state": "missing"
+   },
+   "calls_this_week": 24,
+   "available": false,
+   "why": "ChatGPT is signed out (codex login)",
+   "why_code": "signed_out"
+  },
+  {
+   "name": "grok",
+   "live": true,
+   "configured": false,
+   "online": null,
+   "checked_at": null,
+   "reason": "not configured",
+   "model": null,
+   "served_model": null,
+   "version": null,
+   "probe": null,
+   "calls_this_week": 8,
+   "available": false,
+   "why": "Grok Bot isn't set up: no GROK_WEBHOOK_URL or GROK_WEBHOOK_KEY in .env; no inbox repo in settings",
+   "why_code": "not_configured"
+  },
+  {
+   "name": "cursor",
+   "live": true,
+   "configured": true,
+   "online": true,
+   "checked_at": "2026-10-19T11:39:48+00:00",
+   "reason": null,
+   "model": "grok-4.7-high",
+   "served_model": null,
+   "version": "2026.10.19-6bbf2c4",
+   "probe": {
+    "passed_on": "2026.10.12-a1b2c3d",
+    "current": "2026.10.19-6bbf2c4",
+    "state": "failed"
+   },
+   "calls_this_week": 0,
+   "available": false,
+   "why": "Cursor is off: its safety check failed on agent 2026.10.19-6bbf2c4",
+   "why_code": "probe_failed"
+  }
+ ],
+ "presets": [
+  {
+   "name": "research-build",
+   "description": "One agent researches the web and X, a second builds from what it found, and a third checks the result.",
+   "chain": "Grok research → Claude build → ChatGPT check",
+   "agents": [
+    "grok",
+    "claude",
+    "chatgpt"
+   ],
+   "slots": [
+    {
+     "name": "research",
+     "default": "grok",
+     "allowed": [
+      "claude"
+     ]
+    },
+    {
+     "name": "build",
+     "default": "claude",
+     "allowed": [
+      "claude"
+     ]
+    },
+    {
+     "name": "check",
+     "default": "chatgpt",
+     "allowed": [
+      "claude"
+     ]
+    }
+   ],
+   "project": true,
+   "project_refuses": [
+    "cursor"
+   ],
+   "ready": false,
+   "why": "research-build can't run now: slot check (ChatGPT): ChatGPT is signed out (codex login); no other agent can check there (Claude is in slot build)",
+   "filled": []
+  },
+  {
+   "name": "collab",
+   "description": "Two agents work as a pair: one plans, the other improves the plan, the first does the work, and the second edits and checks it.",
+   "chain": "Claude plan → ChatGPT amend → Claude build → ChatGPT edit (check)",
+   "agents": [
+    "claude",
+    "chatgpt"
+   ],
+   "slots": [
+    {
+     "name": "lead",
+     "default": "claude",
+     "allowed": [
+      "claude"
+     ]
+    },
+    {
+     "name": "partner",
+     "default": "chatgpt",
+     "allowed": [
+      "claude"
+     ]
+    }
+   ],
+   "project": false,
+   "project_refuses": [
+    "cursor"
+   ],
+   "ready": false,
+   "why": "collab can't run now: slot partner (ChatGPT): ChatGPT is signed out (codex login); no other agent can amend the plan there (Claude is in slot lead)",
+   "filled": []
+  },
+  {
+   "name": "versus",
+   "description": "Two agents each build their own answer from the task alone and review each other's, then you pick the winner.",
+   "chain": "Claude build → ChatGPT build → ChatGPT review → Claude review → your pick",
+   "agents": [
+    "claude",
+    "chatgpt"
+   ],
+   "slots": [
+    {
+     "name": "a",
+     "default": "claude",
+     "allowed": [
+      "claude"
+     ]
+    },
+    {
+     "name": "b",
+     "default": "chatgpt",
+     "allowed": [
+      "claude"
+     ]
+    }
+   ],
+   "project": false,
+   "project_refuses": [
+    "cursor"
+   ],
+   "ready": false,
+   "why": "versus can't run now: slot b (ChatGPT): ChatGPT is signed out (codex login); no other agent can build there (Claude is in slot a)",
+   "filled": []
+  },
+  {
+   "name": "redteam",
+   "description": "One agent builds, a second attacks it to find the weak spots, the builder fixes them, and a checker confirms the fixes.",
+   "chain": "Claude build → ChatGPT attack → Claude revise → ChatGPT check",
+   "agents": [
+    "claude",
+    "chatgpt"
+   ],
+   "slots": [
+    {
+     "name": "build",
+     "default": "claude",
+     "allowed": [
+      "claude"
+     ]
+    },
+    {
+     "name": "attack",
+     "default": "chatgpt",
+     "allowed": [
+      "claude"
+     ]
+    },
+    {
+     "name": "check",
+     "default": "chatgpt",
+     "allowed": [
+      "claude"
+     ]
+    }
+   ],
+   "project": true,
+   "project_refuses": [
+    "cursor"
+   ],
+   "ready": false,
+   "why": "redteam can't run now: slot attack (ChatGPT): ChatGPT is signed out (codex login); no other agent can attack there (Claude is in slot build)",
+   "filled": []
+  },
+  {
+   "name": "vote",
+   "description": "Three agents answer the same short question on their own; the majority wins, and a tie comes to you.",
+   "chain": "Claude vote → ChatGPT vote → Grok vote → tally",
+   "agents": [
+    "claude",
+    "chatgpt",
+    "grok"
+   ],
+   "slots": [
+    {
+     "name": "a",
+     "default": "claude",
+     "allowed": [
+      "claude"
+     ]
+    },
+    {
+     "name": "b",
+     "default": "chatgpt",
+     "allowed": [
+      "claude"
+     ]
+    },
+    {
+     "name": "c",
+     "default": "grok",
+     "allowed": [
+      "claude"
+     ]
+    }
+   ],
+   "project": false,
+   "project_refuses": [
+    "cursor"
+   ],
+   "ready": false,
+   "why": "vote can't run now: slot b (ChatGPT): ChatGPT is signed out (codex login); no other agent can vote there (Claude is in slot a)",
+   "filled": []
+  }
+ ],
+ "skills": [
+  {
+   "key": "x_social_pulse",
+   "description": "Find out what people on X (Twitter) are saying right now: sentiment, breaking news, memecoin chatter.",
+   "not_for": null,
+   "best": "grok",
+   "second": "chatgpt",
+   "now": {
+    "doer": null,
+    "checker": null,
+    "stand_in": null,
+    "unchecked": null,
+    "note": "needs Grok Bot",
+    "comes_back": "x_social_pulse needs Grok Bot: Grok Bot isn't set up: no GROK_WEBHOOK_URL or GROK_WEBHOOK_KEY in .env; no inbox repo in settings"
+   }
+  },
+  {
+   "key": "meta_social_trends",
+   "description": "Find trends or posts on Instagram, Threads or Facebook.",
+   "not_for": null,
+   "best": "grok",
+   "second": "chatgpt",
+   "now": {
+    "doer": "claude",
+    "checker": null,
+    "stand_in": {
+     "for": "grok",
+     "why": "Grok Bot isn't set up: no GROK_WEBHOOK_URL or GROK_WEBHOOK_KEY in .env; no inbox repo in settings"
+    },
+    "unchecked": "no other agent available to check (ChatGPT is signed out (codex login))",
+    "note": "done without Meta",
+    "comes_back": null
+   }
+  },
+  {
+   "key": "read_media",
+   "description": "Describe or pull information out of an image, screenshot or video that the task provides.",
+   "not_for": null,
+   "best": "claude",
+   "second": "chatgpt",
+   "now": {
+    "doer": "claude",
+    "checker": null,
+    "stand_in": null,
+    "unchecked": "no other agent available to check (ChatGPT is signed out (codex login))",
+    "note": null,
+    "comes_back": null
+   }
+  },
+  {
+   "key": "web_research",
+   "description": "Look up facts on the open web or check whether a claim is true, with source links. Not social media chatter.",
+   "not_for": "Questions that can be answered from general knowledge with no lookup, such as math, unit conversions or definitions.",
+   "best": "chatgpt",
+   "second": "claude",
+   "now": {
+    "doer": "claude",
+    "checker": null,
+    "stand_in": {
+     "for": "chatgpt",
+     "why": "ChatGPT is signed out (codex login)"
+    },
+    "unchecked": "no other agent available to check (ChatGPT is signed out (codex login))",
+    "note": null,
+    "comes_back": null
+   }
+  },
+  {
+   "key": "code",
+   "description": "Write, fix or explain code, bots or scripts.",
+   "not_for": null,
+   "best": "claude",
+   "second": "chatgpt",
+   "now": {
+    "doer": "claude",
+    "checker": null,
+    "stand_in": null,
+    "unchecked": "no other agent available to check (ChatGPT is signed out (codex login))",
+    "note": null,
+    "comes_back": null
+   }
+  },
+  {
+   "key": "writing",
+   "description": "Write, edit or translate text for people to read: copy, newsletters, posts, docs.",
+   "not_for": null,
+   "best": "claude",
+   "second": "chatgpt",
+   "now": {
+    "doer": "claude",
+    "checker": null,
+    "stand_in": null,
+    "unchecked": "no other agent available to check (ChatGPT is signed out (codex login))",
+    "note": null,
+    "comes_back": null
+   }
+  },
+  {
+   "key": "planning",
+   "description": "Break a goal into steps or split a big task into smaller tasks, without doing the steps.",
+   "not_for": null,
+   "best": "claude",
+   "second": "chatgpt",
+   "now": {
+    "doer": "claude",
+    "checker": null,
+    "stand_in": null,
+    "unchecked": "no other agent available to check (ChatGPT is signed out (codex login))",
+    "note": null,
+    "comes_back": null
+   }
+  },
+  {
+   "key": "computer_use",
+   "description": "Carry out actions in a browser or on a computer: click, fill in forms, log in, navigate a site.",
+   "not_for": null,
+   "best": "chatgpt",
+   "second": "claude",
+   "now": {
+    "doer": null,
+    "checker": null,
+    "stand_in": null,
+    "unchecked": null,
+    "note": null,
+    "comes_back": "skill not routed in version 2"
+   }
+  },
+  {
+   "key": "make_media",
+   "description": "Create a new image or video.",
+   "not_for": null,
+   "best": "grok",
+   "second": "claude",
+   "now": {
+    "doer": null,
+    "checker": null,
+    "stand_in": null,
+    "unchecked": null,
+    "note": "needs Grok Bot",
+    "comes_back": "make_media needs Grok Bot: Grok Bot isn't set up: no GROK_WEBHOOK_URL or GROK_WEBHOOK_KEY in .env; no inbox repo in settings"
+   }
+  },
+  {
+   "key": "bulk_text",
+   "description": "Apply the same simple step to many items: tag, sort or summarize a large batch of posts or rows.",
+   "not_for": null,
+   "best": "claude",
+   "second": "grok",
+   "now": {
+    "doer": "claude",
+    "checker": null,
+    "stand_in": null,
+    "unchecked": "no other agent available to check (Grok Bot isn't set up: no GROK_WEBHOOK_URL or GROK_WEBHOOK_KEY in .env; no inbox repo in settings)",
+    "note": null,
+    "comes_back": null
+   }
+  },
+  {
+   "key": "quick_answer",
+   "description": "Answer a simple question from general knowledge: math, unit conversions, definitions.",
+   "not_for": "Anything that needs today's facts, prices, dates or a source link.",
+   "best": "claude",
+   "second": null,
+   "now": {
+    "doer": "claude",
+    "checker": null,
+    "stand_in": null,
+    "unchecked": null,
+    "note": null,
+    "comes_back": null
+   }
+  },
+  {
+   "key": "recall",
+   "description": "Answer a question about earlier tasks in the same project or chat from what the router remembers: what was done, decided, produced or said, or what was planned next. The answer reports; it makes nothing new.",
+   "not_for": "Any task that produces something, even from an earlier result or 'from memory': writing, rewriting, shortening or redoing a text, planning, code, or anything needing new facts from the web or social media.",
+   "best": "claude",
+   "second": "chatgpt",
+   "now": {
+    "doer": "claude",
+    "checker": null,
+    "stand_in": null,
+    "unchecked": "no other agent available to check (ChatGPT is signed out (codex login))",
+    "note": null,
+    "comes_back": null
+   }
+  }
+ ],
+ "commands": [
+  {
+   "name": "route",
+   "help": "route a task: Jev labels it and the skill table picks claude or grok or chatgpt or cursor",
+   "arguments": [
+    {
+     "name": "--no-wait",
+     "kind": "flag",
+     "help": "return as soon as a Grok task is sent (also automatic when output isn't a terminal)"
+    },
+    {
+     "name": "task",
+     "kind": "positional",
+     "nargs": "+",
+     "help": "the task text; start with @claude or @grok or @chatgpt or @cursor to force that agent"
+    },
+    {
+     "name": "--file",
+     "kind": "option",
+     "help": "attach a file (up to 4; png, jpg, jpeg, webp, gif, pdf, mp4, mov; 50 MB each; one video). Copies go to Claude or ChatGPT only, never to Grok"
+    },
+    {
+     "name": "--web",
+     "kind": "flag",
+     "help": "let Claude and ChatGPT search the web on this task's calls with files too: say the files are not private (rules v2.22); without files it changes nothing"
+    },
+    {
+     "name": "--source",
+     "kind": "option",
+     "help": null
+    },
+    {
+     "name": "--project",
+     "kind": "option",
+     "help": "run the task with a registered project's HANDOFF.md as context (rules v2.25); sr project list prints the names"
+    },
+    {
+     "name": "--chat",
+     "kind": "option",
+     "help": "tag the task chat:<name> for memory (rules v2.27): lower case letters, digits and -; nothing to create; never with --project"
+    },
+    {
+     "name": "--skill",
+     "kind": "option",
+     "help": "label the task yourself with this skill; Jev is not asked (build brief 22)"
+    },
+    {
+     "name": "--answers",
+     "kind": "option",
+     "help": "with --skill: the Jev floor row this answers (its # or task_id); the text must be that row's, its tag, --web and files come from it"
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing"
+    }
+   ]
+  },
+  {
+   "name": "relay",
+   "help": "run a preset chain (rules v2.16): sr relay research-build|collab|versus \"task\"; --list prints the presets; a versus task ends with `sr pick`",
+   "arguments": [
+    {
+     "name": "--list",
+     "kind": "flag",
+     "help": "print every preset in config/presets.json"
+    },
+    {
+     "name": "--no-wait",
+     "kind": "flag",
+     "help": "return as soon as a Grok stage is sent (also automatic when output isn't a terminal)"
+    },
+    {
+     "name": "preset",
+     "kind": "positional",
+     "nargs": "?",
+     "help": "the preset name, from `sr relay --list`"
+    },
+    {
+     "name": "task",
+     "kind": "positional",
+     "nargs": "*",
+     "help": "the task text; no @agent prefix on a relay task"
+    },
+    {
+     "name": "--file",
+     "kind": "option",
+     "help": "not allowed on a relay task (refused with the reason)"
+    },
+    {
+     "name": "--source",
+     "kind": "option",
+     "help": null
+    },
+    {
+     "name": "--web",
+     "kind": "flag",
+     "help": "--web is for a routed task with files"
+    },
+    {
+     "name": "--project",
+     "kind": "option",
+     "help": "research-build and redteam only (rules v2.25)"
+    },
+    {
+     "name": "--chat",
+     "kind": "option",
+     "help": "tag the task chat:<name> for memory (rules v2.27), any preset; never with --project"
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing"
+    }
+   ]
+  },
+  {
+   "name": "split",
+   "help": "split a task (rules v2.18): Claude plans 2 to 4 pieces, you approve them (y/N/e), each runs as its own routed task, Claude joins the results and ChatGPT checks: sr split \"task\"; sr split --go <n> approves a plan that waited",
+   "arguments": [
+    {
+     "name": "--no-wait",
+     "kind": "flag",
+     "help": "return as soon as a Grok piece is sent (also automatic when output isn't a terminal)"
+    },
+    {
+     "name": "task",
+     "kind": "positional",
+     "nargs": "*",
+     "help": "the task text; no @agent prefix on a split task"
+    },
+    {
+     "name": "--go",
+     "kind": "option",
+     "help": "approve a plan that waited (needs a terminal), or report a split's pieces and integrate once every piece is in"
+    },
+    {
+     "name": "--skip",
+     "kind": "option",
+     "help": "go on without a blocked piece (its # or task_id); the integration says it is missing"
+    },
+    {
+     "name": "--file",
+     "kind": "option",
+     "help": "not allowed on a split task (refused with the reason)"
+    },
+    {
+     "name": "--preset",
+     "kind": "option",
+     "help": "not allowed on a split task (refused with the reason)"
+    },
+    {
+     "name": "--source",
+     "kind": "option",
+     "help": null
+    },
+    {
+     "name": "--web",
+     "kind": "flag",
+     "help": "--web is for a routed task with files"
+    },
+    {
+     "name": "--project",
+     "kind": "option",
+     "help": "not allowed on a split task (refused with the reason)"
+    },
+    {
+     "name": "--chat",
+     "kind": "option",
+     "help": "not allowed on a split task (refused with the reason)"
+    },
+    {
+     "name": "--answer",
+     "kind": "option",
+     "help": "with --go: approve (y) or reject (n) a plan that waits, without a terminal; editing a piece stays Terminal-only (build brief 22)"
+    },
+    {
+     "name": "--skill",
+     "kind": "option",
+     "help": "with --go --answer y: the skill for piece K when Jev was under the floor on it"
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing"
+    }
+   ]
+  },
+  {
+   "name": "resume",
+   "help": "continue a task Claude or ChatGPT stopped on its plan limit, once, with the other of the two (rules v2.15): sr resume 5",
+   "arguments": [
+    {
+     "name": "--no-wait",
+     "kind": "flag",
+     "help": "return as soon as a Grok call is sent (also automatic when output isn't a terminal)"
+    },
+    {
+     "name": "words",
+     "kind": "positional",
+     "nargs": "*",
+     "help": "the task number from `sr log`, or a task_id"
+    },
+    {
+     "name": "--web",
+     "kind": "flag",
+     "help": "--web is for a routed task with files"
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing"
+    }
+   ]
+  },
+  {
+   "name": "pick",
+   "help": "pick a versus candidate (rules v2.16): sr pick 5 a|b|none; the picked one becomes the task's result, none fails the task; one pick per task",
+   "arguments": [
+    {
+     "name": "words",
+     "kind": "positional",
+     "nargs": "*",
+     "help": "the task number from `sr log` (or a task_id), then a, b or none"
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing"
+    }
+   ]
+  },
+  {
+   "name": "fallback",
+   "help": "redo a task whose result failed its check twice, once (rules v2.17): its checker redoes it from the task and the final fix list, never the failed result; the original doer checks: sr fallback 5",
+   "arguments": [
+    {
+     "name": "--no-wait",
+     "kind": "flag",
+     "help": "return as soon as a Grok check is sent (also automatic when output isn't a terminal)"
+    },
+    {
+     "name": "words",
+     "kind": "positional",
+     "nargs": "*",
+     "help": "the task number from `sr log`, or a task_id"
+    },
+    {
+     "name": "--web",
+     "kind": "flag",
+     "help": "--web is for a routed task with files"
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing"
+    }
+   ]
+  },
+  {
+   "name": "check",
+   "help": "read Grok results from the inbox, mark done or timed out",
+   "arguments": [
+    {
+     "name": "--web",
+     "kind": "flag",
+     "help": "--web is for a routed task with files"
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing; a `tasks` list says what became of each open task"
+    }
+   ]
+  },
+  {
+   "name": "log",
+   "help": "print recent tasks",
+   "arguments": [
+    {
+     "name": "--limit",
+     "kind": "option",
+     "help": null
+    },
+    {
+     "name": "--chat",
+     "kind": "option",
+     "help": "only that chat's tasks (rules v2.27)"
+    },
+    {
+     "name": "--project",
+     "kind": "option",
+     "help": "only that project's tasks (rules v2.30)"
+    },
+    {
+     "name": "--search",
+     "kind": "option",
+     "help": "only tasks whose text holds TEXT (any case, plain text)"
+    },
+    {
+     "name": "--before",
+     "kind": "option",
+     "help": "only tasks older than TASK (its # or task_id): the next page"
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "the rows as JSON, newest first, with their state (rules v2.30)"
+    }
+   ]
+  },
+  {
+   "name": "show",
+   "help": "print one task in full: newest, #n, a task_id, or the newest task containing words",
+   "arguments": [
+    {
+     "name": "words",
+     "kind": "positional",
+     "nargs": "*",
+     "help": null
+    },
+    {
+     "name": "--history",
+     "kind": "flag",
+     "help": "list every call the task made (the original result and the fix list live here)"
+    },
+    {
+     "name": "--stages",
+     "kind": "flag",
+     "help": "on a relay task, also print each stage's result"
+    },
+    {
+     "name": "--pieces",
+     "kind": "flag",
+     "help": "on a split task, also print each piece's result"
+    },
+    {
+     "name": "--memory",
+     "kind": "flag",
+     "help": "on a tagged task, also print the memory block as it was sent to the build call (rules v2.27)"
+    },
+    {
+     "name": "--handoff",
+     "kind": "flag",
+     "help": "on a project task, also print the handoff as it was sent to the build call (rules v2.25)"
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "the task, its calls and everything its kind has, as JSON (rules v2.30); read only"
+    }
+   ]
+  },
+  {
+   "name": "cancel",
+   "help": "cancel a queued or sent task: sr cancel 5 (the # column in log)",
+   "arguments": [
+    {
+     "name": "words",
+     "kind": "positional",
+     "nargs": "*",
+     "help": null
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing"
+    }
+   ]
+  },
+  {
+   "name": "status",
+   "help": "the router's state: agents (online by a command, never a model), presets, skills, commands, open tasks, Jev's meter, memory; writes nothing",
+   "arguments": [
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "print one JSON object and nothing else (rules v2.30)"
+    }
+   ]
+  },
+  {
+   "name": "serve",
+   "help": "the page on 127.0.0.1: shows the log and runs sr commands with buttons (Ctrl+C stops the page; tasks it started keep running)",
+   "arguments": [
+    {
+     "name": "--port",
+     "kind": "option",
+     "help": "the port (default: serve_port in config/settings.json)"
+    },
+    {
+     "name": "--demo",
+     "kind": "flag",
+     "help": "show the page on invented sample tasks; nothing runs (works with no setup)"
+    }
+   ]
+  },
+  {
+   "name": "migrate",
+   "help": "one time: move a version 1 log into backups/ and start fresh, or upgrade a version 2 log in place after a backup copy",
+   "arguments": []
+  },
+  {
+   "name": "project",
+   "help": "the project registry (rules v2.25): sr project add <name> <path>, sr project list, sr project remove <name>",
+   "arguments": [
+    {
+     "name": "words",
+     "kind": "positional",
+     "nargs": "*",
+     "help": "add <name> <path> | list | remove <name>"
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing; `list --json` prints the projects as JSON"
+    }
+   ]
+  },
+  {
+   "name": "chat",
+   "help": "chats from the log (rules v2.27): sr chat list prints every chat name with its task count and newest date; nothing is created",
+   "arguments": [
+    {
+     "name": "words",
+     "kind": "positional",
+     "nargs": "*",
+     "help": "list"
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing; `list --json` prints the chats as JSON"
+    }
+   ]
+  },
+  {
+   "name": "memory",
+   "help": "the memory store (rules v2.27): sr memory start|stop|status|rebuild; Hindsight on 127.0.0.1:8888 from ~/.hindsight/venv, bank super-router; you start it, the router never does; rebuild reloads the bank from the log",
+   "arguments": [
+    {
+     "name": "words",
+     "kind": "positional",
+     "nargs": "*",
+     "help": "start | stop | status | rebuild"
+    }
+   ]
+  },
+  {
+   "name": "probe",
+   "help": "one real Codex run that must fail to read .env, list your home folder or write a file; run it after every Codex update, before routing tasks to ChatGPT; then one real Claude run that must web-search and do nothing else (run it after every Claude Code update: Claude's search stays off until it passes)",
+   "arguments": []
+  }
+ ],
+ "open_tasks": [
+  {
+   "task_id": "sr-20261019-092100-0005",
+   "n": 5,
+   "created_at": "2026-10-19T09:21:03+00:00",
+   "updated_at": "2026-10-19T09:21:21+00:00",
+   "sent_at": null,
+   "source": "cli",
+   "text": "A 25-word blurb for a bakery's new rye loaf.",
+   "status": "returned",
+   "waiting_on": "pick",
+   "outcome": null,
+   "reason_code": null,
+   "mode": "relay",
+   "preset": "versus",
+   "parent": null,
+   "project": null,
+   "chat": null,
+   "tag": null,
+   "skill": null,
+   "skill_source": null,
+   "agent": null,
+   "checker": null,
+   "check_state": null,
+   "check_note": "awaiting pick",
+   "route_reason": "relay",
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": null,
+   "result_url": null,
+   "jev": {
+    "status": "not_asked",
+    "label": null,
+    "confidence": null,
+    "tokens": 0,
+    "needs_split": null,
+    "error": null
+   },
+   "slots": {
+    "a": "claude",
+    "b": "chatgpt"
+   },
+   "working": null,
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not eligible: a versus task; run it again"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is returned; only a task stopped by a plan limit or by a process that ended can be resumed"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null
+  },
+  {
+   "task_id": "sr-20261019-093600-0008",
+   "n": 8,
+   "created_at": "2026-10-19T09:36:03+00:00",
+   "updated_at": "2026-10-19T09:36:30+00:00",
+   "sent_at": null,
+   "source": "cli",
+   "text": "Pick a one-word name for the garden's seed library.",
+   "status": "returned",
+   "waiting_on": "vote_pick",
+   "outcome": null,
+   "reason_code": null,
+   "mode": "relay",
+   "preset": "vote",
+   "parent": null,
+   "project": null,
+   "chat": null,
+   "tag": null,
+   "skill": null,
+   "skill_source": null,
+   "agent": null,
+   "checker": null,
+   "check_state": null,
+   "check_note": "awaiting pick",
+   "route_reason": "relay",
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": null,
+   "result_url": null,
+   "jev": {
+    "status": "not_asked",
+    "label": null,
+    "confidence": null,
+    "tokens": 0,
+    "needs_split": null,
+    "error": null
+   },
+   "slots": {
+    "a": "claude",
+    "b": "chatgpt",
+    "c": "grok"
+   },
+   "working": null,
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not eligible: a vote task; nothing checked it, so nothing failed it"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is returned; only a task stopped by a plan limit or by a process that ended can be resumed"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null
+  },
+  {
+   "task_id": "sr-20261019-101100-000d",
+   "n": 13,
+   "created_at": "2026-10-19T10:11:03+00:00",
+   "updated_at": "2026-10-19T10:11:33+00:00",
+   "sent_at": null,
+   "source": "cli",
+   "text": "Build a one-page FAQ for the seed library and a short email announcing it.",
+   "status": "returned",
+   "waiting_on": "split_plan",
+   "outcome": null,
+   "reason_code": null,
+   "mode": "split",
+   "preset": null,
+   "parent": null,
+   "project": null,
+   "chat": null,
+   "tag": null,
+   "skill": null,
+   "skill_source": null,
+   "agent": "claude",
+   "checker": "chatgpt",
+   "check_state": "pending",
+   "check_note": "awaiting approval",
+   "route_reason": "split",
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": null,
+   "result_url": null,
+   "jev": {
+    "status": "not_asked",
+    "label": null,
+    "confidence": null,
+    "tokens": 1280,
+    "needs_split": null,
+    "error": null
+   },
+   "slots": null,
+   "working": null,
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not a double fail: it is returned"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is returned; only a task stopped by a plan limit or by a process that ended can be resumed"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null
+  },
+  {
+   "task_id": "sr-20261019-101600-0010",
+   "n": 14,
+   "created_at": "2026-10-19T10:16:03+00:00",
+   "updated_at": "2026-10-19T10:18:18+00:00",
+   "sent_at": null,
+   "source": "cli",
+   "text": "List three winter vegetables for a small garden and write a haiku about frost.",
+   "status": "returned",
+   "waiting_on": "piece",
+   "outcome": null,
+   "reason_code": null,
+   "mode": "split",
+   "preset": null,
+   "parent": null,
+   "project": null,
+   "chat": null,
+   "tag": null,
+   "skill": null,
+   "skill_source": null,
+   "agent": "claude",
+   "checker": "chatgpt",
+   "check_state": "pending",
+   "check_note": "waiting: pieces #15, #16",
+   "route_reason": "split",
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": null,
+   "result_url": null,
+   "jev": {
+    "status": "not_asked",
+    "label": null,
+    "confidence": null,
+    "tokens": 1280,
+    "needs_split": null,
+    "error": null
+   },
+   "slots": null,
+   "working": null,
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not a double fail: it is returned"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is returned; only a task stopped by a plan limit or by a process that ended can be resumed"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null
+  },
+  {
+   "task_id": "sr-20261019-102100-0013",
+   "n": 17,
+   "created_at": "2026-10-19T10:21:06+00:00",
+   "updated_at": "2026-10-19T10:21:09+00:00",
+   "sent_at": null,
+   "source": "cli",
+   "text": "redo last month's volunteer calendar for november, same format",
+   "status": "returned",
+   "waiting_on": "needs_label",
+   "outcome": null,
+   "reason_code": "needs_label",
+   "mode": "route",
+   "preset": null,
+   "parent": null,
+   "project": null,
+   "chat": null,
+   "tag": null,
+   "skill": null,
+   "skill_source": null,
+   "agent": null,
+   "checker": null,
+   "check_state": null,
+   "check_note": null,
+   "route_reason": "returned: needs your label",
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": null,
+   "result_url": null,
+   "jev": {
+    "status": "below_floor",
+    "label": "writing",
+    "confidence": 0.5,
+    "tokens": 640,
+    "needs_split": 0.08,
+    "error": null
+   },
+   "slots": null,
+   "working": null,
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not a double fail: it is returned"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is returned; only a task stopped by a plan limit or by a process that ended can be resumed"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null
+  },
+  {
+   "task_id": "sr-20261019-112400-0020",
+   "n": 30,
+   "created_at": "2026-10-19T11:24:06+00:00",
+   "updated_at": "2026-10-19T11:24:09+00:00",
+   "sent_at": null,
+   "source": "cli",
+   "text": "Draft the agenda for next month's garden meeting.",
+   "status": "returned",
+   "waiting_on": "needs_label",
+   "outcome": null,
+   "reason_code": "needs_label",
+   "mode": "route",
+   "preset": null,
+   "parent": null,
+   "project": null,
+   "chat": null,
+   "tag": null,
+   "skill": null,
+   "skill_source": null,
+   "agent": null,
+   "checker": null,
+   "check_state": null,
+   "check_note": null,
+   "route_reason": "returned: needs your label",
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": null,
+   "result_url": null,
+   "jev": {
+    "status": "not_set_up",
+    "label": null,
+    "confidence": null,
+    "tokens": 0,
+    "needs_split": null,
+    "error": null
+   },
+   "slots": null,
+   "working": null,
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not a double fail: it is returned"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is returned; only a task stopped by a plan limit or by a process that ended can be resumed"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null
+  },
+  {
+   "task_id": "sr-20261019-112700-0021",
+   "n": 31,
+   "created_at": "2026-10-19T11:27:06+00:00",
+   "updated_at": "2026-10-19T11:27:15+00:00",
+   "sent_at": "2026-10-19T11:27:12+00:00",
+   "source": "cli",
+   "text": "What are bike commuters posting about winter tires on X?",
+   "status": "sent",
+   "waiting_on": "grok",
+   "outcome": null,
+   "reason_code": null,
+   "mode": "route",
+   "preset": null,
+   "parent": null,
+   "project": null,
+   "chat": null,
+   "tag": null,
+   "skill": "x_social_pulse",
+   "skill_source": "jev",
+   "agent": "grok",
+   "checker": "chatgpt",
+   "check_state": "pending",
+   "check_note": "overdue: grok, 12 min",
+   "route_reason": "best",
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": null,
+   "result_url": null,
+   "jev": {
+    "status": "ok",
+    "label": "x_social_pulse",
+    "confidence": 0.96,
+    "tokens": 640,
+    "needs_split": 0.08,
+    "error": null
+   },
+   "slots": null,
+   "working": {
+    "agent": "grok",
+    "doing": null
+   },
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not a double fail: it is sent"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is still open (sent); run `sr check` to finish it"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null
+  },
+  {
+   "task_id": "sr-20261019-113300-0022",
+   "n": 32,
+   "created_at": "2026-10-19T11:33:06+00:00",
+   "updated_at": "2026-10-19T11:33:15+00:00",
+   "sent_at": "2026-10-19T11:33:12+00:00",
+   "source": "cli",
+   "text": "What are people saying about sourdough discard recipes on X this week?",
+   "status": "sent",
+   "waiting_on": "grok",
+   "outcome": null,
+   "reason_code": null,
+   "mode": "route",
+   "preset": null,
+   "parent": null,
+   "project": null,
+   "chat": null,
+   "tag": null,
+   "skill": "x_social_pulse",
+   "skill_source": "jev",
+   "agent": "grok",
+   "checker": "chatgpt",
+   "check_state": "pending",
+   "check_note": "waiting: grok, 6 min",
+   "route_reason": "best",
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": null,
+   "result_url": null,
+   "jev": {
+    "status": "ok",
+    "label": "x_social_pulse",
+    "confidence": 0.96,
+    "tokens": 640,
+    "needs_split": 0.08,
+    "error": null
+   },
+   "slots": null,
+   "working": {
+    "agent": "grok",
+    "doing": null
+   },
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not a double fail: it is sent"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is still open (sent); run `sr check` to finish it"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null
+  }
+ ],
+ "running": [],
+ "jev": {
+  "configured": false,
+  "tokens_month": 16000,
+  "cap": 1000000,
+  "over_cap": false,
+  "floor": 0.8,
+  "available": false,
+  "why": "Jev isn't set up: no JEV_API_KEY in .env"
+ },
+ "memory": {
+  "setting": "auto",
+  "online": false,
+  "starting": true,
+  "documents": null
+ },
+ "projects": [
+  {
+   "name": "garden-site",
+   "path": "~/Projects/garden-site",
+   "handoff_lines": 11,
+   "open_task": null
+  }
+ ],
+ "chats": [
+  {
+   "name": "garden",
+   "tasks": 4,
+   "newest": "2026-10-19T10:31:06+00:00"
+  }
+ ],
+ "drop_folder": "~/Desktop/Router Drop",
+ "serve_port": 8765,
+ "report_path": "~/Downloads/claude-code-report.md",
+ "version": "2.32",
+ "log_version": 16,
+ "api_version": 1
+}

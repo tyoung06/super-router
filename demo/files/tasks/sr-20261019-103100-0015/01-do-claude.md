@@ -1,0 +1,1 @@
+You voted for a monthly newsletter (2 to 1); the tool shed notice went out for weekdays.

@@ -1,0 +1,1 @@
+Thank you for every weeded row, every watered bed and every early Saturday. The garden grows because you show up. See you at the harvest supper!

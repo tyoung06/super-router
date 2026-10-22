@@ -1,0 +1,3 @@
+- Three breads
+- Two soups
+- One cake of the day

@@ -1,0 +1,1 @@
+Dark, tangy and slow-proofed for two days: our new rye is made for butter, soup and Sunday.

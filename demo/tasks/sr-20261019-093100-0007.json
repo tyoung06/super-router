@@ -1,0 +1,227 @@
+{
+ "api_version": 1,
+ "task_id": "sr-20261019-093100-0007",
+ "n": 7,
+ "created_at": "2026-10-19T09:31:03+00:00",
+ "updated_at": "2026-10-19T09:31:30+00:00",
+ "sent_at": null,
+ "source": "cli",
+ "text": "One word: should the garden newsletter go out weekly or monthly? Then one line why.",
+ "status": "done",
+ "waiting_on": null,
+ "outcome": "passed",
+ "reason_code": null,
+ "mode": "relay",
+ "preset": "vote",
+ "parent": null,
+ "project": null,
+ "chat": "garden",
+ "tag": "chat:garden",
+ "skill": null,
+ "skill_source": null,
+ "agent": "claude",
+ "checker": null,
+ "check_state": "passed",
+ "check_note": "checked-by-vote 2/1",
+ "route_reason": "relay",
+ "failed_stage": null,
+ "web": false,
+ "files": [],
+ "result": "## Answer\nMonthly\n\n## Why\nVolunteers have time to write once a month.\n\n## Confidence\n75",
+ "result_url": null,
+ "jev": {
+  "status": "not_asked",
+  "label": null,
+  "confidence": null,
+  "tokens": 0,
+  "needs_split": null,
+  "error": null
+ },
+ "slots": {
+  "a": "claude",
+  "b": "chatgpt",
+  "c": "grok"
+ },
+ "working": null,
+ "fallback": {
+  "ok": false,
+  "agent": null,
+  "reason": "not eligible: a vote task; nothing checked it, so nothing failed it"
+ },
+ "resume": {
+  "ok": false,
+  "substitute": null,
+  "agent": null,
+  "checker": null,
+  "reason": "it is done; only a task stopped by a plan limit or by a process that ended can be resumed"
+ },
+ "pid": null,
+ "run_started_at": null,
+ "answered_by": null,
+ "stand_in": null,
+ "filled": null,
+ "card_line": null,
+ "takeover": null,
+ "late": null,
+ "calls": [
+  {
+   "call_id": "sr-20261019-093100-0007-s1",
+   "order": 1,
+   "kind": "stage",
+   "stage": 1,
+   "role": "vote",
+   "agent": "claude",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T09:31:09+00:00",
+   "finished_at": "2026-10-19T09:31:09+00:00",
+   "round_file": "tasks/sr-20261019-093100-0007/01-vote-a-claude.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "off (probe not passed)",
+    "count": null
+   },
+   "memory": {
+    "state": "sent",
+    "sent": 2,
+    "found": 2,
+    "from": null,
+    "with": null,
+    "limit": null
+   }
+  },
+  {
+   "call_id": "sr-20261019-093100-0007-s2",
+   "order": 2,
+   "kind": "stage",
+   "stage": 2,
+   "role": "vote",
+   "agent": "chatgpt",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T09:31:12+00:00",
+   "finished_at": "2026-10-19T09:31:12+00:00",
+   "round_file": "tasks/sr-20261019-093100-0007/02-vote-b-chatgpt.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "allowed",
+    "count": null
+   },
+   "memory": {
+    "state": "sent",
+    "sent": 2,
+    "found": 2,
+    "from": null,
+    "with": null,
+    "limit": null
+   }
+  },
+  {
+   "call_id": "sr-20261019-093100-0007-s3",
+   "order": 3,
+   "kind": "stage",
+   "stage": 3,
+   "role": "vote",
+   "agent": "grok",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T09:31:15+00:00",
+   "finished_at": "2026-10-19T09:31:24+00:00",
+   "round_file": "tasks/sr-20261019-093100-0007/03-vote-c-grok.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": null,
+   "memory": {
+    "state": "sent",
+    "sent": 2,
+    "found": 2,
+    "from": null,
+    "with": null,
+    "limit": null
+   }
+  }
+ ],
+ "handoff": null,
+ "memory_stored": [
+  {
+   "document_id": "task-sr-20261019-093100-0007",
+   "chars": 172,
+   "state": "done/passed/3",
+   "at": "2026-10-19T09:31:33+00:00"
+  }
+ ],
+ "memory_given": [
+  {
+   "n": 2,
+   "date": "2026-10-19",
+   "kind": "writing",
+   "doer": "claude",
+   "status": null,
+   "text": "Draft a 40-word notice that the garden's tool shed now opens at 7 am.\n\nFrom Monday, the tool shed opens at 7 am on weekdays."
+  },
+  {
+   "n": 1,
+   "date": "2026-10-19",
+   "kind": "writing",
+   "doer": "claude",
+   "status": null,
+   "text": "Write a two-sentence welcome for the Maple Street community garden newsletter.\n\nWelcome to the Maple Street garden! Bring gloves, bring friends, and take home what you grow."
+  }
+ ],
+ "candidates": null,
+ "pick": null,
+ "votes": [
+  {
+   "letter": "a",
+   "stage": 1,
+   "agent": "claude",
+   "answer": "Monthly",
+   "why": "Volunteers have time to write once a month.",
+   "confidence": 75,
+   "round_file": "tasks/sr-20261019-093100-0007/01-vote-a-claude.md"
+  },
+  {
+   "letter": "b",
+   "stage": 2,
+   "agent": "chatgpt",
+   "answer": "Monthly",
+   "why": "Readers open a monthly letter more often.",
+   "confidence": 75,
+   "round_file": "tasks/sr-20261019-093100-0007/02-vote-b-chatgpt.md"
+  },
+  {
+   "letter": "c",
+   "stage": 3,
+   "agent": "grok",
+   "answer": "Weekly",
+   "why": "Weekly keeps the plot news fresh.",
+   "confidence": 75,
+   "round_file": "tasks/sr-20261019-093100-0007/03-vote-c-grok.md"
+  }
+ ],
+ "tally": {
+  "winner": "a",
+  "for": 2,
+  "against": 1,
+  "note": "checked-by-vote 2/1",
+  "dissent": [
+   "c"
+  ]
+ },
+ "attacks": null,
+ "pieces": null,
+ "join": null,
+ "original_file": null,
+ "result_file": "tasks/sr-20261019-093100-0007/01-vote-a-claude.md"
+}

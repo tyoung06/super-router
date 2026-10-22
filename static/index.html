@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<meta name="sr-token" content="__SR_TOKEN__">
+<meta name="sr-demo" content="__SR_DEMO__">
+<meta name="sr-reveal" content="__SR_REVEAL__">
+<title>Super Router</title>
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="app" id="app">
+  <nav class="sidebar" id="sidebar" aria-label="Workspace"></nav>
+  <main class="main" id="main">
+    <div class="banners" id="banners"></div>
+    <header class="strip" id="strip" aria-label="Agents"></header>
+    <section class="stream" id="stream" aria-label="Tasks"></section>
+    <footer class="composer-area" id="composer-area">
+      <div class="composer" id="composer">
+        <label class="sr-only" for="prompt" id="prompt-label">New task</label>
+        <textarea id="prompt" rows="2" placeholder="New task" spellcheck="true"></textarea>
+        <div class="composer-files" id="files" aria-label="Files on this task"></div>
+        <div class="composer-bar">
+          <div class="team" id="team"></div>
+          <button class="attach" id="attach" type="button" aria-label="Attach a file">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <span class="chip-tag" id="context-tag"></span>
+          <label class="toggle" id="quick-label" title="No chat, no memory"><input type="checkbox" id="quick"> Quick task</label>
+          <select class="select" id="project" aria-label="Project"></select>
+          <label class="toggle" id="web-label"><input type="checkbox" id="web"> Web</label>
+          <select class="select" id="skill" aria-label="Skill" hidden></select>
+          <button class="btn btn-primary btn-lg send" id="send" type="button">Send · Route</button>
+          <input type="file" id="file-input" multiple hidden>
+        </div>
+      </div>
+      <div class="under">
+      <div class="cmdline" id="cmdline" aria-label="The command Enter will run">
+        <span class="prompt">$</span><span class="cmd" id="cmd"></span>
+        <button class="icon-btn" id="copy" type="button" aria-label="Copy the command">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+        </button>
+      </div>
+      <div class="jev" id="jev" aria-label="Jev confidence"></div>
+      </div>
+    </footer>
+  </main>
+  <aside class="panel" id="panel" aria-label="Side panel" hidden></aside>
+</div>
+<div class="nav-backdrop" id="nav-backdrop" hidden></div>
+<div class="sheet-backdrop" id="sheet" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>

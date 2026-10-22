@@ -1,0 +1,1 @@
+A wooden raised bed full of dark soil sits on a green lawn.

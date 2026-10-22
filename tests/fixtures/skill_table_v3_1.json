@@ -1,0 +1,137 @@
+{
+  "version": 3.1,
+  "updated": "2026-10-06",
+  "status": "Version 3.1. Same descriptions as version 3, which Jev passed round 2 on (28 of 30). Six of the ten original pairs are still low confidence.",
+  "models": [
+    "claude",
+    "chatgpt",
+    "grok",
+    "muse"
+  ],
+  "labeler": {
+    "jev_model": "jev-1.13.0",
+    "jev_model_note": "Pinned on purpose. The alias jev-latest moves when TypeSafe ships a release, which would shift scores without warning.",
+    "api_key_env": "JEV_API_KEY",
+    "api_key_note": "TypeSafe's Python SDK reads TYPESAFE_API_KEY by default. Pass the key in explicitly: TypeSafeClient(api_key=os.environ['JEV_API_KEY']).",
+    "question": "Which one skill does this task mainly need?",
+    "fallback_label": "none_of_these",
+    "fallback_description": "The task fits none of the other skills: a reminder or alarm, small talk, a personal decision, or a message too unclear to label.",
+    "second_question": {
+      "id": "needs_split",
+      "type": "noul",
+      "instructions": "Does this task need two or more of the listed skills to finish?",
+      "note": "Logged only, not scored. In round 1 the median answer was 0.53, so it does not separate tasks cleanly. The owner has not decided whether to keep it."
+    },
+    "shuffle_options": true,
+    "shuffle_note": "TypeSafe's docs say Jev 1.13 can lean toward the first option in a list. Shuffle the option order on every call.",
+    "min_confidence": 0.8,
+    "min_confidence_note": "Provisional. Below it, the router asks the owner instead of routing. Recheck after round 2.",
+    "criteria_format_note": "When a skill has a not_for field, send Jev an object for that option: {\"what\": description, \"not_for\": not_for}. Otherwise send the description string."
+  },
+  "skills": {
+    "x_social_pulse": {
+      "description": "Find out what people on X (Twitter) are saying right now: sentiment, breaking news, memecoin chatter.",
+      "best": "grok",
+      "second": "chatgpt",
+      "confidence": "medium",
+      "note": "Verifier opens the source links and cross-checks on the open web. It has no X feed.",
+      "interim": null
+    },
+    "meta_social_trends": {
+      "description": "Find trends or posts on Instagram, Threads or Facebook.",
+      "best": "muse",
+      "second": "grok",
+      "confidence": "low",
+      "note": "Verifier checks whether the trend shows on X. A rough proxy. Probably needs the Muse agent rather than the Meta Model API. Unverified.",
+      "interim": null
+    },
+    "read_media": {
+      "description": "Describe or pull information out of an image, screenshot or video that the task provides.",
+      "best": "muse",
+      "second": "claude",
+      "confidence": "medium",
+      "note": "Muse reviewing a video file handed over by the router is untested.",
+      "interim": null
+    },
+    "web_research": {
+      "description": "Look up facts on the open web or check whether a claim is true, with source links. Not social media chatter.",
+      "best": "chatgpt",
+      "second": "claude",
+      "confidence": "low",
+      "note": "Results must come back with source links.",
+      "not_for": "Questions that can be answered from general knowledge with no lookup, such as math, unit conversions or definitions.",
+      "interim": "grok"
+    },
+    "code": {
+      "description": "Write, fix or explain code, bots or scripts.",
+      "best": "claude",
+      "second": "chatgpt",
+      "confidence": "low",
+      "note": "Near tie. Claude builds because the repos and files live in its workspace. Never send code to Muse's contributor tier: Meta trains on it.",
+      "interim": null
+    },
+    "writing": {
+      "description": "Write, edit or translate text for people to read: copy, newsletters, posts, docs.",
+      "best": "claude",
+      "second": "chatgpt",
+      "confidence": "low",
+      "note": "Sources split.",
+      "interim": null
+    },
+    "planning": {
+      "description": "Break a goal into steps or split a big task into smaller tasks, without doing the steps.",
+      "best": "claude",
+      "second": "chatgpt",
+      "confidence": "low",
+      "note": "",
+      "interim": null
+    },
+    "computer_use": {
+      "description": "Carry out actions in a browser or on a computer: click, fill in forms, log in, navigate a site.",
+      "best": "chatgpt",
+      "second": "claude",
+      "confidence": "medium",
+      "note": "",
+      "interim": null
+    },
+    "make_media": {
+      "description": "Create a new image or video.",
+      "best": "chatgpt",
+      "second": "muse",
+      "confidence": "low",
+      "note": "Muse judges the visuals. Claude can't generate either. Grok also generates; which is better is untested. Image and video pricing on the ChatGPT side is not researched.",
+      "interim": null
+    },
+    "bulk_text": {
+      "description": "Apply the same simple step to many items: tag, sort or summarize a large batch of posts or rows.",
+      "best": "muse",
+      "second": "grok",
+      "confidence": "medium",
+      "note": "The two cheapest models. Verifier spot-checks a sample.",
+      "interim": null
+    },
+    "quick_answer": {
+      "description": "Answer a simple question from general knowledge: math, unit conversions, definitions.",
+      "not_for": "Anything that needs today's facts, prices, dates or a source link.",
+      "best": "claude",
+      "second": null,
+      "verify": false,
+      "confidence": "medium",
+      "note": "The one skill with no verifier. See SUPER-ROUTER.md, Checking.",
+      "interim": null
+    }
+  },
+  "changes_from_v2": [
+    "Added an 11th skill, quick_answer. Claude answers alone with no verifier. The owner's decision, 6 Oct.",
+    "Added not_for lines to quick_answer and web_research so Jev can tell them apart.",
+    "writing now names translation. The owner's second look put a translation task there.",
+    "The none_of_these wording now names reminders, small talk and personal decisions.",
+    "min_confidence set to 0.8 from round 1: Jev was right 41 of 44 times at 0.8 and up, 2 of 5 below."
+  ],
+  "changes_from_v3": [
+    "Added an interim field to each skill: the live agent that does the work until the best agent is switched on. null means the task comes back to the owner.",
+    "Fixed the quick_answer note to point at SUPER-ROUTER.md, Checking.",
+    "No description, not_for line or pair changed. Nothing Jev sees is different."
+  ],
+  "interim_note": "Used only while a skill's best agent is not live. Skills whose best agent is already live (claude or grok) need none. web_research goes to grok in the meantime, as version 1's routing rules did."
+}

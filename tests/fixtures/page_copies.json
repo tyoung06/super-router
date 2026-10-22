@@ -1,0 +1,14 @@
+[
+  {"request": {"action": "pick", "task_id": "sr-20261021-000803-3d77", "choice": "a"}, "copy": "sr pick sr-20261021-000803-3d77 a"},
+  {"request": {"action": "pick", "task_id": "sr-20261021-000803-3d77", "choice": "none"}, "copy": "sr pick sr-20261021-000803-3d77 none"},
+  {"request": {"action": "cancel", "task_id": "sr-20261021-000803-3d77"}, "copy": "sr cancel sr-20261021-000803-3d77"},
+  {"request": {"action": "resume", "task_id": "sr-20261021-000803-3d77"}, "copy": "sr resume sr-20261021-000803-3d77"},
+  {"request": {"action": "fallback", "task_id": "sr-20261021-000803-3d77"}, "copy": "sr fallback sr-20261021-000803-3d77"},
+  {"request": {"action": "check"}, "copy": "sr check"},
+  {"request": {"action": "split_skip", "task_id": "sr-20261021-000901-ab12"}, "copy": "sr split --skip sr-20261021-000901-ab12"},
+  {"request": {"action": "split_go", "task_id": "sr-20261021-000803-3d77", "choice": "y", "skills": {"2": "code", "1": "writing"}},
+   "copy": "sr split --go sr-20261021-000803-3d77 --answer y --skill 1=writing --skill 2=code"},
+  {"request": {"action": "split_go", "task_id": "sr-20261021-000803-3d77", "choice": "n"}, "copy": "sr split --go sr-20261021-000803-3d77 --answer n"},
+  {"request": {"action": "floor", "skill": "planning", "answers": "sr-20261021-000803-3d77", "text": "redo it's calendar for $5"},
+   "copy": "sr route --skill planning --answers sr-20261021-000803-3d77 -- 'redo it'\"'\"'s calendar for $5'"}
+]

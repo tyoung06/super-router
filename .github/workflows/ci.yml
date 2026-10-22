@@ -1,0 +1,65 @@
+# The public copy's tests and secret scan (brief 25, decision 7). This file lives in the private repo at publish/ci.yml,
+# so the private repo runs no Actions; scripts/publish.py places it at .github/workflows/ci.yml in the public copy.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "26"
+
+      - name: Install the pinned requirements
+        run: python -m pip install -r requirements.txt
+
+      - name: The suite (fakes only)
+        run: python -m pytest -q
+
+      - name: The page's logic
+        run: node --test tests/js/
+
+      - name: gitleaks, a pinned release checked by its checksum
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+          GITLEAKS_SHA256: "b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5"
+          GITLEAKS_CONFIG_TOML: |
+            title = "Super Router public copy"
+
+            [extend]
+            useDefault = true
+
+            [[allowlists]]
+            description = "Deliberate fakes in the tests: fake keys, example domains and alphabet runs"
+            regexTarget = "match"
+            regexes = [
+              '''(?i)fake''',
+              '''example\.(com|invalid|org)''',
+              '''(?i)abcdefghijkl''',
+            ]
+        run: |
+          set -euo pipefail
+          curl -sSfL -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_darwin_arm64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | shasum -a 256 -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" git --redact --no-banner --verbose --exit-code 1 .

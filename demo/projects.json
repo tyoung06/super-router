@@ -1,0 +1,11 @@
+{
+ "api_version": 1,
+ "projects": [
+  {
+   "name": "garden-site",
+   "path": "~/Projects/garden-site",
+   "handoff_lines": 11,
+   "open_task": null
+  }
+ ]
+}

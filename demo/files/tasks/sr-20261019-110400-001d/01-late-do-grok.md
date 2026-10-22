@@ -1,0 +1,2 @@
+- Cyclists on Facebook love the new lane.
+- Some want it extended to the park.

@@ -1,0 +1,1 @@
+Welcome to the Maple Street garden! Bring gloves, bring friends, and take home what you grow.

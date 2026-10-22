@@ -1,0 +1,7 @@
+{"type":"system","subtype":"init","apiKeySource":"login","cwd":"/Users/you/Projects/super-router/workspace/cursor/pin","session_id":"00000000-0000-4000-8000-000000000006","model":"Grok 4.7 256K High","permissionMode":"default"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Reply with the single word ok."}]},"session_id":"00000000-0000-4000-8000-000000000006"}
+{"type":"thinking","subtype":"delta","text":"The user wants a single-word","session_id":"00000000-0000-4000-8000-000000000006","timestamp_ms":1792385233081}
+{"type":"thinking","subtype":"delta","text":" reply: \"ok\".","session_id":"00000000-0000-4000-8000-000000000006","timestamp_ms":1792385233454}
+{"type":"thinking","subtype":"completed","session_id":"00000000-0000-4000-8000-000000000006","timestamp_ms":1792385234218}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]},"session_id":"00000000-0000-4000-8000-000000000006"}
+{"type":"result","subtype":"success","duration_ms":21888,"duration_api_ms":21888,"is_error":false,"result":"ok","session_id":"00000000-0000-4000-8000-000000000006","request_id":"00000000-0000-4000-8000-000000000013","usage":{"inputTokens":14183,"outputTokens":78,"cacheReadTokens":6272,"cacheWriteTokens":0}}

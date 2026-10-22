@@ -1,0 +1,290 @@
+{
+ "cancel_a_queued_task": {
+  "exit": 0,
+  "lines": [
+   "Cancelled #1 sr-20261020-000000-00aa claude queued: write a poem",
+   "Logged as cancelled.",
+   "If it is still running in another window, that window will say its answer was not saved."
+  ]
+ },
+ "cancel_nothing_open": {
+  "exit": 1,
+  "lines": [
+   "Nothing to cancel: no task is queued or sent."
+  ]
+ },
+ "chat_list_empty": {
+  "exit": 0,
+  "lines": [
+   "No chats yet. sr route \"task\" --chat <name> starts one."
+  ]
+ },
+ "check_nothing_open": {
+  "exit": 0,
+  "lines": [
+   "0 task(s) still open."
+  ]
+ },
+ "fallback_refused_passed": {
+  "exit": 2,
+  "lines": [
+   "Refused: #1 can't fall back: not a double fail: it passed. Nothing was logged or sent."
+  ]
+ },
+ "log_two_tasks": {
+  "exit": 0,
+  "lines": [
+   "  #  created (local)   task_id                  status         agent    skill                 check       task  |  result",
+   "  2  <time>  sr-20261020-000000-0002  awaiting pick  -        relay:versus          -           a 20-word blurb for a seed tray  |  ",
+   "  1  <time>  sr-20261020-000000-0001  done           claude   writing               passed      write a two-line poem about trays  |  Trays stand tall. Garden goes on."
+  ]
+ },
+ "main_slot_flag_on_route": {
+  "exit": 2,
+  "lines": [
+   "Refused: slot flags are for sr relay only (--build on sr route). Nothing was logged or sent."
+  ]
+ },
+ "main_web_on_relay": {
+  "exit": 2,
+  "lines": [
+   "Refused: --web is for a routed task with files (sr route --file <path> --web). Nothing was logged or sent."
+  ]
+ },
+ "pick_a": {
+  "exit": 0,
+  "lines": [
+   "#1 sr-20261020-000000-0001: picked A (claude), reviewed by chatgpt: PASS. It is the task's result (`sr show 1`)."
+  ]
+ },
+ "pick_refused_not_versus": {
+  "exit": 2,
+  "lines": [
+   "Refused: #1 is not a versus task. Nothing was changed."
+  ]
+ },
+ "project_list_empty": {
+  "exit": 0,
+  "lines": [
+   "No projects registered. sr project add <name> <path> registers one."
+  ]
+ },
+ "project_usage": {
+  "exit": 2,
+  "lines": [
+   "Refused: sr project add|list|remove (add <name> <path>; remove <name>). Nothing was changed."
+  ]
+ },
+ "relay_refused_no_preset": {
+  "exit": 2,
+  "lines": [
+   "Refused: name a preset: sr relay <preset> \"task\". `sr relay --list` prints them. Nothing was logged or sent."
+  ]
+ },
+ "relay_versus_awaiting_pick": {
+  "exit": 0,
+  "lines": [
+   "sr-20261020-000000-0001: relay versus: build by claude -> build by chatgpt -> review of stage 1 by chatgpt -> review of stage 2 by claude, then your pick.",
+   "Task 1 · versus · awaiting your pick",
+   "",
+   "A — claude · reviewed by chatgpt: PASS",
+   "CANDIDATE-A: the SimTee adjusts to any height on any mat.",
+   "notes (chatgpt):",
+   "- Wrong: nothing.\n- Strong: clear.",
+   "",
+   "B — chatgpt · reviewed by claude: FAIL",
+   "CANDIDATE-B: one tray, every mat, every height.",
+   "notes (claude):",
+   "- Wrong: it invents a spec.\n- Strong: short.",
+   "",
+   "Pick: sr pick 1 a | b | none"
+  ]
+ },
+ "relay_vote_majority": {
+  "exit": 0,
+  "lines": [
+   "sr-20261020-000000-0001: relay vote: vote by claude -> vote by chatgpt -> vote by grok, then the tally.",
+   "sr-20261020-000000-0001-s3 sent to grok (stage).",
+   "Waiting up to 10 min for Grok. Ctrl+C stops waiting; the task keeps running.",
+   "sr-20261020-000000-0001-s3 (stage 3, vote by grok) arrived (issue #1).",
+   "",
+   "Task 1 · vote · checked-by-vote 2/1",
+   "Answer: Paris (checked-by-vote 2/1)",
+   "",
+   "C — grok (dissent): Lyon · confidence 80",
+   "why (grok):",
+   "Because it is.",
+   "",
+   "A — claude: Paris · confidence 80",
+   "why (claude):",
+   "Because it is.",
+   "",
+   "B — chatgpt: Paris · confidence 80",
+   "why (chatgpt):",
+   "Because it is."
+  ]
+ },
+ "resume_refused_passed": {
+  "exit": 2,
+  "lines": [
+   "Refused: #1 can't be resumed: it is done; only a task stopped by a plan limit or by a process that ended can be resumed.",
+   "Nothing was logged or sent."
+  ]
+ },
+ "resume_refused_unknown": {
+  "exit": 2,
+  "lines": [
+   "Refused: No task #7. Nothing was logged or sent."
+  ]
+ },
+ "route_failed_first_call": {
+  "exit": 1,
+  "lines": [
+   "sr-20261020-000000-0001: writing (Jev, confidence 0.93) -> claude, the skill's best agent.",
+   "sr-20261020-000000-0001 failed: unexpected error: RuntimeError"
+  ]
+ },
+ "route_fixed": {
+  "exit": 0,
+  "lines": [
+   "sr-20261020-000000-0001: writing (Jev, confidence 0.93) -> claude, the skill's best agent.",
+   "sr-20261020-000000-0001 done by claude:",
+   "Draft two.",
+   "CHECKED: passed after one fix.",
+   "`sr show 1 --history` shows the original and the fix list."
+  ]
+ },
+ "route_grok_not_waiting": {
+  "exit": 0,
+  "lines": [
+   "sr-20261020-000000-0001: x_social_pulse (Jev, confidence 0.95) -> grok, the skill's best agent.",
+   "sr-20261020-000000-0001 sent to grok (do).",
+   "sr-20261020-000000-0001 (do by grok) is with grok. Not waiting; run `sr check` later for it."
+  ]
+ },
+ "route_not_passed": {
+  "exit": 5,
+  "lines": [
+   "sr-20261020-000000-0001: writing (Jev, confidence 0.93) -> claude, the skill's best agent.",
+   "sr-20261020-000000-0001 done by claude:",
+   "Draft two.",
+   "NOT PASSED: after one fix round. What the checker still wants fixed:",
+   "1. It still does not rhyme.",
+   "Run: sr fallback 1  (chatgpt redoes it; claude checks)"
+  ]
+ },
+ "route_passed": {
+  "exit": 0,
+  "lines": [
+   "sr-20261020-000000-0001: writing (Jev, confidence 0.93) -> claude, the skill's best agent.",
+   "sr-20261020-000000-0001 done by claude:",
+   "Trays stand tall.\nGarden goes on.",
+   "CHECKED: passed."
+  ]
+ },
+ "route_quick_answer": {
+  "exit": 0,
+  "lines": [
+   "sr-20261020-000000-0001: quick_answer (Jev, confidence 0.99) -> claude, the skill's best agent.",
+   "sr-20261020-000000-0001 done by claude:",
+   "391"
+  ]
+ },
+ "route_refused_agent_not_live": {
+  "exit": 2,
+  "lines": [
+   "Refused: muse is not live yet, so @muse can't be used. Nothing was logged or sent."
+  ]
+ },
+ "route_refused_billing_switch": {
+  "exit": 2,
+  "lines": [
+   "Refused: OPENAI_API_KEY is set. It would make chatgpt bill per token. Unset it and run again.",
+   "Nothing was logged or sent."
+  ]
+ },
+ "route_refused_empty": {
+  "exit": 2,
+  "lines": [
+   "Refused: the task is empty. Nothing was logged or sent."
+  ]
+ },
+ "route_returned_needs_label": {
+  "exit": 4,
+  "lines": [
+   "sr-20261020-000000-0001 came back to you: needs your label.",
+   "Jev's label: writing, confidence 0.50, under the 0.8 floor.",
+   "Run it in Terminal to choose the skill, or start it with @claude or @grok or @chatgpt or @cursor.",
+   "Nothing was sent to an agent."
+  ]
+ },
+ "route_returned_needs_tag": {
+  "exit": 4,
+  "lines": [
+   "sr-20261020-000000-0001 came back to you: recall needs --project or --chat: nothing to recall from.",
+   "Jev's label: recall, confidence 0.97.",
+   "Nothing was sent to an agent."
+  ]
+ },
+ "show_passed": {
+  "exit": 0,
+  "lines": [
+   "#1  sr-20261020-000000-0001  done  created <time>",
+   "Jev: writing, confidence 0.93 (ok, 700 tokens)",
+   "Skill: writing (chosen by jev)",
+   "Doer: claude (best)   Checker: chatgpt   Check: passed",
+   "Task:",
+   "write a two-line poem about trays",
+   "Result:",
+   "Trays stand tall.\nGarden goes on.",
+   "CHECKED: passed.",
+   "Round files: not kept"
+  ]
+ },
+ "show_versus_awaiting": {
+  "exit": 0,
+  "lines": [
+   "#1  sr-20261020-000000-0001  awaiting pick  created <time>",
+   "Relay: versus",
+   "Jev: not asked (relay task)",
+   "Stages:",
+   "  1. build by claude: passed",
+   "  2. build by chatgpt: passed",
+   "  3. review by chatgpt: passed",
+   "  4. review by claude: passed",
+   "Checker: -   Check: -",
+   "Note: awaiting pick",
+   "Task:",
+   "a 20-word blurb for a seed tray",
+   "Round files: not kept",
+   "",
+   "Task 1 · versus · awaiting your pick",
+   "",
+   "A — claude · reviewed by chatgpt: PASS",
+   "CANDIDATE-A: the SimTee adjusts to any height on any mat.",
+   "notes (chatgpt):",
+   "- Wrong: nothing.\n- Strong: clear.",
+   "",
+   "B — chatgpt · reviewed by claude: FAIL",
+   "CANDIDATE-B: one tray, every mat, every height.",
+   "notes (claude):",
+   "- Wrong: it invents a spec.\n- Strong: short.",
+   "",
+   "Pick: sr pick 1 a | b | none"
+  ]
+ },
+ "split_plan_without_a_terminal": {
+  "exit": 0,
+  "lines": [
+   "sr-20261020-000000-0001: split: claude plans 2 to 4 pieces; you approve them; each runs as its own routed task; claude joins the results; chatgpt checks.",
+   "Plan ready: 2 pieces.",
+   "Task 1 · split · plan",
+   "",
+   "1. List three garden seed tray brands.  → writing · claude / chatgpt",
+   "2. Write a haiku about trays.  → writing · claude / chatgpt",
+   "Join: Put the list above the haiku.",
+   "",
+   "No terminal to ask in. Approve it in Terminal: sr split --go 1"
+  ]
+ }
+}

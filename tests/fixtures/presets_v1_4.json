@@ -1,0 +1,42 @@
+{
+  "version": "1.4",
+  "presets": {
+    "research-build": {
+      "stages": [
+        {"n": 1, "agent": "grok",   "role": "research", "contract": "research_note"},
+        {"n": 2, "agent": "claude", "role": "build",    "contract": null}
+      ],
+      "checker": "chatgpt",
+      "slots": {"research": [1], "build": [2], "check": ["checker"]}
+    },
+    "collab": {
+      "stages": [
+        {"n": 1, "agent": "claude",  "role": "plan",    "contract": "plan"},
+        {"n": 2, "agent": "chatgpt", "role": "amend",   "contract": "amended_plan"},
+        {"n": 3, "agent": "claude",  "role": "execute", "contract": "deliverable"},
+        {"n": 4, "agent": "chatgpt", "role": "edit",    "contract": "edit_check", "is_check": true}
+      ],
+      "checker": null,
+      "slots": {"lead": [1, 3], "partner": [2, 4]}
+    },
+    "versus": {
+      "stages": [
+        {"n": 1, "agent": "claude",  "role": "build",  "input": "task",    "contract": null},
+        {"n": 2, "agent": "chatgpt", "role": "build",  "input": "task",    "contract": null},
+        {"n": 3, "agent": "chatgpt", "role": "review", "input": "stage:1", "review_of": 1, "contract": "review_note"},
+        {"n": 4, "agent": "claude",  "role": "review", "input": "stage:2", "review_of": 2, "contract": "review_note"}
+      ],
+      "pick": "owner",
+      "slots": {"a": [1, 4], "b": [2, 3]}
+    },
+    "redteam": {
+      "stages": [
+        {"n": 1, "agent": "claude",  "role": "build",  "input": "task",    "contract": "deliverable"},
+        {"n": 2, "agent": "chatgpt", "role": "attack", "input": "stage:1", "attack_of": 1, "contract": "attack_list"},
+        {"n": 3, "agent": "claude",  "role": "revise", "revise_of": 1, "against": 2, "contract": "revision"}
+      ],
+      "checker": "chatgpt",
+      "slots": {"build": [1, 3], "attack": [2], "check": ["checker"]}
+    }
+  }
+}

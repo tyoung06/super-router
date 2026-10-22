@@ -1,0 +1,219 @@
+{
+ "api_version": 1,
+ "task_id": "sr-20261019-094100-0009",
+ "n": 9,
+ "created_at": "2026-10-19T09:41:03+00:00",
+ "updated_at": "2026-10-19T09:41:21+00:00",
+ "sent_at": null,
+ "source": "cli",
+ "text": "Plan how the bakery moves its pre-orders from a paper list to a shared spreadsheet.",
+ "status": "done",
+ "waiting_on": null,
+ "outcome": "passed",
+ "reason_code": null,
+ "mode": "relay",
+ "preset": "redteam",
+ "parent": null,
+ "project": null,
+ "chat": null,
+ "tag": null,
+ "skill": null,
+ "skill_source": null,
+ "agent": "claude",
+ "checker": "chatgpt",
+ "check_state": "passed",
+ "check_note": null,
+ "route_reason": "relay",
+ "failed_stage": null,
+ "web": false,
+ "files": [],
+ "result": "Pre-order plan\n\n1. Make one shared sheet with columns: name, item, pickup day, paid.\n2. Staff add each phone order the moment it comes in.\n3. Turn on version history and keep a daily copy.\n4. Print the next day's list at closing.",
+ "result_url": null,
+ "jev": {
+  "status": "not_asked",
+  "label": null,
+  "confidence": null,
+  "tokens": 0,
+  "needs_split": null,
+  "error": null
+ },
+ "slots": {
+  "build": "claude",
+  "attack": "chatgpt",
+  "check": "chatgpt"
+ },
+ "working": null,
+ "fallback": {
+  "ok": false,
+  "agent": null,
+  "reason": "not a double fail: it passed"
+ },
+ "resume": {
+  "ok": false,
+  "substitute": null,
+  "agent": null,
+  "checker": null,
+  "reason": "it is done; only a task stopped by a plan limit or by a process that ended can be resumed"
+ },
+ "pid": null,
+ "run_started_at": null,
+ "answered_by": null,
+ "stand_in": null,
+ "filled": null,
+ "card_line": null,
+ "takeover": null,
+ "late": null,
+ "calls": [
+  {
+   "call_id": "sr-20261019-094100-0009-s1",
+   "order": 1,
+   "kind": "stage",
+   "stage": 1,
+   "role": "build",
+   "agent": "claude",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T09:41:09+00:00",
+   "finished_at": "2026-10-19T09:41:09+00:00",
+   "round_file": "tasks/sr-20261019-094100-0009/01-build-claude.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "off (probe not passed)",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null
+   }
+  },
+  {
+   "call_id": "sr-20261019-094100-0009-s2",
+   "order": 2,
+   "kind": "stage",
+   "stage": 2,
+   "role": "attack",
+   "agent": "chatgpt",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T09:41:12+00:00",
+   "finished_at": "2026-10-19T09:41:12+00:00",
+   "round_file": "tasks/sr-20261019-094100-0009/02-attack-chatgpt.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "allowed",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null
+   }
+  },
+  {
+   "call_id": "sr-20261019-094100-0009-s3",
+   "order": 3,
+   "kind": "stage",
+   "stage": 3,
+   "role": "revise",
+   "agent": "claude",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T09:41:15+00:00",
+   "finished_at": "2026-10-19T09:41:15+00:00",
+   "round_file": "tasks/sr-20261019-094100-0009/03-revise-claude.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "off (probe not passed)",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null
+   }
+  },
+  {
+   "call_id": "sr-20261019-094100-0009-c1",
+   "order": 4,
+   "kind": "check",
+   "stage": null,
+   "role": null,
+   "agent": "chatgpt",
+   "status": "done",
+   "verdict": "PASS",
+   "sent_at": "2026-10-19T09:41:18+00:00",
+   "finished_at": "2026-10-19T09:41:18+00:00",
+   "round_file": "tasks/sr-20261019-094100-0009/04-check-chatgpt.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "allowed",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null
+   }
+  }
+ ],
+ "handoff": null,
+ "memory_stored": [],
+ "memory_given": [],
+ "candidates": null,
+ "pick": null,
+ "votes": null,
+ "tally": null,
+ "attacks": [
+  {
+   "n": 1,
+   "severity": "high",
+   "text": "The plan has no backup if the spreadsheet is edited by mistake.",
+   "answered": null
+  },
+  {
+   "n": 2,
+   "severity": "medium",
+   "text": "Nobody owns the sheet on weekends.",
+   "answered": null
+  },
+  {
+   "n": 3,
+   "severity": "low",
+   "text": "The column names are not fixed in advance.",
+   "answered": "The column names are fixed in step 1, so this attack does not apply."
+  }
+ ],
+ "pieces": null,
+ "join": null,
+ "original_file": "tasks/sr-20261019-094100-0009/03-revise-claude.md",
+ "result_file": "tasks/sr-20261019-094100-0009/03-revise-claude.md"
+}

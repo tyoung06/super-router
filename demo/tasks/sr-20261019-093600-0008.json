@@ -1,0 +1,205 @@
+{
+ "api_version": 1,
+ "task_id": "sr-20261019-093600-0008",
+ "n": 8,
+ "created_at": "2026-10-19T09:36:03+00:00",
+ "updated_at": "2026-10-19T09:36:30+00:00",
+ "sent_at": null,
+ "source": "cli",
+ "text": "Pick a one-word name for the garden's seed library.",
+ "status": "returned",
+ "waiting_on": "vote_pick",
+ "outcome": null,
+ "reason_code": null,
+ "mode": "relay",
+ "preset": "vote",
+ "parent": null,
+ "project": null,
+ "chat": null,
+ "tag": null,
+ "skill": null,
+ "skill_source": null,
+ "agent": null,
+ "checker": null,
+ "check_state": null,
+ "check_note": "awaiting pick",
+ "route_reason": "relay",
+ "failed_stage": null,
+ "web": false,
+ "files": [],
+ "result": null,
+ "result_url": null,
+ "jev": {
+  "status": "not_asked",
+  "label": null,
+  "confidence": null,
+  "tokens": 0,
+  "needs_split": null,
+  "error": null
+ },
+ "slots": {
+  "a": "claude",
+  "b": "chatgpt",
+  "c": "grok"
+ },
+ "working": null,
+ "fallback": {
+  "ok": false,
+  "agent": null,
+  "reason": "not eligible: a vote task; nothing checked it, so nothing failed it"
+ },
+ "resume": {
+  "ok": false,
+  "substitute": null,
+  "agent": null,
+  "checker": null,
+  "reason": "it is returned; only a task stopped by a plan limit or by a process that ended can be resumed"
+ },
+ "pid": null,
+ "run_started_at": null,
+ "answered_by": null,
+ "stand_in": null,
+ "filled": null,
+ "card_line": null,
+ "takeover": null,
+ "late": null,
+ "calls": [
+  {
+   "call_id": "sr-20261019-093600-0008-s1",
+   "order": 1,
+   "kind": "stage",
+   "stage": 1,
+   "role": "vote",
+   "agent": "claude",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T09:36:09+00:00",
+   "finished_at": "2026-10-19T09:36:09+00:00",
+   "round_file": "tasks/sr-20261019-093600-0008/01-vote-a-claude.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "off (probe not passed)",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null
+   }
+  },
+  {
+   "call_id": "sr-20261019-093600-0008-s2",
+   "order": 2,
+   "kind": "stage",
+   "stage": 2,
+   "role": "vote",
+   "agent": "chatgpt",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T09:36:12+00:00",
+   "finished_at": "2026-10-19T09:36:12+00:00",
+   "round_file": "tasks/sr-20261019-093600-0008/02-vote-b-chatgpt.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "allowed",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null
+   }
+  },
+  {
+   "call_id": "sr-20261019-093600-0008-s3",
+   "order": 3,
+   "kind": "stage",
+   "stage": 3,
+   "role": "vote",
+   "agent": "grok",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T09:36:15+00:00",
+   "finished_at": "2026-10-19T09:36:24+00:00",
+   "round_file": "tasks/sr-20261019-093600-0008/03-vote-c-grok.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": null,
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null
+   }
+  }
+ ],
+ "handoff": null,
+ "memory_stored": [],
+ "memory_given": [],
+ "candidates": null,
+ "pick": null,
+ "votes": [
+  {
+   "letter": "a",
+   "stage": 1,
+   "agent": "claude",
+   "answer": "Sprout",
+   "why": "Short and friendly.",
+   "confidence": 75,
+   "round_file": "tasks/sr-20261019-093600-0008/01-vote-a-claude.md"
+  },
+  {
+   "letter": "b",
+   "stage": 2,
+   "agent": "chatgpt",
+   "answer": "Kernel",
+   "why": "It sounds sturdy.",
+   "confidence": 75,
+   "round_file": "tasks/sr-20261019-093600-0008/02-vote-b-chatgpt.md"
+  },
+  {
+   "letter": "c",
+   "stage": 3,
+   "agent": "grok",
+   "answer": "Acorn",
+   "why": "Small things grow.",
+   "confidence": 75,
+   "round_file": "tasks/sr-20261019-093600-0008/03-vote-c-grok.md"
+  }
+ ],
+ "tally": {
+  "winner": null,
+  "for": 0,
+  "against": 3,
+  "note": null,
+  "dissent": [
+   "a",
+   "b",
+   "c"
+  ]
+ },
+ "attacks": null,
+ "pieces": null,
+ "join": null,
+ "original_file": null,
+ "result_file": null
+}

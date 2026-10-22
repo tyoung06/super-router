@@ -1,0 +1,163 @@
+{
+ "api_version": 1,
+ "task_id": "sr-20261019-101600-0010",
+ "n": 14,
+ "created_at": "2026-10-19T10:16:03+00:00",
+ "updated_at": "2026-10-19T10:18:18+00:00",
+ "sent_at": null,
+ "source": "cli",
+ "text": "List three winter vegetables for a small garden and write a haiku about frost.",
+ "status": "returned",
+ "waiting_on": "piece",
+ "outcome": null,
+ "reason_code": null,
+ "mode": "split",
+ "preset": null,
+ "parent": null,
+ "project": null,
+ "chat": null,
+ "tag": null,
+ "skill": null,
+ "skill_source": null,
+ "agent": "claude",
+ "checker": "chatgpt",
+ "check_state": "pending",
+ "check_note": "waiting: pieces #15, #16",
+ "route_reason": "split",
+ "failed_stage": null,
+ "web": false,
+ "files": [],
+ "result": null,
+ "result_url": null,
+ "jev": {
+  "status": "not_asked",
+  "label": null,
+  "confidence": null,
+  "tokens": 1280,
+  "needs_split": null,
+  "error": null
+ },
+ "slots": null,
+ "working": null,
+ "fallback": {
+  "ok": false,
+  "agent": null,
+  "reason": "not a double fail: it is returned"
+ },
+ "resume": {
+  "ok": false,
+  "substitute": null,
+  "agent": null,
+  "checker": null,
+  "reason": "it is returned; only a task stopped by a plan limit or by a process that ended can be resumed"
+ },
+ "pid": null,
+ "run_started_at": null,
+ "answered_by": null,
+ "stand_in": null,
+ "filled": null,
+ "card_line": null,
+ "takeover": null,
+ "late": null,
+ "calls": [
+  {
+   "call_id": "sr-20261019-101600-0010-s1",
+   "order": 1,
+   "kind": "stage",
+   "stage": 1,
+   "role": "split_plan",
+   "agent": "claude",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T10:16:09+00:00",
+   "finished_at": "2026-10-19T10:16:09+00:00",
+   "round_file": "tasks/sr-20261019-101600-0010/01-split_plan-claude.md",
+   "served": null,
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "off (probe not passed)",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null
+   }
+  }
+ ],
+ "handoff": null,
+ "memory_stored": [],
+ "memory_given": [],
+ "candidates": null,
+ "pick": null,
+ "votes": null,
+ "tally": null,
+ "attacks": null,
+ "pieces": [
+  {
+   "piece": 1,
+   "task_id": "sr-20261019-101609-0011",
+   "n": 15,
+   "status": "done",
+   "waiting_on": null,
+   "outcome": "unchecked",
+   "skipped": false,
+   "text": "List three winter vegetables for a small garden.",
+   "result": "Kale, leeks and garlic.",
+   "jev": {
+    "status": "ok",
+    "label": "quick_answer",
+    "confidence": 0.97
+   },
+   "route": {
+    "skill": "quick_answer",
+    "agent": "claude",
+    "checker": null,
+    "check_state": "not_needed",
+    "comes_back": null
+   },
+   "needs_label": false,
+   "choice": null,
+   "edited": false,
+   "piece_state": "done",
+   "why": null
+  },
+  {
+   "piece": 2,
+   "task_id": "sr-20261019-101609-0012",
+   "n": 16,
+   "status": "done",
+   "waiting_on": null,
+   "outcome": "failed_check",
+   "skipped": false,
+   "text": "Write a haiku about frost.",
+   "result": "Frost on the poles, again",
+   "jev": {
+    "status": "ok",
+    "label": "writing",
+    "confidence": 0.95
+   },
+   "route": {
+    "skill": "writing",
+    "agent": "claude",
+    "checker": "chatgpt",
+    "check_state": "pending",
+    "comes_back": null
+   },
+   "needs_label": false,
+   "choice": null,
+   "edited": false,
+   "piece_state": "blocked",
+   "why": "it failed its check twice"
+  }
+ ],
+ "join": "Put the list above the haiku.",
+ "original_file": null,
+ "result_file": null
+}

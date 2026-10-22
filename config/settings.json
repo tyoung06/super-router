@@ -1,0 +1,13 @@
+{
+  "note": "Router settings that are neither agents nor skills. A path may start with ~.",
+  "drop_folder": "~/Desktop/Router Drop",
+  "grok_prompt_limit": 3662,
+  "memory_url": "http://127.0.0.1:8888",
+  "memory_bank": "super-router",
+  "memory_max_items": 5,
+  "memory_max_chars": 2000,
+  "memory_query_chars": 1500,
+  "grok_timeout_minutes": 5,
+  "memory": "auto",
+  "serve_port": 8765
+}

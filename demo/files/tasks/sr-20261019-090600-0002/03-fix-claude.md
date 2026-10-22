@@ -1,0 +1,1 @@
+From Monday, the tool shed opens at 7 am on weekdays.
