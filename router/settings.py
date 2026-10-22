@@ -4,7 +4,7 @@ whole, measured once by Claude Code and written by the owner; until the owner do
 Brief 21 (rules v2.30, Router for the interface; the owner's B1 amendment): `config/settings.local.json`, gitignored and
 optional, overrides the tracked file key by key; it holds this Mac's own values, such as `report_path`, which never
 goes in the tracked file (the repo goes public). `grok_timeout_minutes` (the Grok note's N), `memory` (auto or off,
-shown; brief 22 acts on it) and `serve_port` (the port `sr serve` uses)."""
+shown; brief 22 acts on it) and `serve_port` (the port `sr serve` uses). Brief 26: `projects_root`."""
 import json
 import re
 from pathlib import Path
@@ -74,6 +74,28 @@ def never_register(doc=None):
                                               for v in value):
         return None, f"{NEVER_KEY} in settings isn't a list of paths"
     return [Path(v.strip()).expanduser() for v in value], None
+
+
+# Build brief 26 (decision 8): where `sr project new` makes a project's folder. Optional; the default lives here, so the
+# tracked settings file needs no key. A value that is not absolute once `~` is expanded refuses every `new`.
+PROJECTS_ROOT_KEY = "projects_root"
+DEFAULT_PROJECTS_ROOT = "~/Projects"
+
+
+def projects_root_written(doc=None):
+    """projects_root as written in the settings (shown in status), or the default when it is absent."""
+    value = (_read() if doc is None else doc).get(PROJECTS_ROOT_KEY)
+    return DEFAULT_PROJECTS_ROOT if value is None else value if isinstance(value, str) else json.dumps(value)
+
+
+def projects_root(doc=None):
+    """(the projects root with `~` expanded, None), or (None, why not) in words. Absent is the default, ~/Projects."""
+    value = (_read() if doc is None else doc).get(PROJECTS_ROOT_KEY)
+    if value is None:
+        return Path(DEFAULT_PROJECTS_ROOT).expanduser(), None
+    if not isinstance(value, str) or not value.strip() or not Path(value.strip()).expanduser().is_absolute():
+        return None, f"{PROJECTS_ROOT_KEY} in settings isn't an absolute or ~ path"
+    return Path(value.strip()).expanduser(), None
 
 
 def grok_timeout_minutes():

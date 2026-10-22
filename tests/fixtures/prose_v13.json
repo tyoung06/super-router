@@ -72,7 +72,7 @@
  "project_usage": {
   "exit": 2,
   "lines": [
-   "Refused: sr project add|list|remove (add <name> <path>; remove <name>). Nothing was changed."
+   "Refused: sr project add|list|remove|new (add <name> <path>; remove <name>; new <name> [--dry-run] [-- '<notes>']). Nothing was changed."
   ]
  },
  "relay_refused_no_preset": {

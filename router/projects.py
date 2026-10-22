@@ -6,6 +6,11 @@ The router reads one file in a project folder, `HANDOFF.md`, and writes one thin
 byte for byte (newline style included). `write_entry` is the one write path. A folder in the `never_register`
 setting (brief 25: config/settings.local.json; the code spells no folder) is never registered, by name or by path. No
 agent writes any of this; the router does, and only through here.
+
+Brief 26 (rules 2.36, Making a project): `new` makes `<projects_root>/<name>`, a new `HANDOFF.md` holding the starting
+notes above the empty block (the one write outside the block, in a file the router has just made), and the registry
+entry; a folder already there is registered as `add` registers it. `plan_new` is its dry run: every check, nothing
+written. Nothing here deletes anything.
 """
 import json
 import re
@@ -27,6 +32,17 @@ ENTRY_HEAD = re.compile(r"^### #\d+ ")
 
 class ProjectError(safety.SafeError):
     """A refusal or a failure with no secret in its text: names, paths and counts only."""
+    code = "project_refused"
+
+
+class BadName(ProjectError):
+    """The name rule (brief 26: `new` answers it as `bad_name`; `add` still says project_refused)."""
+    code = "bad_name"
+
+
+class Partial(ProjectError):
+    """Brief 26 (decision 7): a write failed after the folder was made. What exists is left and named."""
+    code = "project_partial"
 
 
 @dataclass(frozen=True)
@@ -93,7 +109,7 @@ def _never_register():
 
 def check_name(name):
     if not isinstance(name, str) or not NAME.fullmatch(name):
-        raise ProjectError("a project name is lower case letters, digits and - only")
+        raise BadName("a project name is lower case letters, digits and - only")
 
 
 def add(name, folder, *, path=None):
@@ -149,6 +165,192 @@ def folder_of(name, *, path=None):
     """The registered folder of `name`, or None."""
     found = read_registry(path).get(name)
     return Path(found) if found else None
+
+
+# ---------- making a project (brief 26) ----------
+
+NOTES_LIMIT = 4000
+
+
+@dataclass(frozen=True)
+class Plan:
+    """What `new` would do: `would` is create, register or refused; `folder` the resolved `<root>/<name>` (None when no
+    folder can be named: a bad name or an unusable root); `handoff` its state; `code` and `why` on a refusal."""
+    would: str
+    name: object
+    folder: Path = None
+    handoff: dict = None
+    code: str = None
+    why: str = None
+    root: Path = None
+
+
+@dataclass(frozen=True)
+class Made:
+    """What `new` did: `did` is created or registered; the folder, the file's line count, and (for a folder that was
+    there) whether `add` created the file or appended the markers."""
+    did: str
+    folder: Path
+    lines: int
+    created: bool = False
+    marked: bool = False
+
+
+def tilde(path):
+    """`path` with the home folder shown as `~` (the page and the prose show folders this way)."""
+    path, home = Path(path), Path.home()
+    for base in dict.fromkeys((home, home.resolve())):
+        if path == base or base in path.parents:
+            return "~" + ("/" + str(path.relative_to(base)) if path != base else "")
+    return str(path)
+
+
+def _notes_problem(notes, secrets):
+    """Why the starting notes are refused, or None: past NOTES_LIMIT, a line that is one of the router's markers (the
+    test `_marker_lines` uses), or a line the redactor would change or the key scan matches (the two checks a handoff
+    passes before every call, context.load). Names the line; never the text."""
+    if len(notes) > NOTES_LIMIT:
+        return f"the starting notes are {len(notes):,} characters; at most {NOTES_LIMIT:,}"
+    lines = notes.splitlines()
+    for n, line in enumerate(lines, 1):
+        if line.strip() in (START, END):
+            return f"line {n} of the notes is the router's marker; it goes only in the router's block"
+    for n, line in enumerate(lines, 1):
+        if safety.redact(line, secrets) != line:
+            return f"line {n} of the notes holds a value from .env"
+    if safety.redact(notes, secrets) != notes:  # a secret across lines (none is, but never let one through)
+        return "the notes hold a value from .env"
+    found = safety.key_like(notes)
+    if found is not None:
+        return f"line {found} of the notes looks like it holds a key"
+    return None
+
+
+def _handoff_state(folder):
+    handoff = handoff_path(folder)
+    if not handoff.exists():
+        return {"exists": False, "lines": None, "has_block": False}
+    text = _read_text(handoff)
+    return {"exists": True, "lines": line_count(text), "has_block": has_block(text)}
+
+
+def plan_new(name, notes=None, *, secrets=(), root=None, path=None):
+    """Every check `new` makes, in its order; reads the registry, the settings and the folder and writes nothing.
+    `root` None reads projects_root from the settings. Never raises a ProjectError: a refusal is the Plan's answer."""
+    try:
+        check_name(name)
+    except BadName as e:
+        return Plan("refused", name, code=e.code, why=str(e))
+    try:
+        entries = _never_register()
+        refused = never_registered(None, name, entries)
+        if refused:
+            raise ProjectError(refused)
+        if root is None:
+            root, why = settings.projects_root()
+            if why:
+                raise ProjectError(f"{why}: nothing is made until it is fixed")
+        try:
+            root = Path(root).expanduser().resolve()
+        except OSError:
+            raise ProjectError(f"the projects root {safety.one_line(str(root))} could not be resolved") from None
+        for entry in entries:
+            if root == entry or entry in root.parents:
+                raise ProjectError(f"the projects root {safety.one_line(tilde(root))} is inside {entry.name}, which is "
+                                   "never registered")
+        if root.exists() and not root.is_dir():
+            raise ProjectError(f"the projects root {safety.one_line(tilde(root))} is not a folder")
+        folder = root / name
+    except ProjectError as e:
+        return Plan("refused", name, code=e.code, why=str(e))
+    try:
+        if folder.is_symlink():
+            raise ProjectError(f"{name} in the projects root is a link; a folder kept elsewhere is registered with "
+                               f"sr project add {name} <path>")
+        refused = never_registered(folder, name, entries)
+        if refused:
+            raise ProjectError(refused)
+        registry = read_registry(path)
+        if name in registry:  # the owner (22 Oct): where it is registered, shown with ~, so the page prints no home path
+            folder = Path(registry[name])
+            raise ProjectError(f"{name} is already registered at {safety.one_line(tilde(folder))}; remove it first")
+        if folder.exists() and not folder.is_dir():
+            raise ProjectError(f"{safety.one_line(tilde(folder))} is there and is not a folder")
+        if folder.is_dir():
+            if notes:
+                raise ProjectError(f"{safety.one_line(tilde(folder))} is there already, so its {HANDOFF} is yours to "
+                                   "edit: starting notes go only in a file the router makes")
+            return Plan("register", name, folder, _handoff_state(folder), root=root)
+        problem = _notes_problem(notes, secrets) if notes else None
+        if problem:
+            raise ProjectError(problem)
+        return Plan("create", name, folder, {"exists": False, "lines": None, "has_block": False}, root=root)
+    except ProjectError as e:
+        return Plan("refused", name, folder, code=e.code, why=str(e), root=root)
+
+
+def _create_handoff(handoff, data):
+    """Exclusive create: a file that appeared at the path is never overwritten (FileExistsError)."""
+    with open(handoff, "xb") as f:
+        f.write(data)
+
+
+def _partial(step, root, made_root, folder, name, path):
+    """The Partial for a write that failed at `step`: what exists now, read from the disk and the registry."""
+    shown = [f"the projects root {tilde(root)} (made now)"] if made_root else []
+    if folder.is_dir():
+        shown.append(f"the folder {tilde(folder)}")
+        shown.append(f"{HANDOFF} is there" if handoff_path(folder).exists() else f"{HANDOFF} is not there")
+    try:
+        registered = name in read_registry(path)
+    except ProjectError:
+        registered = False
+    shown.append(f"{name} is registered" if registered else f"{name} is not registered")
+    return Partial(f"{step}. What exists now: {', '.join(shown)}. Nothing was deleted")
+
+
+def new(name, notes=None, *, secrets=(), root=None, path=None):
+    """Make the project (brief 26, decision 7): every check first (`plan_new`); then the root if missing (with its
+    parents), the folder (no parents), HANDOFF.md by exclusive create (the notes byte for byte, a newline added if
+    missing, one blank line, then the two marker lines; no notes: the bytes `add` makes), then the registry entry through
+    `add`. A folder already there goes to `add` as it is. Raises the plan's refusal (BadName or ProjectError, nothing
+    written), or Partial when a write fails after the folder is made."""
+    plan = plan_new(name, notes, secrets=secrets, root=root, path=path)
+    if plan.would == "refused":
+        raise (BadName if plan.code == BadName.code else ProjectError)(plan.why)
+    if plan.would == "register":
+        done = add(name, str(plan.folder), path=path)
+        return Made("registered", done.path, done.lines, done.created, done.marked)
+    root, folder = plan.root, plan.folder
+    made_root = False
+    if not root.exists():
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            raise ProjectError(f"the projects root {safety.one_line(tilde(root))} could not be made") from None
+        made_root = True
+    try:
+        folder.mkdir()
+    except FileExistsError:
+        if made_root:
+            raise _partial(f"{tilde(folder)} appeared while it was being made", root, True, folder, name, path) from None
+        raise ProjectError(f"{safety.one_line(tilde(folder))} appeared while it was being made") from None
+    except OSError:
+        if made_root:
+            raise _partial(f"the folder {tilde(folder)} could not be made", root, True, folder, name, path) from None
+        raise ProjectError(f"the folder {safety.one_line(tilde(folder))} could not be made") from None
+    body = f"{START}\n{END}\n"
+    if notes:
+        body = notes + ("" if notes.endswith("\n") else "\n") + "\n" + body
+    try:
+        _create_handoff(handoff_path(folder), body.encode("utf-8"))
+    except OSError:
+        raise _partial(f"{HANDOFF} could not be written", root, made_root, folder, name, path) from None
+    try:
+        done = add(name, str(folder), path=path)
+    except (ProjectError, OSError):
+        raise _partial("the registry entry could not be written", root, made_root, folder, name, path) from None
+    return Made("created", done.path, done.lines)
 
 
 # ---------- the handoff file ----------

@@ -7,7 +7,12 @@ switcher page. Never part of the page, the router or `sr`; the regression fixtur
 
 Scenarios: demo, worst (a 4,000-character task with no spaces, a one-character task, a 200-character file name, a
 2 MB result, every waiting state at once, a 64-character chat name, 64 tasks for History), empty, one (every count
-at 1), two-agents, null-lights, status-failing."""
+at 1), two-agents, null-lights, status-failing, and newproject (brief 26): not a demo, so the New project sheet's Create
+works, against a fake reader and a fake `sr` (nothing real runs or is written but `made.json` in the scenario folder).
+Its dry run answers by the name typed: `slow…` never answers, `link…` and `root…` are the router's refusals, a name
+already a project is taken, `recipe…` is a folder that is there (HANDOFF.md 14 lines), anything else a new folder under a
+long iCloud projects root. Create: notes holding `token:` are refused (exit 2), a name starting `partial` stops part
+way (exit 1), anything else is made and shows in the sidebar."""
 import copy
 import http.server
 import json
@@ -30,7 +35,8 @@ LONG_FILE = ("Q3-2026-board-review-deck-final-v12-APPROVED-by-legal-and-finance-
              "quarterly-meeting-with-comments-from-aleksandra-wisniewska-kowalczyk-and-jo-before-the-vote.pdf")[:200]
 _LINE = "region,store,week,units,revenue,returns,notes\nnorth,Maple Street,2026-W42,1284,18311.40,12,\"restock trays\"\n"
 BIG_RESULT = "Here is the full export you asked for.\n\n```csv\n" + _LINE * (2_000_000 // len(_LINE)) + "```\n"
-SCENARIOS = ("demo", "worst", "empty", "one", "two-agents", "null-lights", "status-failing")
+SCENARIOS = ("demo", "worst", "empty", "one", "two-agents", "null-lights", "status-failing", "newproject")
+LONG_ROOT = "~/Library/Mobile Documents/com~apple~CloudDocs/Northwind Industries Holdings/Client Projects 2026"
 
 
 def _read(name):
@@ -106,6 +112,11 @@ def build(out):
     _two_agents(out / "two-agents", status)
     _null_lights(out / "null-lights", status)
     (out / "status-failing" / "status.json").unlink()
+    status = copy.deepcopy(status)
+    status["projects"] = status["projects"] + [{"name": LONG_PROJECT, "path": f"{LONG_ROOT}/{LONG_PROJECT}",
+                                                "handoff_lines": 212, "open_task": None}]
+    status["projects_root"] = LONG_ROOT
+    _write(out / "newproject" / "status.json", status)
     return out
 
 
@@ -218,6 +229,93 @@ class PagingReader(page.DemoReader):
         return 200, json.dumps({**doc, "tasks": shown, "next_before": shown[-1]["task_id"] if len(tasks) > 50 else None}).encode()
 
 
+# Brief 26: the fake `sr` the newproject scenario runs (as `python -c`, from the scenario folder). It answers
+# `project new` as the router's envelope does and records a made project in made.json; anything else is a plain answer.
+FAKE_SR = r"""
+import json, sys, time
+args = sys.argv[1:]
+time.sleep(0.8)
+env = {"task_id": None, "n": None, "status": None, "waiting_on": None, "outcome": None, "reason_code": None, "exit": 0,
+       "message": "fake sr: " + " ".join(args[:2])}
+if args[:2] == ["project", "new"]:
+    name = args[3]
+    notes = args[args.index("--") + 1] if "--" in args else ""
+    if "token:" in notes:
+        line = next(i for i, l in enumerate(notes.splitlines(), 1) if "token:" in l)
+        env.update(reason_code="project_refused", exit=2,
+                   message=f"Refused: line {line} of the notes looks like it holds a key. Nothing was changed.")
+    elif name.startswith("partial"):
+        env.update(reason_code="project_partial", exit=1, message=(
+            f"Stopped: HANDOFF.md could not be written. What exists now: the projects root ROOT (made now), the folder "
+            f"ROOT/{name}, HANDOFF.md is not there, {name} is not registered. Nothing was deleted."))
+    else:
+        lines = (len(notes.splitlines()) + 1 if notes else 0) + 2
+        try:
+            made = json.load(open("made.json"))
+        except OSError:
+            made = []
+        made.append({"name": name, "path": "ROOT/" + name, "handoff_lines": lines, "open_task": None})
+        open("made.json", "w").write(json.dumps(made).replace("ROOT", ROOT_PATH))
+        env["message"] = f"Created {name} at ROOT/{name}. HANDOFF.md made ({lines} lines)."
+        env["project"] = {"name": name, "folder": "ROOT/" + name, "handoff_lines": lines, "did": "created"}
+print(json.dumps(env).replace("ROOT", ROOT_PATH), file=sys.stdout if env["exit"] == 0 else sys.stderr)
+sys.exit(env["exit"])
+""".replace("ROOT_PATH", repr(LONG_ROOT))
+
+
+class NewProjectReader(PagingReader):
+    """Brief 26: the newproject scenario's reads. Status and the project list add what the fake `sr` made; the dry run
+    answers by the name (see the module's docstring). Never kept, so a made project shows on the next read."""
+
+    def _made(self):
+        try:
+            return json.loads((self.root / "made.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+
+    def status(self, fresh=False):
+        code, body = self._file("status.json")
+        if code != 200:
+            return code, body
+        doc = json.loads(body)
+        doc["projects"] = doc["projects"] + self._made()
+        return 200, json.dumps(doc).encode()
+
+    def projects(self):
+        doc = json.loads(self._file("projects.json")[1])
+        return 200, json.dumps({**doc, "projects": doc["projects"] + self._made()}).encode()
+
+    def forget_status(self):
+        pass
+
+    def project_check(self, name):
+        import time
+        status = self.status_doc() or {}
+        root = status.get("projects_root")
+        taken = next((p for p in status.get("projects") or [] if p.get("name") == name), None)
+        found = {"api_version": 1, "would": "create", "name": name, "folder": f"{root}/{name}",
+                 "handoff": {"exists": False, "lines": None, "has_block": False}, "reason_code": None}
+        if name.startswith("slow"):
+            time.sleep(3600)  # a dry run that never answers
+        if taken:
+            why = f"{name} is already registered at {taken.get('path')}; remove it first"
+        elif name.startswith("link"):
+            why = f"{name} in the projects root is a link; a folder kept elsewhere is registered with sr project add {name} <path>"
+        elif name.startswith("root"):
+            why = "projects_root in settings isn't an absolute or ~ path: nothing is made until it is fixed"
+        else:
+            why = None
+        if why:
+            found.update(would="refused", folder=taken.get("path") if taken else None, handoff=None, reason_code="project_refused",
+                         message=f"Would refuse: {why}. Nothing was changed.")
+        elif name.startswith("recipe"):
+            found.update(would="register", handoff={"exists": True, "lines": 14, "has_block": False},
+                         message=f"Would register {root}/{name} as it is. Nothing was changed.")
+        else:
+            found["message"] = f"Would create {root}/{name} and its HANDOFF.md, and register {name}. Nothing was changed."
+        return 200, json.dumps(found).encode()
+
+
 SWITCHER = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Break the page</title><style>body{font:14px system-ui;margin:24px;background:#f4f4f5;color:#111}
 nav{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:2px;padding:3px;border-radius:9px;
@@ -230,7 +328,13 @@ def serve(out, base=8800):
     links = []
     for i, name in enumerate(SCENARIOS, 1):
         root = Path(out) / name
-        srv = page.make_server(base + i, reader=PagingReader(root), demo=True, demo_root=root)
+        if name == "newproject":  # brief 26: not a demo, so Create works; the fake sr runs, nothing real does
+            from router import page_runs
+            runs = page_runs.Runs(root=root, prefix=[sys.executable, "-c", FAKE_SR])
+            srv = page.make_server(base + i, reader=NewProjectReader(root), runs=runs, root=root, demo_root=root,
+                                   platform="linux")  # linux: no Open in Finder from a dev page
+        else:
+            srv = page.make_server(base + i, reader=PagingReader(root), demo=True, demo_root=root)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         servers.append(srv)
         links.append(f'<a href="http://127.0.0.1:{base + i}/">{name}</a>')

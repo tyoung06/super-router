@@ -59,6 +59,7 @@ class Runs:
         self.popen, self.root, self.clock, self.keep, self.thread = popen, Path(root), clock, keep, thread
         self.prefix = list(prefix) if prefix is not None else [sys.executable, "-m", "router"]
         self._runs, self._ids, self._lock = collections.OrderedDict(), itertools.count(1), threading.Lock()
+        self.on_finished = None  # brief 26 (decision 11): called with (a copy of the run, its exit) before it reads as ended
 
     def start(self, args, display, kind="action", request=None):
         """`sr <args>` started now; its record (a copy). Raises OSError when the command can't start."""
@@ -87,6 +88,14 @@ class Runs:
 
     def finished(self, run_id, code, stdout, stderr):
         envelope, rest = envelope_of(code, stdout or "", stderr or "")
+        with self._lock:
+            run = self._runs.get(run_id)
+            found = dict(run) if run is not None else None
+        if found is not None and self.on_finished is not None:
+            try:  # before the run reads as ended, so a page that sees it end never reads the old kept status
+                self.on_finished(found, code)
+            except Exception:  # never let a hook lose a run's end
+                pass
         with self._lock:
             run = self._runs.get(run_id)
             if run is None:

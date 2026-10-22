@@ -855,18 +855,23 @@
   },
   {
    "name": "project",
-   "help": "the project registry (rules v2.25): sr project add <name> <path>, sr project list, sr project remove <name>",
+   "help": "the project registry (rules v2.25): sr project add <name> <path>, sr project list, sr project remove <name>, sr project new <name> [--dry-run] [-- '<notes>'] (brief 26: makes <projects_root>/<name>)",
    "arguments": [
     {
      "name": "words",
      "kind": "positional",
      "nargs": "*",
-     "help": "add <name> <path> | list | remove <name>"
+     "help": "add <name> <path> | list | remove <name> | new <name>"
     },
     {
      "name": "--json",
      "kind": "flag",
      "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing; `list --json` prints the projects as JSON"
+    },
+    {
+     "name": "--dry-run",
+     "kind": "flag",
+     "help": "with new: say what it would do (create, register or refuse) and write nothing"
     }
    ]
   },
@@ -1441,6 +1446,7 @@
  ],
  "drop_folder": "~/Desktop/Router Drop",
  "serve_port": 8765,
+ "projects_root": "~/Projects",
  "report_path": "~/Downloads/claude-code-report.md",
  "version": "2.32",
  "log_version": 16,

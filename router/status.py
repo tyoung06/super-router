@@ -293,6 +293,7 @@ def build(conn, *, roster, loaded, env, parser, online, versions, state_path, me
         "chats": chats_view(conn),
         "drop_folder": str(drop_folder) if drop_folder else None,
         "serve_port": settings.serve_port(),
+        "projects_root": settings.projects_root_written(),  # brief 26 (decision 8): as written
     }
     report = settings.report_path()
     if report:

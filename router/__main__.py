@@ -4465,17 +4465,103 @@ def cmd_migrate(*, db_path, backups_dir, now=None, out=print):
     return 0
 
 
-PROJECT_USAGE = "sr project add|list|remove (add <name> <path>; remove <name>)"
+PROJECT_USAGE = ("sr project add|list|remove|new (add <name> <path>; remove <name>; "
+                 "new <name> [--dry-run] [-- '<notes>'])")
+PROJECT_FLAGS = ("--json", "--dry-run")
 
 
-def cmd_project(words, *, conn, as_json=False, out=print):
-    """`sr project add|list|remove` (rules v2.25, Project context; build brief 18, decision 1). Only the owner runs
-    these. `add` registers a folder that exists, never one in never_register, and gives its HANDOFF.md the router's block;
-    `list` prints each project with its path, line count and open task; `remove` drops the entry and touches no
-    file. Exit 0, or 2 refused with the reason and nothing changed. `as_json` (brief 21): `list` gives the page its
-    document (`sr project list --json`)."""
+def _take_project_notes(argv):
+    """Brief 26 (decisions 1 and 9): for `sr project`, (argv for argparse, the notes or None, a usage problem or None).
+    The one argument after the first bare `--` is the notes, taken off before argparse, so `-h` or `--skill coding` in
+    them is text; `--json` and `--dry-run` before it move to just after `project`, so `new --json <name>` parses (the
+    words are one positional). Any other command comes back unchanged."""
+    argv = list(argv)
+    if not argv or argv[0] != "project":
+        return argv, None, None
+    head, tail = (argv[:argv.index("--")], argv[argv.index("--") + 1:]) if "--" in argv else (argv, None)
+    head = [head[0], *(t for t in head[1:] if t in PROJECT_FLAGS), *(t for t in head[1:] if t not in PROJECT_FLAGS)]
+    if tail is None:
+        return head, None, None
+    if not tail:
+        return head, None, "nothing follows --: the notes go after it, in quotes (sr project new <name> -- '<notes>')"
+    if len(tail) > 1:
+        return head, None, ("the notes after -- are one argument: put them in quotes "
+                            "(sr project new <name> -- '<notes>')")
+    return head, tail[0], None
+
+
+def _handoff_words(created, marked):
+    return ("HANDOFF.md created with an empty block" if created
+            else "HANDOFF.md given the router's block at its end" if marked else "HANDOFF.md kept as it is")
+
+
+def _dry_run_words(plan):
+    """The dry run's prose (brief 26, decision 6): what `new` would do, or why it would refuse."""
+    if plan.would == "refused":
+        return f"Would refuse: {safety.one_line(plan.why)}. Nothing was changed."
+    folder = safety.one_line(projects.tilde(plan.folder))
+    if plan.would == "register":
+        state = plan.handoff
+        what = ("HANDOFF.md created with an empty block" if not state["exists"]
+                else f"HANDOFF.md ({state['lines']} lines) kept as it is" if state["has_block"]
+                else f"HANDOFF.md ({state['lines']} lines) given the router's block at its end")
+        return f"Would register {folder} as it is: {what}. Nothing was changed."
+    root = "" if plan.root.exists() else f"; the projects root {safety.one_line(projects.tilde(plan.root))} is made too"
+    return f"Would create {folder} and its HANDOFF.md, and register {plan.name}{root}. Nothing was changed."
+
+
+def _project_new(name, notes, *, dry_run, secrets, out):
+    """`sr project new <name> [--dry-run] [-- <notes>]` (brief 26). The dry run answers with its document and exit 0,
+    a refusal included; `new` answers 0 with `project` on the envelope, 2 refused (bad_name or project_refused, nothing
+    changed) or 1 when a write failed after the folder was made (project_partial, what exists named)."""
+    if dry_run:
+        plan = projects.plan_new(name, secrets=secrets)
+        words = _dry_run_words(plan)
+        receipt.deliver(out, {"api_version": jsonview.API_VERSION, "would": plan.would, "name": plan.name,
+                              "folder": projects.tilde(plan.folder) if plan.folder is not None else None,
+                              "handoff": plan.handoff, "reason_code": plan.code, "message": words})
+        out(words)
+        return 0
+    try:
+        made = projects.new(name, notes or None, secrets=secrets)
+    except projects.Partial as e:
+        receipt.mark(out, code=e.code)
+        out(f"Stopped: {safety.one_line(e)}.")
+        return 1
+    except projects.ProjectError as e:
+        receipt.mark(out, code=e.code)
+        out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+        return 2
+    folder = projects.tilde(made.folder)
+    if made.did == "created":
+        what = "HANDOFF.md made: your notes, then the router's block" if notes else "HANDOFF.md made with an empty block"
+        out(f"Created {name} at {safety.one_line(folder)}. {what} ({made.lines} lines).")
+    else:
+        out(f"Added {name} at {safety.one_line(folder)}. {_handoff_words(made.created, made.marked)} ({made.lines} lines).")
+    receipt.attach(out, project={"name": name, "folder": folder, "handoff_lines": made.lines, "did": made.did})
+    text = projects.read_handoff(made.folder)
+    warning = projects.size_warning(made.lines, projects.block_start(text))
+    if warning:
+        out(warning)
+    return 0
+
+
+def cmd_project(words, *, conn, as_json=False, out=print, notes=None, dry_run=False, secrets=()):
+    """`sr project add|list|remove|new` (rules v2.25, Project context; build brief 18, decision 1; brief 26). Only the
+    owner runs these. `add` registers a folder that exists, never one in never_register, and gives its HANDOFF.md the
+    router's block; `list` prints each project with its path, line count and open task; `remove` drops the entry and
+    touches no file; `new` (brief 26) makes `<projects_root>/<name>`, its HANDOFF.md (the `notes` above the block) and the
+    entry, or registers the folder there, and `--dry-run` says which without writing. Exit 0, or 2 refused with the reason
+    and nothing changed (1 for `new` stopped part way). `as_json` (brief 21): `list` gives the page its document
+    (`sr project list --json`)."""
     words = list(words)
     verb = words[0] if words else None
+    if verb == "new" and len(words) == 2 and not (dry_run and notes is not None):
+        return _project_new(words[1], notes, dry_run=dry_run, secrets=secrets, out=out)
+    if dry_run or notes is not None:
+        receipt.mark(out, code="usage")
+        out(f"Refused: {PROJECT_USAGE}; --dry-run takes the name alone. Nothing was changed.")
+        return 2
     if verb == "add" and len(words) == 3:
         name, folder = words[1], words[2]
         try:
@@ -4484,8 +4570,7 @@ def cmd_project(words, *, conn, as_json=False, out=print):
             receipt.mark(out, code="project_refused")
             out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
             return 2
-        what = ("HANDOFF.md created with an empty block" if done.created
-                else "HANDOFF.md given the router's block at its end" if done.marked else "HANDOFF.md kept as it is")
+        what = _handoff_words(done.created, done.marked)
         out(f"Registered {name} at {safety.one_line(str(done.path))}. {what} ({done.lines} lines).")
         warning = projects.size_warning(done.lines, done.block_start)
         if warning:
@@ -4963,9 +5048,13 @@ def _parser(roster, quiet=False):
     sub.add_parser("migrate", help="one time: move a version 1 log into backups/ and start fresh, "
                                    "or upgrade a version 2 log in place after a backup copy")
     p_project = sub.add_parser("project", help="the project registry (rules v2.25): sr project add <name> <path>, "
-                                               "sr project list, sr project remove <name>", allow_abbrev=False)
-    p_project.add_argument("words", nargs="*", help="add <name> <path> | list | remove <name>")
+                                               "sr project list, sr project remove <name>, sr project new <name> "
+                                               "[--dry-run] [-- '<notes>'] (brief 26: makes <projects_root>/<name>)",
+                               allow_abbrev=False)
+    p_project.add_argument("words", nargs="*", help="add <name> <path> | list | remove <name> | new <name>")
     p_project.add_argument("--json", action="store_true", help=JSON_HELP + "; `list --json` prints the projects as JSON")
+    p_project.add_argument("--dry-run", action="store_true", dest="dry_run",
+                           help="with new: say what it would do (create, register or refuse) and write nothing")
     p_chat = sub.add_parser("chat", help="chats from the log (rules v2.27): sr chat list prints every chat name with its "
                                          "task count and newest date; nothing is created", allow_abbrev=False)
     p_chat.add_argument("words", nargs="*", help="list")
@@ -5089,6 +5178,11 @@ def _main(argv, platform, out):
         out(f"Refused: slot flags are for sr relay only ({elsewhere} on sr {argv[0]}). Nothing was logged or sent.")
         return 2
     argv, slot_flags = _take_slot_flags(argv)
+    argv, project_notes, notes_problem = _take_project_notes(argv)  # brief 26: the notes are never a flag
+    if notes_problem:
+        receipt.mark(out, code="usage", command=True)
+        out(f"Refused: {notes_problem}. Nothing was changed.")
+        return 2
     try:
         roster, roster_error = load_roster(send_paths=tuple(SENDERS)), None
     except RosterError as e:
@@ -5309,7 +5403,8 @@ def _main(argv, platform, out):
         if args.command == "cancel":
             return cmd_cancel(conn=conn, words=args.words, kill=os.kill, sleep=time.sleep, clock=time.monotonic, out=out)
         if args.command == "project":  # rules v2.25: the registry and the handoff file; nothing is sent
-            return cmd_project(args.words, conn=conn, as_json=json_mode, out=out)
+            return cmd_project(args.words, conn=conn, as_json=json_mode, out=out, notes=project_notes,
+                               dry_run=args.dry_run, secrets=_secrets(config))
         if args.command == "chat":  # rules v2.27: from the log, no Hindsight call
             return cmd_chat(args.words, conn=conn, as_json=json_mode, out=out)
         if args.command == "pick":  # sends nothing; needs the presets to read the candidates
@@ -5385,6 +5480,8 @@ def _envelope(out, code):
             conn.close()
     elif out.multi:
         found["tasks"] = []
+    if code == 0:
+        found.update(out.extra)  # brief 26: a new project's `project`, after the envelope's own keys
     return found
 
 

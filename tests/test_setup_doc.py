@@ -57,3 +57,25 @@ def test_env_example_holds_placeholders_only_and_says_the_inbox_repo_is_a_settin
     values = [line.split("=", 1)[1] for line in ENV.splitlines() if "=" in line and not line.startswith("#")]
     assert values and all(v == '""' for v in values)
     assert "inbox repository is a setting, not a key: grok_inbox_repo in config/settings.local.json" in ENV
+
+
+# ---------- brief 26 (decision 16): Projects ----------
+
+def test_setup_has_a_projects_section_with_both_ways_in_and_the_root():
+    text = _section("Projects")
+    assert "**New project, on the page.**" in text and "`+`" in text  # on the page
+    assert "sr project new" in text and "sr project add" in text      # in Terminal
+    assert "`projects_root`" in text and "`~/Projects`" in text and "config/settings.local.json" in text
+    assert "--dry-run" in text and "-- '" in text                      # the notes in quotes after --
+    assert "can't open the folder" in text and "all they know" in text  # HANDOFF.md, notes included, is all they get
+
+
+def test_the_projects_section_comes_after_the_pieces_and_names_no_real_folder():
+    assert SETUP.index("## Projects") > SETUP.index("## Memory")
+    assert "/Users/" not in _section("Projects")
+
+
+def test_the_readme_names_new_project_in_its_memory_bullet():
+    readme = (ROOT / "README.md").read_text()
+    bullet = next(line for line in readme.splitlines() if line.startswith("- **Memory per chat or project.**"))
+    assert "New project" in bullet and "`sr project new`" in bullet

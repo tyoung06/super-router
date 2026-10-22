@@ -7,7 +7,7 @@ CORS header is ever sent and OPTIONS gets 405; the CSP allows no inline script. 
 token and a blob URL, never a bare URL.
 
 What it runs: `sr status --json` (kept a minute; a fresh one at most once per 10 s), `sr log --json`, `sr show <task_id>
---json`, `sr project list --json`, the actions the command builder makes (router/page_commands.py) as argument lists in
+--json`, `sr project list --json`, `sr project new --json --dry-run <name>` (brief 26, never kept), the actions the command builder makes (router/page_commands.py) as argument lists in
 their own session (router/page_runs.py), its own `sr check --json` (a dead run, brief 22; and once a minute while a task
 waits on Grok, decision 7), `sr memory start` at launch when memory is auto, and `open -R` for Open in Finder. Never a
 shell string. It never opens router.db and never reads .env: it serves what `sr` printed, which went through the redactor
@@ -103,6 +103,11 @@ class Reader:
                 self._after_status(body)
             return self._kept[1], self._kept[2]
 
+    def forget_status(self):
+        """Brief 26 (decision 11): drop the kept status, so the next read is fresh without "Check again"'s 10 s wait."""
+        with self._lock:
+            self._kept = None
+
     def status_doc(self):
         """The kept status as a document, or None when it can't be read (then nothing can be checked or run)."""
         code, body = self.status()
@@ -176,6 +181,11 @@ class Reader:
     def projects(self):
         return self._json(sr("project", "list", "--json"))
 
+    def project_check(self, name):
+        """Brief 26 (decision 10): the New project sheet's folder check, `sr project new --json --dry-run <name>` (the
+        caller has checked the name). Never kept: the folder can change between two looks."""
+        return self._json(sr("project", "new", "--json", "--dry-run", name))
+
 
 class DemoReader:
     """Brief 23 (decision 15): the demo's documents, read from the invented files in demo/ (made by
@@ -219,6 +229,22 @@ class DemoReader:
 
     def projects(self):
         return self._file("projects.json")
+
+    def project_check(self, name):
+        """Brief 26 (decision 15): the dry run's answer from the demo's own projects (taken or new), with nothing run."""
+        root = (self.status_doc() or {}).get("projects_root") or "~/Projects"
+        code, body = self.projects()
+        listed = (json.loads(body).get("projects") or []) if code == 200 else []
+        taken = next((p for p in listed if isinstance(p, dict) and p.get("name") == name), None)
+        state = {"exists": False, "lines": None, "has_block": False}
+        if taken is not None:
+            words = f"Would refuse: {name} is already registered at {taken.get('path')}; remove it first. Nothing was changed."
+            doc = {"would": "refused", "folder": taken.get("path"), "handoff": None, "reason_code": "project_refused"}
+        else:
+            words = f"Would create {root}/{name} and its HANDOFF.md, and register {name}. Nothing was changed."
+            doc = {"would": "create", "folder": f"{root}/{name}", "handoff": state, "reason_code": None}
+        return 200, json.dumps({"api_version": 1, "would": doc["would"], "name": name, "folder": doc["folder"],
+                                "handoff": doc["handoff"], "reason_code": doc["reason_code"], "message": words}).encode()
 
     def tick(self):
         return False
@@ -287,6 +313,12 @@ class _Handler(BaseHTTPRequestHandler):
         reader = self.server.reader
         if path == "/api/status":
             return self._sr_json(reader.status(fresh=query.get("fresh") == "1"))
+        if path == "/api/project-check":  # brief 26 (decision 10): a bad name answers 400 before anything runs
+            try:
+                name = page_commands.project_name(query.get("name"))
+            except page_commands.Refused as e:
+                return self._json(400, {"error": str(e)})
+            return self._sr_json(reader.project_check(name))
         if path == "/api/log":
             try:
                 flags = _log_flags(query)
@@ -516,7 +548,16 @@ def make_server(port, reader=None, *, runs=None, demo=False, demo_root=None, roo
     server.reveal_run = subprocess.run  # decision 11: `open -R` (tests hand their own)
     server.runs = runs if runs is not None or demo else page_runs.Runs(root=server.root)
     server.reader = reader or (DemoReader(server.demo_root) if demo else Reader(root=server.root, runs=server.runs))
+    if server.runs is not None and hasattr(server.reader, "forget_status"):
+        server.runs.on_finished = lambda run, code: _after_run(server.reader, run, code)
     return server
+
+
+def _after_run(reader, run, code):
+    """Brief 26 (decision 11): a `project_new` that exited 0 made a project, so the kept status is out of date. A refused
+    one changed nothing and keeps it."""
+    if code == 0 and (run.get("request") or {}).get("action") == "project_new":
+        reader.forget_status()
 
 
 def start_memory(run=subprocess.run, root=ROOT, out=print, runs=None):

@@ -42,7 +42,9 @@ STATUS = {
     "jev": {"configured": BOOL, "tokens_month": INT, "cap": INT, "over_cap": BOOL, "floor": (NUM, NULL),  # brief 23
             "available": BOOL, "why": (STR, NULL)},  # brief 24 (decision 14)
     "memory": {"setting": STR, "online": BOOL, "starting": BOOL, "documents": (INT, NULL)},
-    "projects": LIST, "chats": LIST, "drop_folder": (STR, NULL), "serve_port": INT, "version": (STR, NULL),
+    "projects": LIST, "chats": LIST, "drop_folder": (STR, NULL), "serve_port": INT,
+    "projects_root": STR,  # brief 26 (decision 8): as written, ~/Projects when absent
+    "version": (STR, NULL),
     "log_version": INT, "api_version": INT,
 }
 

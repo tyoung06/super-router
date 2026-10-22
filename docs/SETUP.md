@@ -171,3 +171,29 @@ python3 -m venv ~/.hindsight/venv && ~/.hindsight/venv/bin/pip install "hindsigh
 Its first start downloads one embedding model (about 470 MB). After that the router starts memory itself when a chat or project task needs it, and saves anything delivered while it was off.
 
 **Ready on the page.** Memory reads "online" (or "starting" for up to a minute). "Off" means `memory` is set to `off` in the settings.
+
+## Projects
+
+**What it is.** A project is a folder on your Mac with a notes file in it, `HANDOFF.md`. Every task you send in a project carries that file to the agents, and after each task the router adds a short entry about it at the end of the file, inside its own marked block. The agents can't open the folder: `HANDOFF.md`, starting notes included, is all they know about the project. Write there what an agent needs: what it is, the stack, where things are, what's decided.
+
+**New project, on the page.** The `+` on the sidebar's Projects label (or the "New project" line when there are none, or "New project…" at the bottom of the project picker) opens one sheet. Type a name: it is saved as lowercase letters, digits and `-` (`Price Tracker` becomes `price-tracker`). The sheet asks the router what it would do with that name and shows the folder: a new folder, a folder that's already there (it's added as it is, and its `HANDOFF.md` stays yours, so starting notes are off), or the router's reason for refusing. Starting notes are optional; they're written once, at the top of the new `HANDOFF.md`, and notes that look like they hold a key are refused. Create runs the command the sheet shows, then opens the project.
+
+**In Terminal.** The same thing, with the notes in quotes after `--`:
+
+```
+sr project new price-tracker -- 'What it is: a price checker for a watchlist.
+Decided: no paid APIs.'
+sr project new price-tracker --dry-run
+```
+
+`--dry-run` says what it would do (make the folder, add the one that's there, or refuse, and why) and writes nothing. For a folder anywhere else, register it as it is:
+
+```
+sr project add price-tracker ~/Code/price-tracker
+```
+
+`sr project list` shows each project with its folder and the file's line count; `sr project remove <name>` takes it off the list and touches no file. The router never deletes a project's folder or anything in it.
+
+**Where new projects go.** Into `~/Projects`, one folder per project named like it, unless you set `projects_root` in `config/settings.local.json`, for example `{"projects_root": "~/Code"}`. It must be a `~` or absolute path; the router makes the folder itself if it isn't there yet.
+
+**Ready on the page.** The project shows under Projects in the sidebar; pick it, and the composer reads "Project: <name>".

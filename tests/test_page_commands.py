@@ -219,3 +219,41 @@ def test_the_real_parser_reads_every_built_argv_with_the_text_byte_for_byte(stat
         assert args.source == "ui"
     if request_["action"] in ("pick", "resume", "fallback", "cancel"):
         assert args.words[0] == TID
+
+
+# ---------- brief 26 (decision 9): project_new ----------
+
+def test_project_new_without_notes(status):
+    command = pc.build({"action": "project_new", "name": "seed-trays", "notes": ""}, status)
+    assert (list(command.args), command.added) == (["project", "new", "--json", "seed-trays"], frozenset({2}))
+    assert _args({"action": "project_new", "name": "seed-trays"}, status) == ["project", "new", "--json", "seed-trays"]
+    assert command.display() == "sr project new --json seed-trays" and command.copy() == "sr project new seed-trays"
+    assert [p["added"] for p in command.parts()] == [False, False, False, True, False]
+
+
+def test_project_new_with_notes_after_dashes_as_typed(status):
+    command = pc.build({"action": "project_new", "name": "seed-trays", "notes": TEXT}, status)
+    assert list(command.args) == ["project", "new", "--json", "seed-trays", "--", TEXT]
+    assert command.display() == "sr project new --json seed-trays -- " + __import__("shlex").quote(TEXT)  # as typed
+
+
+@pytest.mark.parametrize("name", ["Seed", "-h", "--json", "", None, "a/b", "a.b", "seed trays", 5, "-seed"])
+def test_project_new_refuses_a_bad_name_before_anything(status, name):
+    with pytest.raises(pc.Refused, match="the project name"):
+        pc.build({"action": "project_new", "name": name, "notes": ""}, status)
+
+
+@pytest.mark.parametrize("notes", ["a\x00b", 5, ["x"]])
+def test_project_new_refuses_notes_no_command_line_carries(status, notes):
+    with pytest.raises(pc.Refused, match="the notes"):
+        pc.build({"action": "project_new", "name": "seed-trays", "notes": notes}, status)
+
+
+@pytest.mark.parametrize("notes", [TEXT, "-h", "--skill coding", "--", "--json", "line\n\nthree"])
+def test_the_real_parser_reads_project_new_with_the_notes_byte_for_byte(status, notes):
+    argv = _args({"action": "project_new", "name": "seed-trays", "notes": notes}, status)
+    assert cli._json_requested(argv)
+    rest, notes_seen, problem = cli._take_project_notes(cli._take_slot_flags(argv)[0])
+    args = cli._parser(None, quiet=True).parse_args(rest)
+    assert (args.command, args.words, args.json, args.dry_run, notes_seen, problem) == (
+        "project", ["new", "seed-trays"], True, False, notes, None)

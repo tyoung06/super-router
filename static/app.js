@@ -196,8 +196,9 @@ export function contextFor(state, status) {
   const presets = (status && status.presets) || [];
   const preset = presets.find((p) => p.name === state.team) || null;
   const takesProject = state.team === "route" || !!(preset && preset.project);
+  const project = state.project === NEW_PROJECT ? null : state.project;  // brief 26: the picker's sentinel is never sent
   if (state.quick) return { kind: "quick", flag: null, value: null, projectGreyed: true, takesProject };
-  if (state.project && takesProject) return { kind: "project", flag: "project", value: state.project, projectGreyed: false, takesProject };
+  if (project && takesProject) return { kind: "project", flag: "project", value: project, projectGreyed: false, takesProject };
   return { kind: "chat", flag: "chat", value: state.chat, projectGreyed: !takesProject, takesProject };
 }
 
@@ -306,6 +307,103 @@ export function refusalView(run) {
   const exit = run.exit == null ? env.exit : run.exit;
   return { title: exit === 2 ? "The router refused this send" : "This send ended without a task",
     message, exit, code: env.reason_code || null, display: run.display };
+}
+
+// ---------- New project (brief 26, decisions 12–14) ----------
+// The router decides; these only shape its answers. The folder check is `sr project new --json --dry-run <name>`.
+
+export const NEW_PROJECT = "__new__";  // the picker's last option: opens the sheet, never sent (no project name has "_")
+export const NOTES_MAX = 4000;
+const SLUG_MAX = 48;
+
+function slugAll(raw) {
+  return String(raw || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+/, "").replace(/-+$/, "");
+}
+
+export function projectSlug(raw) {
+  // lower case, accents folded, each run of other characters one -, no - at either end, at most 48 characters; a cut
+  // through a word moves back to the word's start when that is in the last third (break-ui: "…-board-revi")
+  const all = slugAll(raw);
+  if (all.length <= SLUG_MAX) return all;
+  let cut = all.slice(0, SLUG_MAX);
+  const dash = cut.lastIndexOf("-");
+  if (all[SLUG_MAX] !== "-" && dash >= Math.floor(SLUG_MAX * 2 / 3)) cut = cut.slice(0, dash);
+  return cut.replace(/-+$/, "");
+}
+
+export function slugHint(raw) {
+  const saved = projectSlug(raw);
+  if (saved && slugAll(raw).length > SLUG_MAX) return { saved, text: ` · cut to ${SLUG_MAX} characters` };
+  if (saved) return { saved, text: " · lowercase letters, digits and\u00a0-" };  // break-ui: never a lone - on a line
+  if (String(raw || "").trim()) return { saved: null, text: "Use letters or digits: the rest is converted as you type" };
+  return { saved: null, text: "Lowercase letters, digits and -: the rest is converted as you type" };
+}
+
+export function newProjectView(check, { name = "", root = "~/Projects", taken = null, running = false, waited = false,
+  error = null, demo = false, typed = false } = {}) {
+  // The sheet from the router's dry run (`would`: create, register or refused). An answer for another name is stale.
+  // `typed`: something is in the box though nothing of it is kept ("!!!", "日本語").
+  const base = { tone: "muted", folder: name ? `${root}/${name}` : `${root}/…`, words: typed ? "no letters yet" : "type a name", detail: null,
+    notesOn: true, notesHint: "Written once, at the top of HANDOFF.md. No keys: notes that look like one are refused.",
+    button: "Create project", canCreate: false, foot: demo ? "Demo: nothing runs." : null };
+  if (!name) return base;
+  if (error) return { ...base, tone: "bad", words: "can't check", detail: error };
+  if (!check || check.name !== name) {
+    return waited ? { ...base, tone: "bad", words: "no answer", detail: "The router hasn't answered the folder check. Type again, or close and try later." }
+      : { ...base, words: "checking…" };
+  }
+  const offWhenTaken = "Off: that name is a project already.";
+  if (check.would === "refused") {
+    const words = String(check.message || "").replace(/^Would refuse: /, "").replace(/ Nothing was changed\.$/, "");
+    // the router's folder, shown with ~ (a taken name: where it is registered); status's absolute path is never printed
+    return { ...base, tone: "bad", folder: check.folder || base.folder,
+      words: taken ? "already a project" : "refused",
+      detail: taken ? `${name} is registered already. Open it from the sidebar, or pick another name.` : words,
+      notesOn: false, notesHint: taken ? offWhenTaken : "Off: the router refuses this name." };
+  }
+  const go = !running && !demo;
+  if (check.would === "register") {
+    const h = check.handoff || {};
+    const detail = !h.exists ? "Added as it is. The router makes its HANDOFF.md with an empty block."
+      : h.has_block ? `Added as it is. Its HANDOFF.md (${h.lines} lines) has the router's block already.`
+        : `Added as it is. Its HANDOFF.md (${h.lines} lines) stays yours; the router adds its block at the end.`;
+    return { ...base, tone: "info", folder: check.folder || base.folder, words: "folder exists", detail, notesOn: false,
+      notesHint: h.exists ? "Off: this folder already has its own HANDOFF.md, and that file is yours to edit."
+        : "Off: starting notes go only in a HANDOFF.md the router makes in a new folder.",
+      button: running ? "Adding…" : "Add project", canCreate: go };
+  }
+  return { ...base, tone: "ok", folder: check.folder || base.folder, words: "new folder",
+    detail: "The router makes the folder and its HANDOFF.md: your notes first, then the router's block.",
+    button: running ? "Creating…" : "Create project", canCreate: go };
+}
+
+export function notesLeftWords(length) {
+  // under 500 left, the count, in the right number (break-ui: "1 characters left")
+  const left = NOTES_MAX - length;
+  if (left >= 500) return null;
+  if (left <= 0) return "No characters left.";
+  return left === 1 ? "1 character left." : `${left.toLocaleString("en-US")} characters left.`;
+}
+
+export function projectOptions(projects, { current = null, greyed = false, quick = false } = {}) {
+  // brief 26 (decision 12): enabled with zero projects; still greyed for a team that takes no --project and for Quick
+  const list = projects || [];
+  return { disabled: !!(greyed || quick), options: [
+    { value: "", text: list.length ? "No project" : "No projects", selected: !current },
+    ...list.map((p) => ({ value: p.name, text: `Project: ${p.name}`, selected: p.name === current })),
+    { value: NEW_PROJECT, text: "New project…", selected: false }] };
+}
+
+export function emptyProjectWords(project) {
+  if (project.handoff_lines == null) return `No tasks in ${project.name} yet. Its HANDOFF.md can't be read right now.`;
+  return `No tasks in ${project.name} yet. Its HANDOFF.md (${project.handoff_lines} lines) goes with every task you send here.`;
+}
+
+export function projectToast(envelope) {
+  const p = envelope && envelope.exit === 0 && envelope.project;
+  if (!p) return null;
+  return `${p.did === "registered" ? "Added" : "Created"} ${p.name} · ${p.folder} · HANDOFF.md ${p.handoff_lines} lines`;
 }
 
 // ---------- markdown (decision 10): a small renderer that never produces HTML ----------
@@ -1064,7 +1162,7 @@ const state = {
   chat: null, project: null, quick: false, team: "route", slots: {}, view: "chat",
   historyQuery: { chat: null, project: null, search: "" }, historyTasks: [], historyNext: null, historyPages: 1, historyError: null,
   logFolders: [], logNext: null, logError: null, setupText: null, setupError: null, setupChecking: false, setupFocus: null,
-  sheetKind: null, teamMenu: false, stripOpen: null, detailsOpen: new Set(), navOpen: false,
+  sheetKind: null, np: null, madeProjects: new Set(), teamMenu: false, stripOpen: null, detailsOpen: new Set(), navOpen: false,
   text: "", files: [], web: false, skill: null,
   command: null, commandSeq: 0,
   pending: [], refused: [], sessionTasks: [],
@@ -1194,15 +1292,22 @@ function renderSidebar() {
   }
   if (!chats.length && !state.chat) chatList.append(h("div", { class: "side-item faint", text: "No chats yet" }));
   list.push(chatList);
-  list.push(h("div", { class: "side-label", text: "Projects" }));
+  // brief 26 (decision 12): a + on the Projects label opens the New project sheet (a 44 px hit area round a small mark)
+  list.push(h("div", { class: "side-label with-action" }, h("span", { text: "Projects" }),
+    h("button", { class: "label-btn", id: "np-open", type: "button", title: "New project", "aria-label": "New project",
+      onclick: () => openNewProject() }, icon("plus"))));
   const projectList = h("div", { class: "side-list" });
   for (const project of status.projects || []) {
+    // the "new" tag: this page session only, in memory (decision 14)
     projectList.append(h("button", { class: "side-item", type: "button", title: project.name,
       "aria-current": project.name === state.project ? "page" : null, onclick: () => openProject(project.name) },
     icon("folder"), h("span", { class: "name", text: project.name }),
-    h("span", { class: "count", text: project.open_task ? `#${project.open_task.n} open` : "" })));
+    h("span", { class: "count", text: project.open_task ? `#${project.open_task.n} open` : state.madeProjects.has(project.name) ? "new" : "" })));
   }
-  if (!(status.projects || []).length) projectList.append(h("div", { class: "side-item faint", text: "No projects" }));
+  if (!(status.projects || []).length) {  // the empty list is the way in
+    projectList.append(h("button", { class: "side-item new-project", id: "np-empty", type: "button", onclick: () => openNewProject() },
+      icon("plus"), h("span", { class: "name", text: "New project" })));
+  }
   list.push(projectList);
   list.push(h("div", { class: "side-label", text: "History" }));
   list.push(h("div", { class: "side-list" },
@@ -1723,7 +1828,10 @@ function renderStream({ follow = true } = {}) {
     items.push(h("button", { class: "btn btn-quiet load-earlier", type: "button", onclick: () => loadHistory({ more: true }) }, "Load earlier tasks"));
   }
   if (!tasks.length && !state.pending.length && !state.refused.length) {
-    items.push(h("div", { class: "empty", text: state.logError ? `The log could not be read: ${state.logError}` : "No tasks here yet. Type below and press Enter." }));
+    // brief 26 (decision 14): a project with no tasks says its HANDOFF.md goes with every task sent there
+    const project = state.project && state.view === "chat" ? ((state.status && state.status.projects) || []).find((p) => p.name === state.project) : null;
+    items.push(h("div", { class: "empty", id: project ? "np-empty-card" : null, text: state.logError ? `The log could not be read: ${state.logError}`
+      : project ? emptyProjectWords(project) : "No tasks here yet. Type below and press Enter." }));
   }
   items.push(...tasks.map(taskCard));
   items.push(...state.pending.map(pendingCard));
@@ -1813,9 +1921,10 @@ function renderComposer() {
   $("quick").checked = state.quick;
   const projectSelect = $("project");
   const projects = (status && status.projects) || [];
-  setChildren(projectSelect, h("option", { value: "", text: projects.length ? "No project" : "No projects" }),
-    projects.map((p) => h("option", { value: p.name, selected: p.name === state.project, text: `Project: ${p.name}` })));
-  projectSelect.disabled = !projects.length || ctx.projectGreyed || state.quick;
+  // brief 26 (decision 12): the last option opens the New project sheet, so the picker works with no projects
+  const picker = projectOptions(projects, { current: state.project, greyed: ctx.projectGreyed, quick: state.quick });
+  setChildren(projectSelect, picker.options.map((o) => h("option", { value: o.value, selected: o.selected, text: o.text })));
+  projectSelect.disabled = picker.disabled;
   projectSelect.title = ctx.projectGreyed && !state.quick ? `${teamLabel(state.team)} takes no --project` : "";
   const onRoute = state.team === "route";
   $("web").disabled = !onRoute;
@@ -1923,6 +2032,7 @@ function render() {
   renderComposer();
   renderPanel();
   if (state.sheetKind === "setup") renderSetup();
+  if (state.sheetKind === "newproject") paintNewProject();  // status may name a project taken meanwhile
 }
 
 function toast(message) {
@@ -2318,6 +2428,220 @@ function renderDocPanel(node, panel) {
   setChildren(node, head, h("div", { class: "panel-body" }, body));
 }
 
+// ---------- the New project sheet (brief 26, decisions 10–14) ----------
+// Built once, then painted in place, so typing keeps its focus and caret. The router answers every question: the
+// folder check is its dry run, the command line comes from the server's builder, and Create runs `sr project new`.
+
+const NP_CHECK_MS = 160;   // like the command line: ask once typing stops
+const NP_WAIT_MS = 5000;   // a dry run this slow is said so; Create stays off until it answers
+const NP_POLL_MS = 400;    // a create is quick: watch its run closely
+const NP_RUN_LIMIT_MS = 125 * 1000;  // the server gives a command 120 s
+let npCheckTimer = null;
+let npWaitTimer = null;
+let npCommandTimer = null;
+
+function openNewProject() {
+  if (state.navOpen) toggleNav(false);
+  state.np = { raw: "", notes: "", check: null, error: null, waited: false, seq: 0, commandSeq: 0, running: false,
+    failure: null };
+  state.sheetKind = "newproject";
+  const name = h("input", { class: "np-input", id: "np-name", type: "text", placeholder: "e.g. Price Tracker", autocomplete: "off",
+    spellcheck: "false", "aria-describedby": "np-hint", oninput: (e) => onNpName(e.target.value),
+    onkeydown: (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); createProject(); } } });
+  const notes = h("textarea", { class: "np-notes", id: "np-notes", rows: "5", maxlength: String(NOTES_MAX), spellcheck: "true",
+    "aria-describedby": "np-notes-hint", placeholder: "What it is:\nStack:\nWhere things are:\nDecided so far:",
+    oninput: (e) => { state.np.notes = e.target.value; state.np.failure = null; paintNewProject(); refreshNpCommand(); } });
+  const sheet = h("div", { class: "sheet np", id: "np-sheet", role: "dialog", "aria-modal": "true", "aria-labelledby": "np-title" },
+    h("div", { class: "sheet-head" }, h("span", { class: "sheet-title", id: "np-title", text: "New project" }),
+      h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: closeSheet }, icon("x"))),
+    h("p", { class: "panel-note", text: "Every task you send in a project carries its notes file, HANDOFF.md. The agents can't open the folder: these notes are all they know about it." }),
+    h("div", { class: "np-field" }, h("label", { class: "np-label", for: "np-name", text: "Name" }), name,
+      h("div", { class: "np-hint", id: "np-hint" })),
+    h("div", { class: "np-folder tone-muted", id: "np-folder", role: "status", "aria-live": "polite" }),
+    h("div", { class: "np-field" },
+      h("label", { class: "np-label", for: "np-notes" }, "Starting notes", h("span", { class: "np-opt", text: "optional" })), notes,
+      h("div", { class: "np-hint", id: "np-notes-hint" })),
+    h("div", { class: "np-cmd", id: "np-cmd", "aria-label": "The command Create runs" }, h("span", { class: "prompt", text: "$" }),
+      h("span", { class: "cmd", id: "np-cmd-text" })),
+    h("div", { class: "np-other" }, "Folder somewhere else? In Terminal: ", h("code", { text: "sr project add <name> <path>" })),
+    h("div", { class: "np-failure", id: "np-failure", role: "alert", hidden: true }),
+    h("div", { class: "np-foot" }, h("span", { class: "np-foot-note", id: "np-foot-note" }),
+      h("button", { class: "btn", type: "button", onclick: closeSheet }, "Cancel"),
+      h("button", { class: "btn btn-primary", type: "button", id: "np-create", disabled: true, onclick: createProject }, "Create project")));
+  setChildren($("sheet"), sheet);
+  $("sheet").hidden = false;
+  paintNewProject();
+  refreshNpCommand();
+  name.focus();
+}
+
+function npView() {
+  const np = state.np;
+  const status = state.status || {};
+  const name = projectSlug(np.raw);
+  const taken = (status.projects || []).find((p) => p.name === name) || null;
+  return { name, view: newProjectView(np.check, { name, root: status.projects_root || "~/Projects", taken, running: np.running,
+    waited: np.waited, error: np.error, demo: state.demo, typed: !!np.raw.trim() }) };
+}
+
+function paintNewProject() {
+  const np = state.np;
+  if (state.sheetKind !== "newproject" || !np || !$("np-sheet")) return;
+  const { view } = npView();
+  const hint = slugHint(np.raw);
+  setChildren($("np-hint"), hint.saved ? ["Saved as ", h("code", { text: hint.saved }), hint.text] : hint.text);
+  const folder = $("np-folder");
+  folder.className = `np-folder tone-${view.tone}`;
+  setChildren(folder, icon("folder"), h("span", { class: "np-path", text: view.folder }), h("span", { class: "np-state", text: view.words }),
+    view.detail ? h("span", { class: "np-detail", text: view.detail }) : null);
+  const notes = $("np-notes");
+  if (notes.disabled === view.notesOn) {  // turning off shows the placeholder; turning on brings the typed notes back
+    notes.disabled = !view.notesOn;
+    notes.value = view.notesOn ? np.notes : "";
+  }
+  const left = view.notesOn ? notesLeftWords(np.notes.length) : null;
+  $("np-notes-hint").textContent = left ? `${view.notesHint} ${left}` : view.notesHint;
+  const create = $("np-create");
+  create.textContent = view.button;
+  create.disabled = !view.canCreate;
+  $("np-foot-note").textContent = view.foot || "";
+  const failure = $("np-failure");
+  const fresh = !!np.failure && failure.hidden;
+  failure.hidden = !np.failure;
+  if (np.failure) {
+    setChildren(failure, h("div", { class: "np-failure-title", text: np.failure.title }),
+      h("div", { class: "np-failure-text", text: np.failure.message }),
+      np.failure.exit != null ? h("div", { class: "np-failure-exit", text: `exit ${np.failure.exit}${np.failure.code ? ` · ${np.failure.code}` : ""}` }) : null);
+    // break-ui: the sheet scrolls, so a refusal could land out of sight and Create would seem to do nothing
+    if (fresh) failure.scrollIntoView({ block: "nearest" });
+  }
+}
+
+function onNpName(raw) {
+  const np = state.np;
+  np.raw = raw;
+  np.failure = null;
+  np.error = null;
+  np.waited = false;
+  paintNewProject();
+  refreshNpCommand();
+  clearTimeout(npCheckTimer);
+  clearTimeout(npWaitTimer);
+  const name = projectSlug(raw);
+  if (!name) return;
+  npCheckTimer = setTimeout(() => askProjectCheck(np, name), NP_CHECK_MS);
+}
+
+async function askProjectCheck(np, name) {
+  const seq = ++np.seq;
+  const current = () => state.np === np && np.seq === seq;
+  clearTimeout(npWaitTimer);
+  npWaitTimer = setTimeout(() => { if (current()) { np.waited = true; paintNewProject(); } }, NP_WAIT_MS);
+  try {
+    const doc = await api(`/api/project-check?name=${encodeURIComponent(name)}`);
+    if (!current()) return;  // a stale answer is dropped
+    Object.assign(np, { check: doc, error: null, waited: false });
+  } catch (e) {
+    if (!current()) return;
+    np.error = (e.doc && e.doc.message) || e.message;
+  }
+  clearTimeout(npWaitTimer);
+  paintNewProject();
+  refreshNpCommand();
+}
+
+function npRequest() {
+  const { name, view } = npView();
+  return { action: "project_new", name, notes: view.notesOn ? state.np.notes : "" };
+}
+
+function npLocalParts(request) {
+  // no name yet, or the demo (whose /api/command answers 409): the same shape the server's builder makes
+  const parts = [{ text: "sr" }, { text: "project" }, { text: "new" }, { text: "--json", added: true }, { text: request.name || "<name>" }];
+  if (request.notes) parts.push({ text: "--" }, { text: shellQuote(request.notes) });
+  return parts;
+}
+
+function paintNpCommand(parts, display) {
+  const node = $("np-cmd-text");
+  if (!node) return;
+  setChildren(node, parts.map((p, i) => [i ? " " : "", h("span", { class: p.added ? "added" : null, text: p.text })]));
+  node.title = display || parts.map((p) => p.text).join(" ");
+}
+
+function refreshNpCommand() {
+  clearTimeout(npCommandTimer);
+  npCommandTimer = setTimeout(async () => {
+    const np = state.np;
+    if (!np) return;
+    const request = npRequest();
+    if (state.demo || !request.name) { paintNpCommand(npLocalParts(request)); return; }
+    const seq = ++np.commandSeq;
+    try {
+      const found = await api("/api/command", { method: "POST", body: request });
+      if (state.np === np && seq === np.commandSeq) paintNpCommand(found.parts, found.display);
+    } catch (e) {
+      if (state.np === np && seq === np.commandSeq) paintNpCommand([{ text: e.message }]);
+    }
+  }, NP_CHECK_MS);
+}
+
+async function npWaitRun(runId) {
+  const until = Date.now() + NP_RUN_LIMIT_MS;
+  while (Date.now() < until) {
+    await new Promise((resolve) => setTimeout(resolve, NP_POLL_MS));
+    try {
+      const run = ((await api("/api/runs")).runs || []).find((r) => r.id === runId);
+      if (!run) return null;
+      if (!run.running) return run;
+    } catch (e) {
+      // the next look tries again
+    }
+  }
+  return null;
+}
+
+async function createProject() {
+  const np = state.np;
+  if (!np) return;
+  const { name, view } = npView();
+  if (!view.canCreate) return;
+  const request = npRequest();
+  np.running = true;
+  np.failure = null;
+  paintNewProject();
+  let run = null;
+  try {
+    const started = await api("/api/run", { method: "POST", body: request });
+    run = await npWaitRun(started.run_id);
+  } catch (e) {
+    np.running = false;
+    np.failure = { title: "Not run", message: e.message, exit: null, code: null };
+    paintNewProject();
+    return;
+  }
+  np.running = false;
+  const env = (run && run.envelope) || {};
+  const code = run ? (run.exit == null ? env.exit : run.exit) : null;
+  if (code === 0) {
+    state.madeProjects.add(name);
+    await loadStatus();  // the server dropped its kept status, so this read is fresh
+    if (state.np === np) closeSheet();
+    openProject(name);
+    toast(projectToast(env) || `Created ${name}`);
+    return;
+  }
+  np.failure = run ? { title: code === 2 ? "The router refused this" : "This stopped part way",
+    message: env.message || run.message || run.stderr || "The command ended without an answer.", exit: code, code: env.reason_code || null }
+    : { title: "No answer", message: "The page lost track of the command. Reload to see whether the project was made.", exit: null, code: null };
+  if (state.np === np) {
+    paintNewProject();
+    askProjectCheck(np, name);  // the folder may have changed: ask again
+  } else {
+    toast(np.failure.message);
+  }
+}
+
 // ---------- the Setup sheet ----------
 
 async function openSetup(focus = null) {
@@ -2638,6 +2962,7 @@ function inTextField(target) {
 function onKey(event) {
   const found = shortcutFor(event, { inText: inTextField(event.target), inPrompt: event.target && event.target.id === "prompt" });
   if (!found) return;
+  if (state.sheetKind === "newproject" && found.action !== "escape") return;  // brief 26: nothing acts behind the sheet
   if (found.action === "chip") {
     const chips = chipViews(state.status, state.team);
     const chip = chips[found.index];
@@ -2663,6 +2988,7 @@ function onKey(event) {
 
 function closeSheet() {
   $("sheet").hidden = true;
+  if (state.sheetKind === "newproject") state.np = null;  // a create still running finishes and says so in a toast
   state.sheetKind = null;
   setChildren($("sheet"));
 }
@@ -2703,7 +3029,10 @@ function wire() {
   document.addEventListener("keydown", onKey);
   $("send").addEventListener("click", send);
   $("quick").addEventListener("change", (e) => { state.quick = e.target.checked; renderComposer(); refreshCommand(); renderStream(); });
-  $("project").addEventListener("change", (e) => { state.project = e.target.value || null; render(); refreshCommand(); });
+  $("project").addEventListener("change", (e) => {
+    if (e.target.value === NEW_PROJECT) { e.target.value = state.project || ""; openNewProject(); return; }  // brief 26: never sent
+    state.project = e.target.value || null; render(); refreshCommand();
+  });
   $("web").addEventListener("change", (e) => { state.web = e.target.checked; refreshCommand(); });
   $("skill").addEventListener("change", (e) => { state.skill = e.target.value || null; renderComposer(); refreshCommand(); });
   $("attach").addEventListener("click", () => $("file-input").click());

@@ -18,7 +18,7 @@ You type a task in Terminal (`sr route "…"`) or on a local web page (`sr serve
   - `redteam`: One agent builds, a second attacks it to find the weak spots, the builder revises (fixing each attack or saying why it doesn't apply), and a checker confirms the fixes.
   - `vote`: Three agents answer the same short question on their own; the majority wins, and a tie comes to you.
 - **Split.** `sr split` breaks a big task into up to 4 pieces: Claude plans them, you approve the plan, each piece runs as its own task, and Claude joins the results.
-- **Memory per chat or project.** Tag a task with a chat or a project, and the agents get what the router remembers there: earlier results, stored and searched on your Mac. On the page, tasks you send in a chat are tagged with it. A project task also gets the project's handoff notes (`HANDOFF.md`), and the router updates them from the result.
+- **Memory per chat or project.** Tag a task with a chat or a project, and the agents get what the router remembers there: earlier results, stored and searched on your Mac. On the page, tasks you send in a chat are tagged with it. A project task also gets the project's handoff notes (`HANDOFF.md`), and the router updates them from the result; make a project with New project on the page or `sr project new` in Terminal.
 - **A local page.** `sr serve` starts a page that shows the log and runs the same `sr` commands with buttons. It always shows the exact command it will run.
 - **When an agent is missing or stops**, the work moves on by itself:
   - An agent that isn't set up is skipped, and the next in line (usually the skill's second place) does the work. Images and X research are the exceptions: only Grok Bot can do them.

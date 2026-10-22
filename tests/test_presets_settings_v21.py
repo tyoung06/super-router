@@ -131,3 +131,30 @@ def test_sr_serve_defaults_to_the_settings_port(files, monkeypatch):
     monkeypatch.setattr(cli.page, "serve", lambda *a, **k: seen.update(k, args=a) or 0)
     assert cli.main(["serve"]) == 0
     assert 8801 in seen["args"] or seen.get("port") == 8801
+
+
+# ---------- brief 26 (decision 8): projects_root ----------
+
+def test_projects_root_absent_reads_the_default_from_code(files):
+    files[0].write_text("{}")
+    assert settings.projects_root() == (Path.home() / "Projects", None)
+    assert settings.projects_root_written() == "~/Projects"
+    assert "projects_root" not in json.loads(settings.REPO_SETTINGS.read_text())  # the tracked file gets no key
+
+
+def test_projects_root_expands_tilde_and_the_local_file_wins(files):
+    tracked, local = files
+    tracked.write_text(json.dumps({"projects_root": "/Users/you/Elsewhere"}))
+    local.write_text(json.dumps({"projects_root": "~/Desktop/garden-projects"}))
+    assert settings.projects_root() == (Path.home() / "Desktop" / "garden-projects", None)
+    assert settings.projects_root_written() == "~/Desktop/garden-projects"
+
+
+@pytest.mark.parametrize("bad", ["Projects", "./Projects", "", "   ", 5, None, ["~/Projects"]])
+def test_a_projects_root_that_is_not_absolute_is_a_reason(files, bad):
+    files[0].write_text(json.dumps({"projects_root": bad}))
+    root, why = settings.projects_root()
+    if bad is None:  # null is absent
+        assert (root, why) == (Path.home() / "Projects", None)
+        return
+    assert root is None and "projects_root in settings" in why

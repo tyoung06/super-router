@@ -158,8 +158,11 @@ def test_memory_projects_chats_and_the_settings(world, monkeypatch, tmp_path):
     assert doc["memory"] == {"setting": "auto", "online": True, "starting": False, "documents": 13}
     assert (doc["projects"], doc["chats"], doc["serve_port"]) == ([], [], 8765)
     assert "report_path" not in doc
-    settings.LOCAL_PATH.write_text(json.dumps({"report_path": "~/Downloads/claude-code-report.md"}))
+    assert doc["projects_root"] == "~/Projects"  # brief 26 (decision 8): the default, from code
+    settings.LOCAL_PATH.write_text(json.dumps({"report_path": "~/Downloads/claude-code-report.md",
+                                               "projects_root": "~/Desktop/garden-projects"}))
     assert _status(world)["report_path"].endswith("Downloads/claude-code-report.md")
+    assert _status(world)["projects_root"] == "~/Desktop/garden-projects"  # as written, `~` and all
     monkeypatch.setattr(cli.memory, "client", lambda *a, **k: FakeStore(up=False))
     assert _status(world)["memory"] == {"setting": "auto", "online": False, "starting": False, "documents": None}
 

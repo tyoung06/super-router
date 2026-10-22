@@ -14,6 +14,7 @@ REFUSAL_CODES = (
     "state_changed", "stuck", "interrupted", "internal_error",
     "needs_label",  # brief 22 (decision 9): `sr split --go --answer y` with a piece Jev left under the floor and no --skill
     "unreachable",  # brief 24 (decision 1): an agent the task needs whose online check did not answer
+    "project_partial",  # brief 26 (decision 7): `sr project new` stopped after the folder was made; what exists is named
 )
 
 
@@ -24,6 +25,7 @@ class Receipt:
     def __init__(self, multi=False):
         self.lines, self.task_id, self.code, self.multi = [], None, None, multi
         self.document = None  # a read command's own JSON document (deliver), printed in place of the envelope
+        self.extra = {}  # brief 26: keys added after the envelope's own (a new project's `project`)
 
     def __call__(self, line=""):
         self.lines.append(str(line))
@@ -47,6 +49,13 @@ def mark(out, *, task_id=None, code=None, command=False):
     marker = getattr(out, "mark", None)
     if marker is not None:
         marker(task_id=task_id, code=code, command=command)
+
+
+def attach(out, **keys):
+    """Brief 26 (decision 11): keys the envelope carries after its own eight, such as `project` on a successful
+    `sr project new`. Nothing without a Receipt."""
+    if isinstance(out, Receipt):
+        out.extra.update(keys)
 
 
 def deliver(out, document):

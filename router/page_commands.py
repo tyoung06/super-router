@@ -15,11 +15,12 @@ import shlex
 import unicodedata
 from dataclasses import dataclass
 
-from router import drop
+from router import drop, projects
 
 TASK_ID = re.compile(r"sr-\d{8}-\d{6}-[0-9a-f]{4}")
 ADDED = ("--json", "--source", "ui")            # the flags the page adds; dimmed on the command line, left out of Copy
-ACTIONS = ("send", "floor", "pick", "resume", "fallback", "cancel", "check", "split_go", "split_skip")
+ACTIONS = ("send", "floor", "pick", "resume", "fallback", "cancel", "check", "split_go", "split_skip",
+           "project_new")  # brief 26 (decision 9): `sr project new`
 PICKS = ("a", "b", "c", "none")
 ANSWERS = ("y", "n")
 
@@ -67,6 +68,27 @@ def _text(value):
     if "\x00" in value:
         raise Refused("the text holds a NUL character, which no command line can carry")
     return value
+
+
+def project_name(value):
+    """Brief 26 (decisions 9 and 10): a project name the router's name rule takes, that is also a plain flag value."""
+    if not isinstance(value, str) or not projects.NAME.fullmatch(value):
+        raise Refused("the project name is lower case letters, digits and - only")
+    return _value(value, "the project name")
+
+
+def _project_new(request):
+    """`sr project new --json <name> [-- <notes>]`: the notes as typed, one argument after `--` (they may hold newlines:
+    the control-character rule is for flag values only), left off when empty."""
+    args = ["project", "new", "--json", project_name(request.get("name"))]
+    notes = request.get("notes")
+    if notes is not None and not isinstance(notes, str):
+        raise Refused("the notes must be text")
+    if notes:
+        if "\x00" in notes:
+            raise Refused("the notes hold a NUL character, which no command line can carry")
+        args += ["--", notes]
+    return Command(tuple(args), frozenset({2}))
 
 
 def _task_id(value, what="the task"):
@@ -164,6 +186,8 @@ def build(request, status):
         return Command(tuple(args), frozenset(marks))
     if action == "check":
         return Command(("check", "--json"), frozenset({1}))
+    if action == "project_new":
+        return _project_new(request)
     task = _task_id(request.get("task_id"))
     if action == "pick":
         choice = request.get("choice")
