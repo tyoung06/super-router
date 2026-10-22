@@ -48,3 +48,21 @@ def test_the_fakes_allowlist_targets_the_match_and_no_path():
     toml = CI.split("GITLEAKS_CONFIG_TOML: |")[1].split("run:")[0]
     assert "useDefault = true" in toml and "[[allowlists]]" in toml and 'regexTarget = "match"' in toml
     assert "paths" not in toml
+
+
+# Brief 25, D5: CI checks out the whole history (fetch-depth 0) and `gitleaks git` reads every commit, so the four fake keys
+# the first run found in the first public commit are excused by fingerprint (commit:file:rule:line) in .gitleaksignore,
+# which gitleaks reads from the repo root. Nothing else is excused there, and only test files.
+FIRST_RUN = (
+    "89c329ca47029ed88b9748e92f02f5570768639b:tests/test_cursor_probe.py:generic-api-key:21",
+    "89c329ca47029ed88b9748e92f02f5570768639b:tests/test_context.py:generic-api-key:84",
+    "89c329ca47029ed88b9748e92f02f5570768639b:tests/test_context.py:generic-api-key:85",
+    "89c329ca47029ed88b9748e92f02f5570768639b:tests/test_context.py:generic-api-key:94",
+)
+
+
+def test_gitleaks_reads_the_whole_history_and_excuses_only_the_first_runs_four_fakes():
+    assert "fetch-depth: 0" in CI and '/gitleaks" git ' in CI and "gitleaks-ignore-path" not in CI
+    lines = (ROOT / ".gitleaksignore").read_text().splitlines()
+    assert lines == list(FIRST_RUN)
+    assert all(re.fullmatch(r"[0-9a-f]{40}:tests/[\w/]+\.py:[a-z-]+:\d+", line) for line in lines)

@@ -80,20 +80,28 @@ def _relay(conn, preset, task=TASK, *, project=None, worker=None, chatgpt=None, 
 
 # ---------- the key scan ----------
 
-@pytest.mark.parametrize("line", [
-    "JEV_API_KEY=abcdef1234567890",
-    "GROK_WEBHOOK_KEY: 'abcdef1234567890'",
-    "api_key = sk_live_abcdefghijklmnop",
-    "token: ghp_abcdefghijklmnopqrstuvwxyz0123",
-    "password=hunter2hunter2",
-    "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9abc",
-    "use sk-abcdefghijklmnopqrstuvwxyz for it",
-    "AKIAABCDEFGHIJKLMNOP",
-    "AIzaSyA-abcdefghijklmnopqrstuvwxyz01234",
-    "xoxb-123456789012-abcdefghijkl",
-    "https://example.invalid/hook?key=abcdef123456",
-    "webhook_url=https://example.invalid/x/abcdef",
-])
+def _key(*pieces):
+    """A key-shaped sample built at run time: secret scanners read source lines, so none spells a key's format whole."""
+    return "".join(pieces)
+
+
+KEY_LINES = [
+    _key("JEV_API_KEY=", "abcdef", "1234567890"),
+    _key("GROK_WEBHOOK_KEY: '", "abcdef", "1234567890'"),
+    _key("api_key = ", "sk_", "live_", "abcdefghijklmnop"),
+    _key("token: ", "gh", "p_", "abcdefghijklmnopqrstuvwxyz0123"),
+    _key("password=", "hunter2", "hunter2"),
+    _key("Authorization: Bearer ", "ey", "JhbGciOiJIUzI1NiJ9abc"),
+    _key("use ", "sk", "-", "abcdefghijklmnopqrstuvwxyz", " for it"),
+    _key("AK", "IA", "ABCDEFGHIJKLMNOP"),
+    _key("AI", "za", "SyA-", "abcdefghijklmnopqrstuvwxyz01234"),
+    _key("xo", "xb-", "123456789012-abcdefghijkl"),
+    _key("https://example.invalid/hook?key=", "abcdef", "123456"),
+    _key("webhook_url=", "https://example.invalid/x/", "abcdef"),
+]
+
+
+@pytest.mark.parametrize("line", KEY_LINES)
 def test_key_like_catches_a_key_shaped_line_and_names_it(line):
     text = f"# Notes\n\n```\n{line}\n```\nmore\n"
     assert safety.key_like(text) == 4

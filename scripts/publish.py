@@ -36,7 +36,8 @@ from scripts import rules_copy  # noqa: E402
 
 ALLOW_DIRS = ("router/", "static/", "scripts/", "docs/", "demo/", "tests/")
 ALLOW_FILES = frozenset({"config/agents.json", "config/presets.json", "config/settings.json", "config/skill_table.json",
-                         "requirements.txt", "pytest.ini", ".env.example", ".gitignore", "README.md", "LICENSE"})
+                         "requirements.txt", "pytest.ini", ".env.example", ".gitignore", ".gitleaksignore",
+                         "README.md", "LICENSE"})
 # The label-test files need labeltest/, so they stay private with it (decision 2).
 LABEL_TESTS = ("tests/test_labeltest_claude.py", "tests/test_labeltest_jev.py", "tests/test_labeltest_report.py",
                "tests/test_labeltest_round3.py", "tests/test_labeltest_round4.py", "tests/test_labeltest_score.py")

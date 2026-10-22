@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 @pytest.mark.parametrize("path", [
     "router/x.py", "static/app.js", "scripts/publish.py", "docs/SETUP.md", "demo/log.json", "tests/test_x.py",
     "config/agents.json", "config/presets.json", "config/settings.json", "config/skill_table.json", "requirements.txt",
-    "pytest.ini", ".env.example", ".gitignore", "README.md", "LICENSE"])
+    "pytest.ini", ".env.example", ".gitignore", ".gitleaksignore", "README.md", "LICENSE"])
 def test_the_allowlist(path):
     assert publish.classify(path) == "allow"
 

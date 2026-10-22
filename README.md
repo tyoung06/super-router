@@ -1,6 +1,6 @@
 # Super Router
 
-A personal AI router for your Mac: each task goes to the agent best at it, and another checks it.
+Claude, ChatGPT, Grok and Cursor as one AI team on your Mac. Each task goes to the agent best at it, a second agent checks the work, and a stalled call hands off automatically. Research, red-team, versus and vote modes, task splitting, memory and a local dashboard, all on the AI plans you already pay for.
 
 ![The page, in demo mode](docs/demo.png)
 
