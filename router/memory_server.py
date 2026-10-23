@@ -15,7 +15,7 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
-from router import memory, safety
+from router import memory, safety, settings
 
 FOLDER = ".hindsight"
 BINARY = Path("venv") / "bin" / "hindsight-api"
@@ -42,7 +42,7 @@ POLL_SECONDS = 2
 START_SECONDS = 180
 REPORT_EVERY = 20
 STOP_SECONDS = 30
-USAGE = "sr memory start|stop|status|rebuild"
+USAGE = "sr memory start|stop|status|rebuild|on|off"
 
 
 class ServerError(safety.SafeError):
@@ -128,7 +128,8 @@ def status_lines(client, home):
     size = (f"data: {folder_size(data)} {shown(data, home)}" if data is not None
             else f"data: none yet (~/{DATA_FOLDERS[0]} appears on the first start)")
     if not client.online():
-        return [f"memory: offline ({client.url}); sr memory start starts it", size], False
+        hint = "" if settings.memory_mode() == "off" else "; sr memory start starts it"  # refused while off (brief 27)
+        return [f"memory: offline ({client.url}){hint}", size], False
     try:
         version = client.version()
     except memory.Unavailable as e:

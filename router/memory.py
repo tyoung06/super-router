@@ -148,6 +148,7 @@ RECALL_MAX_TOKENS = 2000          # decision 8: the recall request's token cap o
 PASSES = ("passed", "fixed")      # the go's amendment 4: the heading shows the status whenever it is not a pass
 # Decision 5 with the amendment: a picked versus candidate is stored even when its review said fail.
 PICKED_FAIL = re.compile(r"picked [ab]; review by [a-z]+: fail(?:; .*)?")
+OFF = "off"  # brief 27: the skip reason, and the call record's key, while memory is off
 _HEAD = re.compile(r"^### #(\d+) · (\d{4}-\d{2}-\d{2}) · (.*)$")
 
 
@@ -160,13 +161,19 @@ def caps():
     return {name: settings.memory_setting(f"memory_{name}")[0] for name in ("max_items", "max_chars", "query_chars")}
 
 
-def storable(row):
+def storable(row, *, off_counts=True):
     """Decision 5: a `done` task whose delivered result the rules let the owner see: passed (a first check, a vote majority,
     collab's check stage, a picked candidate with a passing review), fixed, a quick answer (`not_needed`), or a picked
     versus candidate whose review failed (the go's amendment 4). Never an unchecked delivery, a failed check, or a task
-    that is not done."""
+    that is not done. Brief 27 (decision 7): never a task whose newest write record is `skipped: off` (delivered while
+    memory was off), so the backfill, the rebuild and entry one never take it; `store` passes `off_counts=False`, judging
+    a delivery by the setting at that delivery."""
     if row["status"] != "done":
         return False
+    if off_counts:
+        writes = log.memory_of(row)
+        if writes and writes[-1].get("skipped") == OFF:
+            return False
     state = row["check_state"]
     if state in ("passed", "fixed", "not_needed"):
         return True
@@ -358,6 +365,8 @@ def for_call(conn, task, client, secrets, *, reuse=None):
     if reuse is not None:
         record = log.call_memory_of(reuse)
         base = {"tag": tag, "from": reuse["call_id"]}
+        if record is not None and record.get(OFF):  # brief 27: the reused block was off: it stays off
+            return [], {"tag": tag, OFF: True, "from": reuse["call_id"]}
         if record is None or record.get("unavailable"):
             return [], {**base, "unavailable": True}
         base["found"] = record.get("found", 0)
@@ -366,6 +375,8 @@ def for_call(conn, task, client, secrets, *, reuse=None):
         if not record.get("text"):
             return [], base
         return entries_of_block(record["text"]), base
+    if settings.memory_mode() == OFF:  # brief 27 (decision 6): off means no recall, read at each fresh recall
+        return [], {"tag": tag, OFF: True}
     found = gather(conn, task, client, secrets, **caps())
     if found.unavailable is not None:
         return [], {"tag": tag, "unavailable": True, "reason": found.unavailable}
@@ -409,8 +420,10 @@ def store(conn, row, calls, client, secrets):
     writes = log.memory_of(row)
     if writes and writes[-1].get("state") == state:
         return None
-    if not storable(row):
+    if not storable(row, off_counts=False):
         return None
+    if settings.memory_mode() == OFF:  # brief 27 (decision 6): off means no retain, read at each delivery
+        return {"skipped": OFF, "state": state}, "memory: off; not saved"
     content = safety.redact(content_of(row, calls), secrets)
     if safety.key_like(content) is not None:
         return {"skipped": "looks like a key", "state": state}, "memory: skipped: looks like a key"

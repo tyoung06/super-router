@@ -65,7 +65,7 @@ Then follow [docs/SETUP.md](docs/SETUP.md): one section per piece, each with the
 - **Grok Bot (optional).** A Grok routine the router reaches by webhook; it answers as issues in a private GitHub repo of yours, read with `gh`. Without it: no images and no X research, since nothing else makes the images or sees X posts (for open-web research, pick web research); ChatGPT does the Meta trends research, and the card says "done without Meta"; `research-build` researches the web with ChatGPT; `vote` can't run.
 - **Cursor (optional).** Cursor's command line (`agent`), signed in, running one Grok model pinned by name. It adds a coding voice to `versus`. Without it, `versus` runs with Claude and ChatGPT.
 - **Jev (optional).** A paid labeling API from TypeSafe, with your key in `.env`. Without it, Terminal asks for each routed task's skill, and the page asks for it before Send.
-- **Memory (optional).** Hindsight, a memory store you install once; it runs on your Mac. Without it, tasks still run, but chats and projects don't remember earlier tasks, and a task that asks what the router remembers comes back saying memory is unavailable.
+- **Memory (optional).** Hindsight, a memory store you install once; it runs on your Mac. Without it, tasks still run, but chats and projects don't remember earlier tasks, and a task that asks what the router remembers comes back saying memory is unavailable. It can be switched off on the Setup sheet.
 
 ## What it costs
 

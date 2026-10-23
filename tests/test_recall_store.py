@@ -337,12 +337,13 @@ def test_with_memory_off_a_first_call_come_back_says_memory_is_off_in_settings(c
 
 
 def test_with_memory_off_a_round_come_back_and_its_redo_line_say_memory_is_off(conn):
-    _memory_off()
+    # brief 27: off means no recall, so the first call runs while on and memory is switched off before the round
     _done(conn, "sr-1", "first task", "we decided rubber")
     fake = FakeHindsight(results=[])
     code, out, row, _ = _route(conn, QUESTION, chat="tray", jev=RECALL, worker=Scripted("I can't find a decision."),
                                chatgpt=Chat(KeyboardInterrupt), hindsight=fake.client)  # Ctrl+C at the check
     _blind_first_call(conn, row["task_id"])
+    _memory_off()
     code, out = _check(conn, chatgpt=Chat("PASS"), hindsight=fake.client)
     row = log.get_task(conn, row["task_id"])
     assert (row["status"], row["route_reason"], row["check_note"]) == ("returned", REASON_OFF, BACK_OFF)
@@ -358,8 +359,10 @@ def test_with_memory_off_the_fallback_and_resume_refusals_say_memory_is_off(conn
     assert REDO_LINE_OFF in out and "could not be started" not in out
     _done(conn, "sr-1", "first task", "we decided rubber")
     fake = FakeHindsight(results=[])
+    settings.LOCAL_PATH.write_text(json.dumps({"memory": "auto"}))  # brief 27: the first call runs while on
     code, out, row, _ = _route(conn, QUESTION, chat="tray", jev=RECALL, worker=Scripted(claude_limit()), hindsight=fake.client)
     _blind_first_call(conn, row["task_id"])
+    _memory_off()
     code, out, after = _resume(conn, row, chatgpt=Chat("resumed"), hindsight=fake.client)
     assert code == 2 and f"Refused: #{row['n']} can't be resumed: {BACK_OFF}. Nothing was logged or sent." in out
     assert REDO_LINE_OFF in out

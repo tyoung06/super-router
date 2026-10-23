@@ -115,15 +115,54 @@ export function jevView(jev) {
     configured: !!jev.configured };
 }
 
-export function memoryView(memory) {
-  if (!memory) return { tone: "muted", state: "unknown", detail: "" };
-  if (memory.starting) return { tone: "info", state: "starting", detail: "about 35 s · nothing to do" };
-  if (memory.setting === "off") return { tone: "muted", state: "off", detail: "memory is off in settings" };
+const MEMORY_STARTING = { tone: "info", state: "starting", detail: "about 35 s · nothing to do", problem: false, off: false };
+
+export function memoryView(memory, { turningOn = false } = {}) {
+  // brief 27 (decision 12): off is your choice and installed-and-down is "ready"; only "not installed" is a setup
+  // problem. While the page's own run to on is in flight the light reads starting from that run (the owner's choice 7).
+  if (turningOn) return MEMORY_STARTING;
+  if (!memory) return { tone: "muted", state: "unknown", detail: "", problem: false, off: false };
+  if (memory.setting === "off") return { tone: "muted", state: "off", detail: "you turned it off · tasks run without it and nothing is saved", problem: false, off: true };
+  if (memory.starting) return MEMORY_STARTING;
   if (memory.online) {
     const docs = memory.documents == null ? "" : `${memory.documents} documents · `;
-    return { tone: "ok", state: "online", detail: `${docs}starts itself` };
+    return { tone: "ok", state: "online", detail: `${docs}starts itself`, problem: false, off: false };
   }
-  return { tone: "muted", state: "offline", detail: "starts itself when a chat task needs it" };
+  if (memory.installed === false) return { tone: "muted", state: "not installed", detail: "chat and project tasks run without it until it's installed", problem: true, off: false };
+  return { tone: "ok", state: "ready", detail: "starts itself when a chat or project task needs it", problem: false, off: false };
+}
+
+export function memoryLink(view) {
+  // the strip's details link for memory: off turns it on in Setup, not installed sets it up, the rest link nothing
+  if (!view) return null;
+  return view.off ? "Turn it on in Setup" : view.problem ? "How to set it up" : null;
+}
+
+const MEMORY_WORDS = {
+  on: "On. The router remembers what each chat and project task delivers, and gives later tasks there the earlier results that match. It starts the store itself when a task needs it.",
+  off: "Off. Tasks run without memory, and nothing they deliver is saved, not even after you turn it back on. The store is stopped. A project's HANDOFF.md still goes with its tasks.",
+  starting: "Starting the store: about 35 seconds. Then it saves what chat and project tasks delivered while it was down.",
+  stopping: "Turning memory off: the router stops the store it started. Tasks from now on run without memory.",
+};
+
+export function memorySwitchView(memory, run = null, failure = null, now = Date.now()) {
+  // the Setup row's switch and its note (decision 11): `run` is the page's own memory_switch run in flight ({to, started}),
+  // `failure` the last one's refusal ({exit, message}); the switch can't be clicked while a run goes or before status.
+  // break-ui: a run still going after a minute says how long, and where to look
+  const busy = !!run;
+  const on = busy ? run.to === "on" : !!memory && memory.setting !== "off";
+  const to = busy ? run.to : on ? "off" : "on";
+  const label = busy ? (run.to === "on" ? "Starting…" : "Turning off…") : on ? "On" : "Off";
+  const words = busy ? (run.to === "on" ? MEMORY_WORDS.starting : MEMORY_WORDS.stopping) : on ? MEMORY_WORDS.on : MEMORY_WORDS.off;
+  const minutes = busy && run.started ? Math.floor((now - run.started) / 60000) : 0;
+  return { on, to, label, busy, disabled: busy || !memory, words,
+    cmdLabel: busy ? (minutes >= 1 ? `Running for ${minutes} min` : "Running") : "The switch runs",
+    still: minutes >= 1 ? `The command hasn't ended after ${minutes} min. It keeps running if you close this page; the Memory light shows where memory is when it ends.` : null,
+    failure: failure ? { exit: failure.exit, message: failure.message } : null };
+}
+
+export function chatMemoryWords(memory) {
+  return memory && memory.setting === "off" ? "memory off" : "memory on for this chat";
 }
 
 // ---------- the team chips and the slot strip ----------
@@ -544,7 +583,9 @@ export function receiptView(task, show, now = new Date().toISOString()) {
   }
   if (task.tag && show) {
     const n = (show.memory_given || []).length;
-    pills.push({ text: "memory: ", value: n ? `${n} ${n === 1 ? "entry" : "entries"}` : "none yet" });
+    const build = (show.calls || []).find((c) => c.memory) || null;  // the first call: its record is the fresh one
+    const off = !!(build && build.memory && build.memory.state === "off");
+    pills.push({ text: "memory: ", value: off ? "off" : n ? `${n} ${n === 1 ? "entry" : "entries"}` : "none yet" });
   }
   if (show && show.handoff) pills.push({ text: "handoff: ", value: show.handoff.left_out ? "left out (Grok)" : show.handoff.attached ? "attached" : "not sent yet" });
   if (task.mode === "relay" && task.slots) {
@@ -824,7 +865,8 @@ export function memoryCallLines(calls) {
   return (calls || []).map((c) => {
     const m = c.memory || {};
     const who = `${c.kind === "stage" || c.kind === "reask" ? `stage ${c.stage}${c.kind === "reask" ? " re-ask" : ""}` : roleWords(c.kind)} · ${agentLabel(c.agent)}`;
-    let what = m.state === "unavailable" ? "the store was unavailable; the call ran without it"
+    let what = m.state === "off" ? "memory was off; the call ran without it"
+      : m.state === "unavailable" ? "the store was unavailable; the call ran without it"
       : m.state === "left_out" ? `left out: it could not fit Grok's prompt limit${m.with != null && m.limit != null ? ` (${m.with} > ${m.limit})` : ""}`
         : m.state === "sent" ? `sent ${m.sent} of ${m.found}` : "not kept";
     if (m.from) what += `, the block from ${m.from}`;
@@ -839,6 +881,16 @@ export function handoffWords(handoff) {
   return "Handoff: not sent yet (the build call has not been made)";
 }
 
+function storedWords(m) {
+  // a save, or why it was skipped (brief 27, decision 13: never `undefined · undefined characters`)
+  if (m.skipped) {
+    const why = m.skipped === "off" ? "memory was off" : m.skipped === "looks like a key" ? "it looked like a key"
+      : String(m.skipped).startsWith("unavailable") ? "the store was unavailable" : m.skipped;
+    return `not saved: ${why} · ${m.state}`;
+  }
+  return `${m.document_id} · ${m.chars} characters · ${m.state}`;
+}
+
 export function memoryDrawer(task, show) {
   if (!task || !task.tag || !show) return null;
   return {
@@ -847,7 +899,7 @@ export function memoryDrawer(task, show) {
       .filter(Boolean).join(" · "), text: m.text || "" })),
     calls: memoryCallLines(show.calls),
     handoff: handoffWords(show.handoff),
-    stored: (show.memory_stored || []).map((m) => `${m.document_id} · ${m.chars} characters · ${m.state}`),
+    stored: (show.memory_stored || []).map(storedWords),
   };
 }
 
@@ -994,7 +1046,8 @@ function setupRowsBare(status) {
     }
     if (key === "memory") {
       const memory = memoryView(status && status.memory);
-      return { key, name, tone: memory.tone, state: memory.state, detail: memory.detail, checkedAt: null };
+      return { key, name, tone: memory.tone, state: memory.state, detail: memory.detail, checkedAt: null,
+        problem: memory.problem, off: memory.off };
     }
     const agent = agents.get(key);
     if (!agent) return { key, name, tone: "muted", state: "not in this router", detail: "", checkedAt: null };
@@ -1007,7 +1060,9 @@ export function firstRunItems(status) {
   // the first-run card: every light that is grey or red, with its reason (rules: Setup)
   if (!status) return [];
   // an unknown light (not checked yet) is not a setup problem (break-ui, 21 Oct)
-  return setupRows(status).filter((r) => (r.tone === "bad" || r.tone === "muted") && !["not checked", "unknown"].includes(r.state))
+  // brief 27 (decision 12): memory joins only when it is a setup problem (not installed), never for off
+  return setupRows(status).filter((r) => (r.key === "memory" ? r.problem
+    : (r.tone === "bad" || r.tone === "muted") && !["not checked", "unknown"].includes(r.state)))
     .map((r) => ({ key: r.key, name: r.name, reason: r.detail || r.state, without: r.without }));
 }
 
@@ -1162,7 +1217,7 @@ const state = {
   chat: null, project: null, quick: false, team: "route", slots: {}, view: "chat",
   historyQuery: { chat: null, project: null, search: "" }, historyTasks: [], historyNext: null, historyPages: 1, historyError: null,
   logFolders: [], logNext: null, logError: null, setupText: null, setupError: null, setupChecking: false, setupFocus: null,
-  sheetKind: null, np: null, madeProjects: new Set(), teamMenu: false, stripOpen: null, detailsOpen: new Set(), navOpen: false,
+  sheetKind: null, np: null, madeProjects: new Set(), setupOpen: new Map(), memRun: null, memFailure: null, memCmd: null, teamMenu: false, stripOpen: null, detailsOpen: new Set(), navOpen: false,
   text: "", files: [], web: false, skill: null,
   command: null, commandSeq: 0,
   pending: [], refused: [], sessionTasks: [],
@@ -1235,8 +1290,8 @@ function renderStrip() {
   items.push({ key: "jev", tone: !jev.configured ? "muted" : jev.over ? "bad" : "ok", name: "Jev",
     words: jevUnknown ? "unknown" : jev.configured ? jev.text : "not set up",
     detail: jevUnknown ? "not checked yet" : !jev.configured ? "no JEV_API_KEY in .env" : jev.over ? "over this month's cap: routed tasks wait for your label" : "tokens this month against the cap" });
-  const memory = memoryView(status.memory);
-  items.push({ key: "memory", tone: memory.tone, name: "Memory", words: memory.state, detail: memory.detail });
+  const memory = memoryView(status.memory, { turningOn: !!(state.memRun && state.memRun.to === "on") });
+  items.push({ key: "memory", tone: memory.tone, name: "Memory", words: memory.state, detail: memory.detail, link: memoryLink(memory) });
   const open = items.find((i) => i.key === state.stripOpen);
   setChildren($("strip"), h("div", { class: "pills-row" }, items.map((item) => h("button", {
     class: `agent-pill tone-${item.tone}`, type: "button", title: [item.name, item.words, item.detail].filter(Boolean).join(" · "),
@@ -1245,7 +1300,10 @@ function renderStrip() {
   h("span", { class: "light", "aria-hidden": "true" }), h("span", { class: "agent-name", text: item.name }),
   h("span", { class: "agent-words", text: item.words })))),
   open ? h("div", { class: "strip-details", role: "status" }, h("strong", { text: open.name }), ` · ${open.words}`, open.detail ? ` · ${open.detail}` : "",
-    open.tone === "bad" || open.tone === "muted" ? [" · ", h("button", { class: "linklike", type: "button", onclick: () => openSetup(open.key) }, "How to set it up")] : null)
+    // brief 27 (decision 12): memory's link is its own (off: Turn it on in Setup; not installed: How to set it up; else none)
+    (open.key === "memory" ? open.link : open.tone === "bad" || open.tone === "muted" ? "How to set it up" : null)
+      ? [" · ", h("button", { class: "linklike", type: "button", onclick: () => openSetup(open.key) },
+        open.key === "memory" ? open.link : "How to set it up")] : null)
     : null);
 }
 
@@ -1818,7 +1876,7 @@ function renderStream({ follow = true } = {}) {
       h("button", { class: "btn btn-quiet right", type: "button", onclick: () => openHandoff(state.project) }, icon("book"), "HANDOFF.md"));
   } else if (state.chat) {
     head.append(h("span", { class: "stream-title", text: state.chat }),
-      h("span", { class: "stream-sub", text: `chat · ${tasks.length} task${tasks.length === 1 ? "" : "s"} · memory on for this chat` }),
+      h("span", { class: "stream-sub", id: "chat-memory", text: `chat · ${tasks.length} task${tasks.length === 1 ? "" : "s"} · ${chatMemoryWords((state.status || {}).memory)}` }),
       h("span", { class: "stream-sub right", text: `every task here is sent with --chat ${state.chat}` }));
   } else {
     head.append(h("span", { class: "stream-title", text: "Quick tasks" }), h("span", { class: "stream-sub", text: "no chat, no memory" }));
@@ -2647,6 +2705,7 @@ async function createProject() {
 async function openSetup(focus = null) {
   state.sheetKind = "setup";
   state.setupFocus = focus;
+  state.setupOpen = new Map();  // brief 27: each opening starts from the defaults
   $("sheet").hidden = false;
   renderSetup();
   if (state.setupText != null) return;
@@ -2666,7 +2725,18 @@ function localClock(iso) {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
 }
 
+function setupRowOpen(row) {
+  // brief 27 (the owner's choice 8): a row keeps the open state it was given while the sheet is up; the defaults (a
+  // setup problem, or the row asked for) apply when the sheet opens. Memory's default: open only when not installed.
+  if (state.setupOpen.has(row.key)) return state.setupOpen.get(row.key);
+  if (state.setupFocus === row.key) return true;
+  return row.key === "memory" ? !!row.problem : row.tone === "bad" || row.tone === "muted";
+}
+
 function renderSetup() {
+  const before = document.querySelector("#sheet .sheet.setup");
+  const scroll = before ? before.scrollTop : 0;
+  const keep = document.activeElement && document.activeElement.id;  // the poll redraws the sheet: keep focus and place
   const sections = setupSections(state.setupText || "").sections;
   const rows = setupRows(state.status);
   const checked = rows.map((r) => r.checkedAt).filter(Boolean).sort().at(-1);
@@ -2677,23 +2747,119 @@ function renderSetup() {
         title: state.demo ? "Demo: nothing runs." : "Ask the router for a fresh status (kept for 10 s)", onclick: checkAgain },
       state.setupChecking ? "Checking…" : "Check again"),
       h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: closeSheet }, icon("x"))),
-    h("p", { class: "panel-note", text: "Each piece's live state beside its steps. The steps are for Terminal: the page never runs them." }),
+    h("p", { class: "panel-note", text: "Each piece's live state beside its steps. The steps are for Terminal; the one thing the page runs here is the Memory switch." }),
     state.setupError ? h("p", { class: "missing", text: state.setupError }) : null,
-    h("div", { class: "setup-rows" }, rows.map((row) => h("details", {
-      class: `setup-row tone-${row.tone}`, id: `setup-${row.key}`,
-      open: row.tone === "bad" || row.tone === "muted" || state.setupFocus === row.key ? true : null },
-    h("summary", {}, h("span", { class: "light", "aria-hidden": "true" }), h("span", { class: "setup-name", text: row.name }),
-      h("span", { class: "setup-state", text: row.state }), row.detail ? h("span", { class: "setup-detail", text: row.detail }) : null,
-      row.checkedAt ? h("span", { class: "setup-checked", text: `checked ${localClock(row.checkedAt)}` }) : null),
-    row.without ? h("p", { class: "setup-without", text: `Without it: ${row.without}` }) : null,
-    h("div", { class: "setup-body result" }, sections[row.name] ? renderMarkdown(sections[row.name])
-      : h("p", { class: "panel-note", text: state.setupText == null ? "Loading the steps…" : "No section for it in docs/SETUP.md." }))))));
+    h("div", { class: "setup-rows" }, rows.map((row) => {
+      if (row.key === "memory" && state.memRun && state.memRun.to === "on") Object.assign(row, memoryView(null, { turningOn: true }));
+      const view = row.key === "memory" ? memorySwitchView(state.status && state.status.memory, state.memRun, state.memFailure) : null;
+      const details = h("details", {
+        class: `setup-row tone-${row.tone}`, id: `setup-${row.key}`, open: setupRowOpen(row) ? true : null,
+        ontoggle: (e) => state.setupOpen.set(row.key, e.target.open) },
+      h("summary", {}, h("span", { class: "light", "aria-hidden": "true" }), h("span", { class: "setup-name", text: row.name }),
+        h("span", { class: "setup-state", text: row.state }), row.detail ? h("span", { class: "setup-detail", text: row.detail }) : null,
+        row.checkedAt ? h("span", { class: "setup-checked", text: `checked ${localClock(row.checkedAt)}` }) : null),
+      row.without ? h("p", { class: "setup-without", text: `Without it: ${row.without}` }) : null,
+      view ? memoryNote(view) : null,
+      h("div", { class: "setup-body result" }, sections[row.name] ? renderMarkdown(sections[row.name])
+        : h("p", { class: "panel-note", text: state.setupText == null ? "Loading the steps…" : "No section for it in docs/SETUP.md." })));
+      // decision 11: the switch sits outside <summary> (a control inside it would open and close the row)
+      return view ? h("div", { class: "setup-row-wrap" }, details, memorySwitch(view)) : details;
+    })));
   setChildren($("sheet"), sheet);
   if (state.setupFocus) {
     const row = document.getElementById(`setup-${state.setupFocus}`);
     if (row) row.scrollIntoView({ block: "start" });
     state.setupFocus = null;
+  } else {
+    sheet.scrollTop = scroll;
   }
+  const again = keep && document.getElementById(keep);
+  if (again && again !== document.activeElement) again.focus({ preventScroll: true });
+}
+
+// ---------- the Memory switch (brief 27, decisions 10–12; the owner's choice 7) ----------
+
+function memorySwitch(view) {
+  return h("div", { class: "mem-switch-wrap" },
+    h("button", { class: `mem-switch${view.on ? " on" : ""}${view.busy ? " busy" : ""}`, type: "button", role: "switch", id: "mem-switch",
+      "aria-checked": view.on ? "true" : "false", "aria-label": "Memory", "aria-busy": view.busy ? "true" : null,
+      // break-ui: aria-disabled, not disabled, so a keyboard user keeps focus on it through the run (flipMemory ignores it)
+      "aria-disabled": view.disabled ? "true" : null, title: `Runs sr memory ${view.to}`, onclick: flipMemory },
+    h("span", { class: "mem-switch-label", text: view.label }),
+    h("span", { class: "mem-switch-track", "aria-hidden": "true" }, h("span", { class: "mem-switch-knob" }))));
+}
+
+function memoryNote(view) {
+  const parts = state.memCmd && state.memCmd.to === view.to ? state.memCmd.parts
+    : [{ text: "sr" }, { text: "memory" }, { text: view.to }, { text: "--json", added: true }];
+  if (!state.demo && !(state.memCmd && state.memCmd.to === view.to)) refreshMemoryCommand(view.to);
+  return h("div", { class: "mem-note", id: "mem-note" }, h("p", { text: view.words }),
+    view.still ? h("p", { class: "mem-still", text: view.still }) : null,
+    view.failure ? h("div", { class: "np-failure", role: "alert" }, h("div", { class: "np-failure-title", text: "The router refused this" }),
+      h("div", { class: "np-failure-text", text: view.failure.message }),
+      view.failure.exit != null ? h("div", { class: "np-failure-exit", text: `exit ${view.failure.exit}` }) : null) : null,
+    h("div", { class: "mem-cmd-row" }, h("span", { class: "mem-cmd-label", text: view.cmdLabel }),
+      h("div", { class: "np-cmd mem-cmd", id: "mem-cmd" }, h("span", { class: "prompt", text: "$" }),
+        h("span", { class: "cmd", title: parts.map((part) => part.text).join(" ") },
+          parts.map((part, i) => [i ? " " : "", h("span", { class: part.added ? "added" : null, text: part.text })])))));
+}
+
+let memCommandAsked = null;
+async function refreshMemoryCommand(to) {
+  // the note's command line from the server's builder (decision 11), asked once per direction
+  if (memCommandAsked === to) return;
+  memCommandAsked = to;
+  try {
+    const found = await api("/api/command", { method: "POST", body: { action: "memory_switch", to } });
+    state.memCmd = { to, parts: found.parts };
+    if (state.sheetKind === "setup") renderSetup();
+  } catch (e) {
+    // the note keeps the same words built here
+  } finally {
+    memCommandAsked = null;
+  }
+}
+
+async function memWaitRun(runId) {
+  // a switch to on waits for the start (up to 180 s) and the backfill: no limit while the server says the run goes
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    try {
+      const run = ((await api("/api/runs")).runs || []).find((r) => r.id === runId);
+      if (!run) return null;
+      if (!run.running) return run;
+    } catch (e) {
+      if (state.restarted) return null;
+    }
+  }
+}
+
+async function flipMemory() {
+  const view = memorySwitchView(state.status && state.status.memory, state.memRun, state.memFailure);
+  if (view.disabled) return;  // a double click, or a click while a run goes: one run at a time
+  if (state.demo) { toast("Demo: nothing runs."); return; }
+  state.memRun = { to: view.to, started: Date.now() };
+  state.memFailure = null;
+  render();
+  let run = null, error = null;
+  try {
+    const started = await api("/api/run", { method: "POST", body: { action: "memory_switch", to: view.to } });
+    run = await memWaitRun(started.run_id);
+  } catch (e) {
+    error = e.message;
+  }
+  const env = (run && run.envelope) || {};
+  const code = run ? (run.exit == null ? env.exit : run.exit) : null;
+  if (code === 0) {
+    await loadStatus();  // the server dropped its kept status when the run ended: one fresh read (decision 10)
+  } else {
+    state.memFailure = { exit: code, message: error || env.message || (run && run.stderr) || "The page lost track of the command. Reload to see whether memory switched." };
+    state.setupOpen.set("memory", true);  // break-ui: the refusal is in the row's body; a closed row would hide it
+  }
+  state.memRun = null;
+  render();
+  const failed = state.memFailure && document.querySelector("#mem-note .np-failure");
+  if (failed) failed.scrollIntoView({ block: "nearest" });
 }
 
 async function checkAgain() {
@@ -2837,9 +3003,15 @@ function schedulePoll(ms) {
   pollTimer = setTimeout(poll, ms);
 }
 
+let statusAsked = 0;
+let statusTaken = 0;
 async function loadStatus(fresh = false) {
+  const asked = ++statusAsked;
   try {
-    state.status = await api(fresh ? "/api/status?fresh=1" : "/api/status");
+    const found = await api(fresh ? "/api/status?fresh=1" : "/api/status");
+    if (asked < statusTaken) return;  // break-ui: an older read that lands late never undoes a newer one (the switch's)
+    statusTaken = asked;
+    state.status = found;
     state.statusAt = Date.now();
     state.statusError = null;
   } catch (e) {

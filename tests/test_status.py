@@ -154,8 +154,9 @@ def test_jev_s_meter_and_never_its_key(world):
 
 def test_memory_projects_chats_and_the_settings(world, monkeypatch, tmp_path):
     from router import settings
+    monkeypatch.setattr(cli.Path, "home", classmethod(lambda cls: tmp_path / "home"))  # brief 27: no install there
     doc = _status(world)
-    assert doc["memory"] == {"setting": "auto", "online": True, "starting": False, "documents": 13}
+    assert doc["memory"] == {"setting": "auto", "online": True, "starting": False, "documents": 13, "installed": False}
     assert (doc["projects"], doc["chats"], doc["serve_port"]) == ([], [], 8765)
     assert "report_path" not in doc
     assert doc["projects_root"] == "~/Projects"  # brief 26 (decision 8): the default, from code
@@ -164,7 +165,33 @@ def test_memory_projects_chats_and_the_settings(world, monkeypatch, tmp_path):
     assert _status(world)["report_path"].endswith("Downloads/claude-code-report.md")
     assert _status(world)["projects_root"] == "~/Desktop/garden-projects"  # as written, `~` and all
     monkeypatch.setattr(cli.memory, "client", lambda *a, **k: FakeStore(up=False))
-    assert _status(world)["memory"] == {"setting": "auto", "online": False, "starting": False, "documents": None}
+    assert _status(world)["memory"] == {"setting": "auto", "online": False, "starting": False, "documents": None,
+                                        "installed": False}
+
+
+def test_memory_installed_reads_the_hindsight_binary_in_the_home_folder(world, monkeypatch, tmp_path):
+    # brief 27 (decision 9): whether memory_server.paths(home)["binary"] exists
+    from router import memory_server
+    home = tmp_path / "home"
+    monkeypatch.setattr(cli.Path, "home", classmethod(lambda cls: home))
+    assert _status(world)["memory"]["installed"] is False
+    binary = memory_server.paths(home)["binary"]
+    binary.parent.mkdir(parents=True)
+    binary.write_text("#!/bin/sh\n")
+    assert _status(world)["memory"]["installed"] is True
+
+
+def test_memory_starting_only_while_memory_is_on(world):
+    # brief 27 E (the owner): `sr memory off` holds the memory lock while it stops the store (up to 30 s); that is not
+    # a start, so `starting` reads true only while the lock is held and the setting isn't off
+    from router import locks, runs, settings
+    folder = cli.DB_PATH.parent / runs.FOLDER_NAME
+    with locks.held("memory", folder=folder):
+        assert _status(world)["memory"]["starting"] is True
+        settings.LOCAL_PATH.write_text(json.dumps({"memory": "off"}))
+        assert _status(world)["memory"]["starting"] is False
+    settings.LOCAL_PATH.write_text(json.dumps({"memory": "auto"}))
+    assert _status(world)["memory"]["starting"] is False
 
 
 def test_status_writes_nothing_and_needs_no_log(world):

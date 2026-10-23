@@ -168,9 +168,11 @@ JEV_API_KEY=…
 python3 -m venv ~/.hindsight/venv && ~/.hindsight/venv/bin/pip install "hindsight-api-slim[local-onnx,embedded-db]"
 ```
 
-Its first start downloads one embedding model (about 470 MB). After that the router starts memory itself when a chat or project task needs it, and saves anything delivered while it was off.
+Its first start downloads one embedding model (about 470 MB). After that the router starts memory itself when a chat or project task needs it, and saves anything delivered while the store was down.
 
-**Ready on the page.** Memory reads "online" (or "starting" for up to a minute). "Off" means `memory` is set to `off` in the settings.
+**On and off.** The switch on this row turns memory on or off for this Mac. It runs `sr memory on` or `sr memory off`, which Terminal can run too. Off: tasks run without memory, nothing they deliver is saved (not even after you turn it back on), and the store is stopped; a project's `HANDOFF.md` still goes with its tasks. On: the store starts (about 35 seconds) and saves what it missed while it was down.
+
+**Ready on the page.** Memory reads "online" (running), "ready" (installed; it starts itself when a task needs it), "starting" for up to a minute, or "off" when you switched it off. "Not installed" means the step above is still to do.
 
 ## Projects
 

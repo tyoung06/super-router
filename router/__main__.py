@@ -290,7 +290,7 @@ def _recall_memory_problem(task, mem, hindsight, reuse):
         return None
     if hindsight is None or mem is None:  # memory off: no block could ride, fresh or saved
         return "store"
-    if mem.get("unavailable"):
+    if mem.get("unavailable") or mem.get("off"):  # brief 27: an off record is no store, fresh or saved
         return "record" if reuse is not None else "store"
     return None
 
@@ -3878,6 +3878,8 @@ def _call_memory_lines(calls):
         record = log.call_memory_of(c)
         if record is None:
             state = "not kept"
+        elif record.get("off"):  # brief 27: memory was off for this call
+            state = "off"
         elif record.get("unavailable"):
             state = "unavailable"
         elif record.get("left_out"):
@@ -4654,12 +4656,22 @@ def cmd_memory(words, *, request, environ, home, popen, sleep, clock, kill, db_p
     Exit 0, 1 when the server did not do what was asked, 2 refused with nothing changed."""
     words = list(words)
     verb = words[0] if len(words) == 1 else None
-    if verb not in ("start", "stop", "status", "rebuild"):
+    if verb not in ("start", "stop", "status", "rebuild", "on", "off"):
+        receipt.mark(out, code="usage")
         out(f"Refused: {memory_server.USAGE}. Nothing was changed.")
         return 2
+    if verb in ("start", "rebuild") and settings.memory_mode() == "off":  # brief 27 (decision 8)
+        receipt.mark(out, code="memory_off")
+        out("Refused: memory is off; sr memory on turns it on. Nothing was changed.")
+        return 2
     client = memory.client(request)
+    if verb in ("on", "off"):
+        return _memory_switch(verb, client, environ=environ, home=home, popen=popen, sleep=sleep, clock=clock, kill=kill,
+                              db_path=db_path, secrets=secrets, out=out)
     if verb == "rebuild":
         return _memory_rebuild(client, db_path=db_path, secrets=secrets, ask=ask, out=out)
+    if verb == "status" and settings.memory_mode() == "off":  # brief 27: status says so first, then the store's lines
+        out("memory: off (sr memory on turns it on)")
     try:
         if verb == "start":  # brief 22 (decision 8): one start at a time by the lock; then what the bank is missing
             folder = Path(db_path).parent / runs.FOLDER_NAME if db_path is not None else None
@@ -4673,11 +4685,57 @@ def cmd_memory(words, *, request, environ, home, popen, sleep, clock, kill, db_p
             return memory_server.stop(client, home=home, kill=kill, sleep=sleep, clock=clock, out=out)
         return memory_server.status(client, home=home, out=out)
     except memory_server.ServerError as e:
+        receipt.mark(out, code="setup")
         out(f"Refused: {e}. Nothing was changed.")
         return 2
     except memory.Unavailable as e:
         out(f"memory: Hindsight answered /health but then failed: {e}. See sr memory status.")
         return 1
+
+
+def _memory_switch(verb, client, *, environ, home, popen, sleep, clock, kill, db_path, secrets, out):
+    """`sr memory on|off` (brief 27, decisions 2 to 5): the setting first, in this Mac's local settings file; then `on`
+    runs exactly `sr memory start`'s path (the start under the memory lock, then the backfill) and `off` stops the store
+    `sr memory start` started, under the same lock (a store started another way is left running and said). Exit 0 once
+    the setting is as asked, whatever the start or stop did; 2 refused, nothing written. The JSON adds `memory`."""
+    to = "auto" if verb == "on" else "off"
+    try:
+        was, _ = settings.set_memory(to)
+    except settings.SettingsError as e:
+        receipt.mark(out, code="setup")
+        out(f"Refused: {e}. Nothing was changed.")
+        return 2
+    word = lambda mode: "on" if mode == "auto" else "off"  # noqa: E731
+    out(f"memory: {verb} (it was {'already ' + verb if was == to else word(was)})")
+    installed = memory_server.paths(home)["binary"].exists()
+    folder = Path(db_path).parent / runs.FOLDER_NAME if db_path is not None else None
+    try:
+        if verb == "on" and not installed:
+            out("memory: Hindsight is not installed, so chat and project tasks run without memory until it is; "
+                "the one-time install is on the Setup sheet (sr serve, then Setup, Memory).")
+        elif verb == "on":
+            with locks.held("memory", folder=folder):
+                code = memory_server.start(client, environ=environ, home=home, popen=popen, sleep=sleep, clock=clock,
+                                           out=out)
+            if code == 0:
+                _memory_backfill(client, db_path=db_path, secrets=secrets, out=out)
+        else:
+            with locks.held("memory", folder=folder):
+                if memory_server.read_pid(home) is None and client.online():
+                    out(f"memory: online at {client.url}, but not started by sr memory start; it is left running and "
+                        "not used while memory is off.")
+                else:
+                    memory_server.stop(client, home=home, kill=kill, sleep=sleep, clock=clock, out=out)
+    except memory_server.ServerError as e:  # the setting is as asked; the start or stop said why it didn't happen
+        out(f"memory: {e}")
+    except memory.Unavailable as e:
+        out(f"memory: Hindsight answered /health but then failed: {e}. See sr memory status.")
+    try:
+        online = bool(client.online())
+    except Exception:
+        online = False
+    receipt.attach(out, memory={"setting": to, "was": was, "online": online, "installed": installed})
+    return 0
 
 
 def _memory_backfill(client, *, db_path, secrets, out):
@@ -4739,6 +4797,7 @@ def cmd_status(*, roster, as_json=False, out=print, now=None):
                            online=found, versions=versions, state_path=PROBE_STATE,
                            memory_client=memory.client(requests.request), drop_folder=drop.folder(),
                            memory_starting=locks.holder(DB_PATH.parent / runs.FOLDER_NAME, "memory") is not None,
+                           memory_installed=memory_server.paths(Path.home())["binary"].exists(),  # brief 27
                            rules_path=status.rules_file(ROOT), log_version=log.file_version(DB_PATH),
                            send_paths=tuple(SENDERS), contracts=relay.CONTRACTS, roles=relay.ROLES, verdicts=relay.VERDICTS)
     finally:
@@ -4893,7 +4952,7 @@ WEB_REFUSAL = "--web is for a routed task with files"  # rules v2.22: refused on
 
 # Build brief 21 (rules v2.30, Router for the interface): the actions that answer with the JSON envelope, and the reads
 # that print their own JSON document (a list here; status, show and log in phase B).
-JSON_ACTIONS = ("route", "relay", "split", "resume", "fallback", "pick", "cancel", "check", "project", "chat")
+JSON_ACTIONS = ("route", "relay", "split", "resume", "fallback", "pick", "cancel", "check", "project", "chat", "memory")
 JSON_READS = ("status", "show", "log")  # print their own document (brief 21, B2 and B3)
 JSON_COMMANDS = JSON_ACTIONS + JSON_READS
 JSON_HELP = ("answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, "
@@ -5059,11 +5118,13 @@ def _parser(roster, quiet=False):
                                          "task count and newest date; nothing is created", allow_abbrev=False)
     p_chat.add_argument("words", nargs="*", help="list")
     p_chat.add_argument("--json", action="store_true", help=JSON_HELP + "; `list --json` prints the chats as JSON")
-    p_memory = sub.add_parser("memory", help="the memory store (rules v2.27): sr memory start|stop|status|rebuild; "
-                                             "Hindsight on 127.0.0.1:8888 from ~/.hindsight/venv, bank super-router; you "
-                                             "start it, the router never does; rebuild reloads the bank from the log",
+    p_memory = sub.add_parser("memory", help="the memory store (rules v2.27, 2.38): sr memory start|stop|status|rebuild|on|"
+                                             "off; Hindsight on 127.0.0.1:8888 from ~/.hindsight/venv; on and off switch "
+                                             "memory for this Mac (config/settings.local.json) and start or stop the store; "
+                                             "rebuild reloads the bank from the log",
                               allow_abbrev=False)
-    p_memory.add_argument("words", nargs="*", help="start | stop | status | rebuild")
+    p_memory.add_argument("words", nargs="*", help="start | stop | status | rebuild | on | off")
+    p_memory.add_argument("--json", action="store_true", help=JSON_HELP)
     sub.add_parser("probe", help="one real Codex run that must fail to read .env, list your home folder or write a file; "
                                  "run it after every Codex update, before routing tasks to ChatGPT; then one real Claude run "
                                  "that must web-search and do nothing else (run it after every Claude Code update: "
@@ -5272,7 +5333,8 @@ def _main(argv, platform, out):
     if args.command == "memory":  # rules v2.27: the store is the owner's to start and stop; no log is opened for it
         return cmd_memory(args.words, request=requests.request, environ=os.environ, home=Path.home(),
                           popen=subprocess.Popen, sleep=time.sleep, clock=time.monotonic, kill=os.kill, db_path=DB_PATH,
-                          secrets=_secrets(dotenv_values(ENV_PATH)), ask=input if _can_ask() and not json_mode else None)
+                          secrets=_secrets(dotenv_values(ENV_PATH)), ask=input if _can_ask() and not json_mode else None,
+                          out=out)  # brief 27: memory takes --json, so its lines go through the receipt
 
     loaded = None
     if args.command in ("relay", "resume", "fallback"):  # the presets are checked before anything is logged

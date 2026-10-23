@@ -15,6 +15,7 @@ REFUSAL_CODES = (
     "needs_label",  # brief 22 (decision 9): `sr split --go --answer y` with a piece Jev left under the floor and no --skill
     "unreachable",  # brief 24 (decision 1): an agent the task needs whose online check did not answer
     "project_partial",  # brief 26 (decision 7): `sr project new` stopped after the folder was made; what exists is named
+    "memory_off",  # brief 27 (decision 8): `sr memory start` or `rebuild` while memory is off; `sr memory on` turns it on
 )
 
 

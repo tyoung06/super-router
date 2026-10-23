@@ -894,13 +894,18 @@
   },
   {
    "name": "memory",
-   "help": "the memory store (rules v2.27): sr memory start|stop|status|rebuild; Hindsight on 127.0.0.1:8888 from ~/.hindsight/venv, bank super-router; you start it, the router never does; rebuild reloads the bank from the log",
+   "help": "the memory store (rules v2.27, 2.38): sr memory start|stop|status|rebuild|on|off; Hindsight on 127.0.0.1:8888 from ~/.hindsight/venv; on and off switch memory for this Mac (config/settings.local.json) and start or stop the store; rebuild reloads the bank from the log",
    "arguments": [
     {
      "name": "words",
      "kind": "positional",
      "nargs": "*",
-     "help": "start | stop | status | rebuild"
+     "help": "start | stop | status | rebuild | on | off"
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing"
     }
    ]
   },
@@ -1427,7 +1432,8 @@
   "setting": "auto",
   "online": false,
   "starting": true,
-  "documents": null
+  "documents": null,
+  "installed": true
  },
  "projects": [
   {

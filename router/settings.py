@@ -6,7 +6,10 @@ optional, overrides the tracked file key by key; it holds this Mac's own values,
 goes in the tracked file (the repo goes public). `grok_timeout_minutes` (the Grok note's N), `memory` (auto or off,
 shown; brief 22 acts on it) and `serve_port` (the port `sr serve` uses). Brief 26: `projects_root`."""
 import json
+import os
 import re
+import stat
+import tempfile
 from pathlib import Path
 
 from router import safety
@@ -108,6 +111,54 @@ def memory_mode():
     """`auto` (the default) or `off` (rules v2.30, Memory, Down). Read and shown in brief 21; brief 22 acts on it."""
     value = _read().get("memory")
     return value if value in MEMORY_MODES else "auto"
+
+
+class SettingsError(safety.SafeError):
+    """Brief 27: the local settings file can't take the write (not a JSON object). Its bytes are left as they were."""
+
+
+LOCAL_NAME = "config/settings.local.json"
+
+
+def set_memory(mode):
+    """Brief 27 (decision 2): `memory` in this Mac's local settings file, the one key `sr memory on|off` writes. Returns
+    (the mode before, whether anything was written); already as asked writes nothing. A missing file is made holding the
+    key alone, mode 0600; an existing one keeps every other key and value, in order, and its mode, rewritten through a
+    temporary file beside it and `os.replace`, so it is never half-written. Not a JSON object: SettingsError, nothing
+    written. The tracked file is never written."""
+    if mode not in MEMORY_MODES:
+        raise ValueError(f"memory is one of {', '.join(MEMORY_MODES)}")
+    path = Path(LOCAL_PATH)
+    try:
+        raw = path.read_text()
+    except FileNotFoundError:
+        raw = None
+    except OSError:
+        raise SettingsError(f"{LOCAL_NAME} could not be read") from None
+    if raw is None:
+        doc, perms = {}, 0o600
+    else:
+        try:
+            doc = json.loads(raw)
+        except ValueError:
+            raise SettingsError(f"{LOCAL_NAME} is not JSON") from None
+        if not isinstance(doc, dict):
+            raise SettingsError(f"{LOCAL_NAME} is not a JSON object")
+        perms = stat.S_IMODE(os.stat(path).st_mode)
+    was = memory_mode()
+    if was == mode:
+        return was, False
+    doc["memory"] = mode
+    fd, temp = tempfile.mkstemp(dir=str(path.parent), prefix=".settings.local.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(doc, indent=2) + "\n")
+        os.chmod(temp, perms)
+        os.replace(temp, path)
+    except BaseException:
+        Path(temp).unlink(missing_ok=True)
+        raise
+    return was, True
 
 
 def serve_port():

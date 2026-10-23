@@ -553,10 +553,14 @@ def make_server(port, reader=None, *, runs=None, demo=False, demo_root=None, roo
     return server
 
 
+DROPS_STATUS = ("project_new", "memory_switch")  # briefs 26 and 27: actions that change what status reads
+
+
 def _after_run(reader, run, code):
-    """Brief 26 (decision 11): a `project_new` that exited 0 made a project, so the kept status is out of date. A refused
-    one changed nothing and keeps it."""
-    if code == 0 and (run.get("request") or {}).get("action") == "project_new":
+    """Brief 26 (decision 11): a `project_new` that exited 0 made a project, so the kept status is out of date; brief 27
+    (decision 10): so does a `memory_switch` that exited 0. A refused one changed nothing and keeps it. Never at a run's
+    start (the owner, brief 27: a fresh status runs the sign-in checks, and could land before the switch's lock)."""
+    if code == 0 and (run.get("request") or {}).get("action") in DROPS_STATUS:
         reader.forget_status()
 
 

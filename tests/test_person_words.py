@@ -1,7 +1,8 @@
 """Build brief 24, E (decision 17; C20): the agent prompts that named the owner say "the person" (the checker's lead,
 the fix round's line, the integration's skipped piece), and the text a person reads says "you". Brief 25: the prompt
 snapshots hold each of those three phrases as often as they did, and nowhere the first name of this Mac's account (read
-at run time, so this file spells it nowhere; checked in the owner's checkout only). Jev's request never carried a name."""
+at run time, so this file spells it nowhere; checked in the owner's checkout only). Jev's request never carried a name.
+Brief 27: nor any file the publish would send."""
 import re
 import subprocess
 from pathlib import Path
@@ -27,6 +28,18 @@ def _first_name():
 
 
 FIRST_NAME = _first_name()
+
+
+def _tracked():
+    """The repo's tracked paths, read at import like the name (conftest blocks a test's own subprocesses), or None."""
+    try:
+        done = subprocess.run(["git", "ls-files", "-z"], cwd=FIXTURES.parent.parent, capture_output=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return [p for p in done.stdout.decode().split("\0") if p] if done.returncode == 0 else None
+
+
+TRACKED = _tracked()
 # In a clone, `id -F` names whoever runs the tests, and their first name may well be a word here (Claude, Will): the
 # name checks run only in the owner's checkout, and the publish scan guards the public copy itself.
 owner_only = pytest.mark.skipif(not (FIXTURES.parent.parent / "SUPER-ROUTER.md").exists(),
@@ -57,6 +70,21 @@ def test_no_shipped_config_file_or_its_old_versions_name_the_owner():
     for path in [*sorted((root / "config").glob("*.json")), *(FIXTURES / name for name in (
             "presets_v1_4.json", "skill_table_v3_1.json", "skill_table_v3_3.json"))]:
         assert not re.search(publish._word(FIRST_NAME), path.read_text(), re.I), path.name
+
+
+@owner_only
+@pytest.mark.skipif(FIRST_NAME is None, reason="this account has no two-word full name to look for")
+@pytest.mark.skipif(not TRACKED, reason="git could not list the tracked files")
+def test_no_file_the_publish_would_send_names_the_owner():
+    """Brief 27 G: the first name in four test comments stopped the publish. The suite now finds it first: every tracked
+    file the allowlist sends (`publish.classify`), as it stands in this checkout, by the scan's own first-name pattern
+    (a whole word in any case, after an escape or at a camelCase seam), in its text and in its path. Comments say "the
+    owner". `docs/RULES.md` is made at publish from SUPER-ROUTER.md, which names the owner by design, and is not here."""
+    root = FIXTURES.parent.parent
+    pattern = re.compile(publish._word(FIRST_NAME).encode(), re.I)
+    found = [path for path in TRACKED if publish.classify(path) == "allow" and (root / path).is_file()
+             and (pattern.search(path.encode()) or pattern.search((root / path).read_bytes()))]
+    assert found == [], f"the first name is in {len(found)} file(s) the publish would send: {found}"
 
 
 def test_the_three_agent_lines_say_the_person():

@@ -174,10 +174,13 @@ def agents_view(conn, roster, env, online, versions, state_path, now, avail=None
     return found
 
 
-def memory_view(client, starting=False):
+def memory_view(client, starting=False, installed=False):
     """The setting, and the store's state from its /health and the bank's document count; `starting` while a start
-    holds the memory lock (brief 22, decision 8)."""
-    found = {"setting": settings.memory_mode(), "online": False, "starting": bool(starting), "documents": None}
+    holds the memory lock (brief 22, decision 8), only while memory is on: `sr memory off` holds it to stop the store;
+    `installed`, whether Hindsight's binary is there (brief 27, decision 9)."""
+    setting = settings.memory_mode()
+    found = {"setting": setting, "online": False, "starting": bool(starting) and setting != "off", "documents": None,
+             "installed": bool(installed)}
     if client is None:
         return found
     try:
@@ -257,7 +260,8 @@ def availability_of(roster, env, online, versions, state_path, now=None):
 
 
 def build(conn, *, roster, loaded, env, parser, online, versions, state_path, memory_client, drop_folder, rules_path,
-          now=None, log_version=None, memory_starting=False, send_paths=None, contracts=None, roles=None, verdicts=()):
+          now=None, log_version=None, memory_starting=False, send_paths=None, contracts=None, roles=None, verdicts=(),
+          memory_installed=False):
     """The `sr status --json` document. `conn` is the log read-only, or None when there is none yet (or it is not this
     router's version). `log_version` is the log file's own version (the code's when there is no file yet), so a page sees
     a log that wants `sr migrate`."""
@@ -288,7 +292,7 @@ def build(conn, *, roster, loaded, env, parser, online, versions, state_path, me
                 "floor": roster.labeler.get("min_confidence") if roster is not None else None,
                 # brief 24 (decisions 13 and 14): whether Jev labels at all, and why not in words
                 "available": jev_avail.available, "why": jev_avail.why},
-        "memory": memory_view(memory_client, starting=memory_starting),
+        "memory": memory_view(memory_client, starting=memory_starting, installed=memory_installed),
         "projects": projects_view(conn),
         "chats": chats_view(conn),
         "drop_folder": str(drop_folder) if drop_folder else None,

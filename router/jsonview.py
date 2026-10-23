@@ -161,7 +161,9 @@ def _call_memory(call):
     found = {"state": "not_kept", "sent": None, "found": None, "from": None, "with": None, "limit": None}
     if record is None:
         return found
-    if record.get("unavailable"):
+    if record.get("off"):  # brief 27: memory was off for this call
+        found["state"] = "off"
+    elif record.get("unavailable"):
         found["state"] = "unavailable"
     elif record.get("left_out"):
         found.update(state="left_out", found=record.get("found"), **{"with": record.get("with"), "limit": record.get("limit")})

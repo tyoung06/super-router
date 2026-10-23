@@ -20,7 +20,8 @@ from router import drop, projects
 TASK_ID = re.compile(r"sr-\d{8}-\d{6}-[0-9a-f]{4}")
 ADDED = ("--json", "--source", "ui")            # the flags the page adds; dimmed on the command line, left out of Copy
 ACTIONS = ("send", "floor", "pick", "resume", "fallback", "cancel", "check", "split_go", "split_skip",
-           "project_new")  # brief 26 (decision 9): `sr project new`
+           "project_new",  # brief 26 (decision 9): `sr project new`
+           "memory_switch")  # brief 27 (decision 10): `sr memory on|off`
 PICKS = ("a", "b", "c", "none")
 ANSWERS = ("y", "n")
 
@@ -188,6 +189,11 @@ def build(request, status):
         return Command(("check", "--json"), frozenset({1}))
     if action == "project_new":
         return _project_new(request)
+    if action == "memory_switch":  # brief 27 (decision 10): the Setup sheet's switch; any other `to` runs nothing
+        to = request.get("to")
+        if to not in ("on", "off"):
+            raise Refused("the memory switch goes on or off")
+        return Command(("memory", to, "--json"), frozenset({2}))
     task = _task_id(request.get("task_id"))
     if action == "pick":
         choice = request.get("choice")

@@ -346,7 +346,7 @@ def attach(prompt, task, agent, secrets, *, limit=None, handoff=None, conn=None,
             text = memory.render(tag, kept, cap)
             prompt = f"{prompt}\n\n{text}"
             memory_record = {**base, "sent": len(kept), "text": text}
-        elif base.get("unavailable"):
+        elif base.get("unavailable") or base.get("off"):  # brief 27: off is kept as it is, no `sent`
             memory_record = base
         elif entries:
             memory_record = {**base, "left_out": True}

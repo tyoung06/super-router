@@ -275,7 +275,8 @@ def _cmd(words, fake, home, **over):
 def test_sr_memory_refuses_other_words(home):
     for words in (["frob"], [], ["start", "now"], ["rebuild", "all"]):
         code, out = _cmd(words, FakeHindsight(online=False), home)
-        assert code == 2 and out == ["Refused: sr memory start|stop|status|rebuild. Nothing was changed."], words
+        # brief 27: the usage names on and off too
+        assert code == 2 and out == ["Refused: sr memory start|stop|status|rebuild|on|off. Nothing was changed."], words
 
 
 def test_sr_memory_start_refuses_a_url_off_the_loopback_through_the_command(home, monkeypatch, tmp_path):

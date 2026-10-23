@@ -79,3 +79,22 @@ def test_the_readme_names_new_project_in_its_memory_bullet():
     readme = (ROOT / "README.md").read_text()
     bullet = next(line for line in readme.splitlines() if line.startswith("- **Memory per chat or project.**"))
     assert "New project" in bullet and "`sr project new`" in bullet
+
+
+# ---------- brief 27 (decision 15): the Memory switch ----------
+
+def test_the_memory_section_explains_on_and_off_and_the_light():
+    text = _section("Memory")
+    assert "saves anything delivered while the store was down" in text and "while it was off" not in text
+    assert "**On and off.** The switch on this row turns memory on or off for this Mac." in text
+    assert "`sr memory on`" in text and "`sr memory off`" in text
+    assert "not even after you turn it back on" in text and "`HANDOFF.md` still goes with its tasks" in text
+    ready = text.split("**Ready on the page.**", 1)[1]
+    for word in ('"online"', '"ready"', '"starting"', '"off"', '"Not installed"'):
+        assert word in ready, word
+
+
+def test_the_readme_says_memory_can_be_switched_off_on_the_setup_sheet():
+    readme = (ROOT / "README.md").read_text()
+    line = next(l for l in readme.splitlines() if "Hindsight" in l and l.lstrip().startswith("-"))
+    assert "switched off on the Setup sheet" in line

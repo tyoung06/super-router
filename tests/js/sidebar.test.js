@@ -36,7 +36,8 @@ test("SETUP.md splits into one section per piece the sheet shows, and an intro",
 });
 
 test("the guide tells no one to run sr probe or sr memory (rules: no maintenance step), and names no person or path", () => {
-  assert.equal(/sr probe|sr memory/.test(SETUP), false);
+  // brief 27 (decision 15): `sr memory on|off` is the switch, named beside it; the maintenance verbs stay out
+  assert.equal(/sr probe|sr memory (start|stop|status|rebuild)/.test(SETUP), false);
   assert.equal(/\/Users\//.test(SETUP), false);  // the name and the handle: publish.py's scan covers SETUP.md
 });
 

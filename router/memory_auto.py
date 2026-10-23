@@ -43,7 +43,7 @@ class AutoStore:
 
     def ensure(self):
         """Start the store when it is down, once per command, and backfill it after a start."""
-        if self._tried or self._mode != "auto":
+        if self._tried or (self._mode or settings.memory_mode()) != "auto":  # brief 27: read at each start, not once
             return
         self._tried = True
         if self._client.online():
@@ -66,5 +66,4 @@ def wrap(client, *, conn, secrets, out, folder, start, mode=None):
     """The store a command uses: the AutoStore over `client`, or `client` itself when there is none (tests)."""
     if client is None:
         return None
-    return AutoStore(client, mode=mode or settings.memory_mode(), start=start, conn=conn, secrets=secrets, out=out,
-                     folder=folder)
+    return AutoStore(client, mode=mode, start=start, conn=conn, secrets=secrets, out=out, folder=folder)

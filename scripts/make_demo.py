@@ -545,7 +545,7 @@ def _documents(w, tmp, out_dir):
     doc = status.build(conn, roster=ROSTER, loaded=LOADED, env=STATUS_ENV, parser=cli._parser(ROSTER), online=online,
                        versions={"claude": "2.1.306", "chatgpt": "0.162.1", "cursor": "2026.10.19-6bbf2c4"},
                        state_path=probe, memory_client=FakeHindsight(online=False).client, drop_folder="~/Desktop/Router Drop",
-                       rules_path=rules, now=now, log_version=log.VERSION, memory_starting=True,
+                       rules_path=rules, now=now, log_version=log.VERSION, memory_starting=True, memory_installed=True,
                        send_paths=tuple(cli.SENDERS), contracts=relay.CONTRACTS, roles=relay.ROLES, verdicts=relay.VERDICTS)
     _write(staging / "status.json", doc, tmp)
     _write(staging / "projects.json", {"api_version": jsonview.API_VERSION,

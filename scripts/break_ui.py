@@ -12,7 +12,11 @@ works, against a fake reader and a fake `sr` (nothing real runs or is written bu
 Its dry run answers by the name typed: `slow…` never answers, `link…` and `root…` are the router's refusals, a name
 already a project is taken, `recipe…` is a folder that is there (HANDOFF.md 14 lines), anything else a new folder under a
 long iCloud projects root. Create: notes holding `token:` are refused (exit 2), a name starting `partial` stops part
-way (exit 1), anything else is made and shows in the sidebar."""
+way (exit 1), anything else is made and shows in the sidebar. And memoryswitch (brief 27): not a demo, so the Setup sheet's
+Memory switch runs, against a fake reader whose memory state is `memory.json` in the scenario folder and a fake `sr` that
+answers `sr memory on|off --json` (on takes 4 s, off 1 s) and writes it. A file in the scenario folder changes it: `refuse`
+(the run is refused, exit 2), `hang` (the run never ends), `slow-status` (each status read takes 3 s); `runs.jsonl`
+lists every run the fake `sr` got."""
 import copy
 import http.server
 import json
@@ -35,7 +39,7 @@ LONG_FILE = ("Q3-2026-board-review-deck-final-v12-APPROVED-by-legal-and-finance-
              "quarterly-meeting-with-comments-from-aleksandra-wisniewska-kowalczyk-and-jo-before-the-vote.pdf")[:200]
 _LINE = "region,store,week,units,revenue,returns,notes\nnorth,Maple Street,2026-W42,1284,18311.40,12,\"restock trays\"\n"
 BIG_RESULT = "Here is the full export you asked for.\n\n```csv\n" + _LINE * (2_000_000 // len(_LINE)) + "```\n"
-SCENARIOS = ("demo", "worst", "empty", "one", "two-agents", "null-lights", "status-failing", "newproject")
+SCENARIOS = ("demo", "worst", "empty", "one", "two-agents", "null-lights", "status-failing", "newproject", "memoryswitch")
 LONG_ROOT = "~/Library/Mobile Documents/com~apple~CloudDocs/Northwind Industries Holdings/Client Projects 2026"
 
 
@@ -117,6 +121,8 @@ def build(out):
                                                 "handoff_lines": 212, "open_task": None}]
     status["projects_root"] = LONG_ROOT
     _write(out / "newproject" / "status.json", status)
+    _write(out / "memoryswitch" / "memory.json", {"setting": "auto", "online": True, "starting": False, "documents": 16,
+                                                  "installed": True})
     return out
 
 
@@ -263,6 +269,51 @@ sys.exit(env["exit"])
 """.replace("ROOT_PATH", repr(LONG_ROOT))
 
 
+# Brief 27: the memoryswitch scenario's fake `sr`, run as `python -c` from the scenario folder.
+FAKE_MEMORY_SR = r"""
+import json, os, sys, time
+args = sys.argv[1:]
+open("runs.jsonl", "a").write(json.dumps(args) + "\n")
+env = {"task_id": None, "n": None, "status": None, "waiting_on": None, "outcome": None, "reason_code": None, "exit": 0,
+       "message": "fake sr: " + " ".join(args[:2])}
+if args[:1] == ["memory"] and args[1:2] in (["on"], ["off"]):
+    if os.path.exists("hang"):
+        time.sleep(3600)
+    if os.path.exists("refuse"):
+        env.update(reason_code="setup", exit=2,
+                   message="Refused: config/settings.local.json is not a JSON object. Nothing was changed.")
+    else:
+        to = args[1]
+        time.sleep(4 if to == "on" else 1)
+        was = json.load(open("memory.json")).get("setting", "auto")
+        state = ({"setting": "auto", "online": True, "starting": False, "documents": 16, "installed": True} if to == "on"
+                 else {"setting": "off", "online": False, "starting": False, "documents": None, "installed": True})
+        json.dump(state, open("memory.json", "w"))
+        env["message"] = f"memory: {to} (it was {'on' if was == 'auto' else 'off'})"
+        env["memory"] = {"setting": state["setting"], "was": was, "online": state["online"], "installed": True}
+print(json.dumps(env), file=sys.stdout if env["exit"] == 0 else sys.stderr)
+sys.exit(env["exit"])
+"""
+
+
+class MemorySwitchReader(PagingReader):
+    """Brief 27: the memoryswitch scenario's reads: the demo's status with memory from memory.json; never kept."""
+
+    def status(self, fresh=False):
+        import time
+        if (self.root / "slow-status").exists():
+            time.sleep(3)
+        code, body = self._file("status.json")
+        if code != 200:
+            return code, body
+        doc = json.loads(body)
+        doc["memory"] = json.loads((self.root / "memory.json").read_text(encoding="utf-8"))
+        return 200, json.dumps(doc).encode()
+
+    def forget_status(self):
+        pass
+
+
 class NewProjectReader(PagingReader):
     """Brief 26: the newproject scenario's reads. Status and the project list add what the fake `sr` made; the dry run
     answers by the name (see the module's docstring). Never kept, so a made project shows on the next read."""
@@ -328,7 +379,12 @@ def serve(out, base=8800):
     links = []
     for i, name in enumerate(SCENARIOS, 1):
         root = Path(out) / name
-        if name == "newproject":  # brief 26: not a demo, so Create works; the fake sr runs, nothing real does
+        if name == "memoryswitch":  # brief 27: not a demo, so the switch runs; the fake sr runs, nothing real does
+            from router import page_runs
+            runs = page_runs.Runs(root=root, prefix=[sys.executable, "-c", FAKE_MEMORY_SR])
+            srv = page.make_server(base + i, reader=MemorySwitchReader(root), runs=runs, root=root, demo_root=root,
+                                   platform="linux")
+        elif name == "newproject":  # brief 26: not a demo, so Create works; the fake sr runs, nothing real does
             from router import page_runs
             runs = page_runs.Runs(root=root, prefix=[sys.executable, "-c", FAKE_SR])
             srv = page.make_server(base + i, reader=NewProjectReader(root), runs=runs, root=root, demo_root=root,
