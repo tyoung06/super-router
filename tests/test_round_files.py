@@ -20,6 +20,11 @@ from tests.test_json_actions import FAKE_ENV, World, jev
 from tests.test_loop import Scripted
 from tests.test_redteam_chain import ATTACKS, BUILD, REVISION
 from tests.test_redteam_fixes import BAD_FIX, FIX_LIST, GOOD_FIX
+
+# Brief 32: presets 1.7's redteam answers attacks by label; in this world Cursor isn't ready, so the second attack is left
+# out and the one list is A (the stage names below are the three-stage chain's, as before)
+REVISION, BAD_FIX = REVISION.replace("## Answered\n3.", "## Answered\nA3:"), BAD_FIX.replace("\n7.", "\nA7:").replace("\n8.", "\nA8:")
+GOOD_FIX, FIX_LIST = GOOD_FIX.replace("## Answered\n3.", "## Answered\nA3:"), FIX_LIST.replace("Attack 1", "A1")
 from tests.test_relay import GOOD_NOTE, THIN, Chat, RelayHook
 
 VOTE = "## Answer\nParis\n\n## Why\nIt is the capital.\n\n## Confidence\n90"
@@ -62,7 +67,8 @@ def test_a_routed_task_writes_one_file_per_call_in_order(world):
     tid = row["task_id"]
     assert calls == [("do", "claude", f"tasks/{tid}/01-do-claude.md"), ("check", "chatgpt", f"tasks/{tid}/02-check-chatgpt.md"),
                      ("fix", "claude", f"tasks/{tid}/03-fix-claude.md"), ("recheck", "chatgpt", f"tasks/{tid}/04-recheck-chatgpt.md")]
-    assert [_read(f) for _, _, f in calls] == ["Draft one.", "FIX\n1. Rhyme.", "Draft two.", "PASS"]
+    # brief 29.1 (decision 15): the fake answers the re-check with its line for must 1 (tests/helpers.as_recheck)
+    assert [_read(f) for _, _, f in calls] == ["Draft one.", "FIX\n1. Rhyme.", "Draft two.", "PASS\n1. fixed"]
 
 
 def test_versus_names_the_candidates_and_the_reviews_of_them(world):

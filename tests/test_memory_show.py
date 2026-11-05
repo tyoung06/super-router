@@ -5,6 +5,7 @@ from datetime import timedelta
 
 import pytest
 
+from router import context
 from router import __main__ as cli
 from router import checking, log, memory
 from tests.fake_hindsight import FakeHindsight
@@ -12,6 +13,7 @@ from tests.test_chat_intake import _relay, _route
 from tests.test_loop import Scripted
 from tests.test_memory_block import T0, _done, _entry, project  # noqa: F401  (the project fixture)
 from tests.test_relay import GOOD_NOTE, SECRET, Chat, RelayHook
+from tests.helpers import less_next
 
 TASK = "Write two lines about seed trays."
 TAG = "chat:tray"
@@ -41,7 +43,7 @@ def test_the_checker_gets_the_memory_line_after_the_project_line_only_when_a_blo
     assert checking.CHECK_MEMORY_LINE == (
         "The result was written with a memory block of earlier tasks under the same tag, pasted in this prompt as data. "
         "If the result relies on a memory that is off the point of this task, or that the task or the result itself "
-        "contradicts, that is a failure: name the memory by its task number in your fix list. Do not fail the result "
+        "contradicts, that is a [must]; name the memory by its task number. Do not fail the result "  # brief 29.1 (14)
         "for ignoring a memory it did not need.")
     assert prompt.index(checking.CHECK_MEMORY_LINE) < prompt.index("===== TASK =====")
     assert prompt.endswith("\n\n" + log.call_memory_of(log.calls_for(conn, row["task_id"])[0])["text"])
@@ -216,7 +218,10 @@ def test_show_memory_lists_one_line_per_call_in_96s_shape(conn, monkeypatch, tmp
     b = _done(conn, "sr-b", "task b", "result b", at=T0 + timedelta(hours=1))
     task = "What are gardeners on X saying about tray height? Three themes."
     block = memory.render(TAG, [_entry(b), _entry(a)], 2000)
-    limit = len(task) + 2 + len(block)  # the do call fits exactly; a fix prompt with the block cannot
+    # brief 29.1 (decision 20): the doer's line; brief 33 (decision 5): the Next line; then the memory line
+    do = f"{task}\n\n{checking.DELIVERABLE_LINE}\n\n{checking.NEXT_LINE}"
+    limit = len(do) + 2 + len(context.MEMORY_USE_LINE) + 2 + len(block)  # the do call fits exactly; a fix prompt with
+    # the block cannot
     path = tmp_path / "settings.json"
     path.write_text(json.dumps({"grok_prompt_limit": limit}))
     monkeypatch.setattr(settings, "SETTINGS_PATH", path)
@@ -227,14 +232,18 @@ def test_show_memory_lists_one_line_per_call_in_96s_shape(conn, monkeypatch, tmp
     assert code == 5 and row["check_state"] == "failed", out
     calls = log.calls_for(conn, row["task_id"])
     assert [c["kind"] for c in calls] == ["do", "check", "fix", "recheck"]
-    fix_prompt = checking.fix_prompt(task, "GROK first answer", checking.read_verdict(chat.prompts and "FIX\n1. tie the themes to soil sensors")[1], count=True)
-    assert hook.sent[1]["task"] == fix_prompt  # the fix prompt went whole, without the block, never failed
-    with_block = len(fix_prompt) + 2 + len(block)
+    first = "FIX\n1. tie the themes to soil sensors"
+    fix_prompt = checking.fix_prompt(task, "GROK first answer", checking.read_verdict(first)[1], count=True,
+                                     reading=checking.read_check(first), could_search=True)  # brief 29.1: Grok can search
+    assert less_next(hook.sent[1]["task"]) == fix_prompt  # the fix prompt went whole, without the block, never failed
+    with_block = len(hook.sent[1]["task"]) + 2 + len(context.MEMORY_USE_LINE) + 2 + len(block)  # brief 33: with its Next line
     assert log.call_memory_of(calls[2]) == {"tag": TAG, "found": 2, "left_out": True, "with": with_block, "limit": limit,
                                             "from": row["task_id"]}
     code, shown = _show(conn, str(row["n"]), memory_flag=True)
     tid = row["task_id"]
+    query = "What are gardeners on X saying about tray height? Three themes.\ntask b"
     assert (f"{block}\n"
+            f"Searched with ({tid}, {len(query)} characters):\n{query}\n"  # brief 30 (A3): the query, as sent
             f"do grok: sent 2 of 2\n"
             f"check chatgpt: sent 2 of 2, from {tid}\n"
             f"fix grok: left out ({with_block} > {limit}), from {tid}\n"

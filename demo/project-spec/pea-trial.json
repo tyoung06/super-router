@@ -1,0 +1,43 @@
+{
+ "api_version": 1,
+ "spec": {
+  "name": "pea-trial",
+  "folder": "~/Projects/pea-trial",
+  "exists": true,
+  "text": "# Pea trial\n\nA sowing log for the pea beds: which variety went in where, and when it came up.\n\n## Examples\n\n1. `record(\"Kelvedon Wonder\", bed=2)` adds a sowing dated today\n2. `sowings(bed=2)` lists that bed's sowings, newest first\n3. `frost_warning(forecast)` names a sowing that falls in a frost window\n\n## Done when\n\n- every example above has a passing test\n- README.md says how to run the tests\n",
+  "hash": "18e8a9b81c51c761",
+  "chars": 398,
+  "lines": 14,
+  "max": 6000,
+  "git": true,
+  "commits": true,
+  "tracked": true,
+  "examples": [
+   {
+    "label": "E1",
+    "text": "`record(\"Kelvedon Wonder\", bed=2)` adds a sowing dated today"
+   },
+   {
+    "label": "E2",
+    "text": "`sowings(bed=2)` lists that bed's sowings, newest first"
+   },
+   {
+    "label": "E3",
+    "text": "`frost_warning(forecast)` names a sowing that falls in a frost window"
+   }
+  ],
+  "done_when": [
+   {
+    "label": "D1",
+    "text": "every example above has a passing test"
+   },
+   {
+    "label": "D2",
+    "text": "README.md says how to run the tests"
+   }
+  ],
+  "labeled": true,
+  "draft": null,
+  "commit_words": "Save makes one commit holding SPEC.md alone."
+ }
+}

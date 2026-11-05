@@ -2,7 +2,7 @@
 
 Super Router sends each task to the AI agent that suits it, has a second agent check the result, and keeps a log. It runs on your Mac: a command (`sr`) and a page (`sr serve`) that shows the log and runs `sr` commands with buttons.
 
-This guide has one section per piece. Each says what the piece is for, what it costs, what happens without it, the Terminal steps to copy, and how the page shows it ready. The page's Setup sheet shows each section beside that piece's live state; it never runs a step for you, because sign-ins open browser pages it can't answer.
+This guide is for setting up: one section per piece. Once a piece is set up, [GUIDE.md](GUIDE.md) shows how to use the router. Each piece's section says what the piece is for, what it costs, what happens without it, the Terminal steps to copy, and how the page shows it ready. The page's Settings tab shows each section beside that piece's live state; it never runs a step for you, because sign-ins open browser pages it can't answer.
 
 **Claude is required. Every other piece is optional.** Without one, the router gives its work to the agents you have and says so on the task: the card names who did the work and why, and a result nobody else could check is marked unchecked. Start with Claude, then add the others in any order.
 
@@ -55,7 +55,7 @@ You never run a maintenance command: the router checks each agent's safety and s
 
    It should say you're signed in with claude.ai.
 
-**Ready on the page.** Claude's light reads "online" with its version. "Search on" appears once the router's search check passes on that version; the router runs that check itself right before Claude's first task that may search.
+**Ready on the page.** Claude's light turns green. Its words, on hover or in the list a click on any box opens, read "online" with its version. "Search on" appears once the router's search check passes on that version; the router runs that check itself right before Claude's first task that may search.
 
 ## ChatGPT
 
@@ -63,7 +63,7 @@ You never run a maintenance command: the router checks each agent's safety and s
 
 **What it costs.** Your ChatGPT plan, through OpenAI's Codex command line signed in with your ChatGPT account. Never an API key.
 
-**Without it.** Web research goes to Claude. Most of Claude's results are delivered unchecked, since Claude never checks its own work (X and Meta research is still checked by Claude, and bulk text by Grok Bot). No team can run, since each needs ChatGPT in a slot: Research-build (its check), Collab, Versus, Redteam and Vote. A split still runs; its joined result is delivered unchecked.
+**Without it.** Web research goes to Claude. Most of Claude's results are delivered unchecked, since Claude never checks its own work (X and Meta research, which Grok Bot does, is still checked by Claude). No team can run, since each needs ChatGPT in a slot: Research-build (its check), Collab, Versus, Redteam and Vote. Plan can't run either, since it runs Redteam's chain, and so Auto has no plan to run. A split still runs; its joined result is delivered unchecked.
 
 **Steps.**
 1. Install OpenAI's Codex command line from OpenAI's install guide.
@@ -75,15 +75,15 @@ You never run a maintenance command: the router checks each agent's safety and s
 
 ChatGPT's safety check runs itself: the first time ChatGPT is about to work on a Codex version the router hasn't checked, it makes one short ChatGPT call that tries to read your keys, list your home folder and write a file, and passes only when all three fail. If that check fails, ChatGPT stays off on that version and its work goes to the other agents, said in plain words; a check that couldn't run is tried again an hour later.
 
-**Ready on the page.** ChatGPT's light reads "online": the `codex` command answers that it is signed in. If it reads "signed out", run the step above again.
+**Ready on the page.** ChatGPT's light turns green, and its words read "online": the `codex` command answers that it is signed in. If they read "signed out", run the step above again.
 
 ## Cursor
 
-**What it's for.** A second coding voice in Versus: it builds candidate A or B from the task alone and reviews the other. It reads nothing, writes nothing and runs nothing: every tool is switched off.
+**What it's for.** A second coding voice in Versus: it builds candidate A or B from the task alone and reviews the other. It is also the second attacker on Redteam and on a plan: it gets the build or the plan in its prompt and lists the weak spots it finds, never seeing the first attacker's list. Either way it reads nothing, writes nothing and runs nothing: every tool is switched off, and everything it gets is text in its prompt.
 
 **What it costs.** The X Subscription's included weekly pool, the same pool Grok Bot and the Grok apps draw from. Keep the prepaid balance at $0 and auto top-up off, so nothing can be billed. Only Grok models, pinned by name. Never set `CURSOR_API_KEY`: it is a billing switch, and the router refuses to run while it is set.
 
-**Without it.** Nothing else changes: Cursor only takes a Versus slot you choose for it.
+**Without it.** Versus takes the agents you pick. Redteam and Plan run with one attacker, and the card says "One attacker: Cursor isn't available" with the reason. If Cursor's call fails partway, the second attack is skipped (the card says why) and the revision answers the first list alone; it is never handed to another agent.
 
 **Steps.**
 1. Install Cursor's command line (`agent`) from Cursor's install guide.
@@ -94,11 +94,11 @@ ChatGPT's safety check runs itself: the first time ChatGPT is about to work on a
    ```
 3. The Grok model Cursor runs is pinned by name in `config/agents.json`. Only you change it.
 
-**Ready on the page.** Cursor's light reads "online", with the pinned model and its calls this week. Cursor updates itself; after an update the router runs Cursor's safety check (two short calls) itself, before Cursor's next task. If a check fails, Cursor stays off on that version, the light says why, and the page offers the other agents for that slot.
+**Ready on the page.** Cursor's light turns green, and its words read "online", with the pinned model and its calls this week. Cursor updates itself; after an update the router runs Cursor's safety check (three short calls) itself, before Cursor's next task. If a check fails, Cursor stays off on that version, the light says why, and the page offers the other agents for that slot.
 
 ## Grok Bot
 
-**What it's for.** What people are saying on X and other social sites, images made with Grok Imagine, the research stage of Research-build, a voice in Vote, and checking bulk text. It never receives a file.
+**What it's for.** What people are saying on X and other social sites, images made with Grok Imagine, the research stage of Research-build, and a voice in Vote. It never receives a file. The skill table names it as bulk text's checker, but those check prompts pass its prompt limit, so that check is skipped and ChatGPT checks instead.
 
 **What it costs.** The X Subscription's included weekly pool. No API key.
 
@@ -136,7 +136,7 @@ ChatGPT's safety check runs itself: the first time ChatGPT is about to work on a
 
    If the file is already there, add the `grok_inbox_repo` line to what it holds.
 
-**Ready on the page.** Grok Bot's light reads "online" when the inbox repository answers, with its calls this week. Until all of steps 6 and 7 are done it reads "not set up" and says which is missing. A Grok task waits for its answer, and the page checks for it once a minute on its own. A Grok call still out after 10 minutes is handed to the next agent when there is one; if Grok Bot's answer comes later, it is kept on the log and never used.
+**Ready on the page.** Grok Bot's light turns green, and its words read "online", when the inbox repository answers, with its calls this week. Until all of steps 6 and 7 are done it reads "not set up" and says which is missing. A Grok task waits for its answer, and the page checks for it once a minute on its own. A Grok call still out after 10 minutes is handed to the next agent when there is one; if Grok Bot's answer comes later, it is kept on the log and never used.
 
 ## Jev
 
@@ -144,7 +144,9 @@ ChatGPT's safety check runs itself: the first time ChatGPT is about to work on a
 
 **What it costs.** Jev is an API (TypeSafe), reached with your key; check TypeSafe's pricing for your account. The router counts Jev's input tokens and stops asking at 1,000,000 a month; past that, each routed task waits for your label.
 
-**Without it.** Jev isn't called. Each routed task asks you for its skill: Terminal asks before it runs, and the page shows a skill menu beside Send. A team (Relay) never asks Jev, so nothing changes there.
+**Without it.** Jev isn't called. Each routed task asks you for its skill: Terminal asks before it runs, and the page asks for it before Send. A team (Relay) never asks Jev, so nothing changes there.
+
+**Follow-ups.** A task in a chat or a project routes on Jev's label from 0.4 confidence (0.8 elsewhere). Under that, or when Jev finds no skill that fits, it runs as a *follow-up*: Claude does it with the chat's or project's memory and ChatGPT checks it, with no question to you. The card reads "follow-up: Claude, with memory" and keeps Jev's label beside it.
 
 **Steps.** Put Jev's key in `.env`:
 
@@ -168,34 +170,46 @@ JEV_API_KEY=…
 python3 -m venv ~/.hindsight/venv && ~/.hindsight/venv/bin/pip install "hindsight-api-slim[local-onnx,embedded-db]"
 ```
 
-Its first start downloads one embedding model (about 470 MB). After that the router starts memory itself when a chat or project task needs it, and saves anything delivered while the store was down.
+Its first start downloads one embedding model (about 470 MB). After that the router starts memory itself when a chat or project task needs it, and saves anything delivered while the store was down. Each task gets the chat's or project's three newest delivered tasks first, then up to five earlier ones the search finds; the search uses the task's text and the one before it.
 
-**On and off.** The switch on this row turns memory on or off for this Mac. It runs `sr memory on` or `sr memory off`, which Terminal can run too. Off: tasks run without memory, nothing they deliver is saved (not even after you turn it back on), and the store is stopped; a project's `HANDOFF.md` still goes with its tasks. On: the store starts (about 35 seconds) and saves what it missed while it was down.
+**On and off.** The switch in Settings → Memory turns memory on or off for this Mac. It runs `sr memory on` or `sr memory off`, which Terminal can run too. Off: tasks run without memory, nothing they deliver is saved (not even after you turn it back on), and the store is stopped; a project's `HANDOFF.md` still goes with its tasks. On: the store starts (about 35 seconds) and saves what it missed while it was down.
 
-**Ready on the page.** Memory reads "online" (running), "ready" (installed; it starts itself when a task needs it), "starting" for up to a minute, or "off" when you switched it off. "Not installed" means the step above is still to do.
+**Ready on the page.** Memory's words read "online" (running), "ready" (installed; it starts itself when a task needs it), "starting" for up to a minute, or "off" when you switched it off. "Not installed" means the step above is still to do.
 
-## Projects
+**The control page.** Settings → Memory has a plain link to Hindsight's own control page on 127.0.0.1:9999, in a new tab, with the command that starts it to copy. It's optional, and the router never starts it.
 
-**What it is.** A project is a folder on your Mac with a notes file in it, `HANDOFF.md`. Every task you send in a project carries that file to the agents, and after each task the router adds a short entry about it at the end of the file, inside its own marked block. The agents can't open the folder: `HANDOFF.md`, starting notes included, is all they know about the project. Write there what an agent needs: what it is, the stack, where things are, what's decided.
+## Git
 
-**New project, on the page.** The `+` on the sidebar's Projects label (or the "New project" line when there are none, or "New project…" at the bottom of the project picker) opens one sheet. Type a name: it is saved as lowercase letters, digits and `-` (`Price Tracker` becomes `price-tracker`). The sheet asks the router what it would do with that name and shows the folder: a new folder, a folder that's already there (it's added as it is, and its `HANDOFF.md` stays yours, so starting notes are off), or the router's reason for refusing. Starting notes are optional; they're written once, at the top of the new `HANDOFF.md`, and notes that look like they hold a key are refused. Create runs the command the sheet shows, then opens the project.
+**What it's for.** Git is what lets the router change a project's files safely: every change lands as one commit you can see, and Undo takes it back as one more. Without git, projects still work, handoff only: the agents get the notes, and no file changes.
 
-**In Terminal.** The same thing, with the notes in quotes after `--`:
+**Install it, once.** macOS ships git with Apple's command line tools. In Terminal, run `git --version`; if macOS offers to install the command line tools, say yes. That's all: the router finds git by itself. (Homebrew's `git` works too.)
 
-```
-sr project new price-tracker -- 'What it is: a price checker for a watchlist.
-Decided: no paid APIs.'
-sr project new price-tracker --dry-run
-```
+**On the page.** Settings → Setup's Git row says installed (with its version) or not installed. Each project's bar says whether it is in file mode, and why not when it isn't: "no git yet: Turn on undo", "Claude's file check failed on Claude Code <version>" (the router runs the check by itself before the first file-mode task on each Claude Code version; until then the bar reads on), "this is the router's own folder", or "too big for a copy".
 
-`--dry-run` says what it would do (make the folder, add the one that's there, or refuse, and why) and writes nothing. For a folder anywhere else, register it as it is:
+## Router notes
 
-```
-sr project add price-tracker ~/Code/price-tracker
-```
+**What they're for.** Some things every agent should know on every task: how you like answers, your stack, what never to do; and some only one agent should, like how ChatGPT should check or what Grok should name. The router notes are one file, edited here, sent first with every agent call as your standing instructions. Nothing is sent while they're empty.
 
-`sr project list` shows each project with its folder and the file's line count; `sr project remove <name>` takes it off the list and touches no file. The router never deletes a project's folder or anything in it.
+**The six sections, and who gets which.** The file has six headings, `## All agents`, `## Claude`, `## ChatGPT`, `## Grok`, `## Cursor` and `## Planner`, each at most once, in any order, with your lines under each, for example `<a line every agent should follow>` under All agents and `<how you like a task split and its teams picked>` under Planner. A `###` line is just text; any other `## ` heading, or text before the first heading, is refused, naming its line. Every call gets **All agents** and the section of the agent making that call: the one doing the task, every stage of a team, every check and fix round, a takeover or a substitute (its own section, never the stopped agent's). **Planner** goes to a split's plan and to a project plan's planning calls. Jev never gets them, and neither does memory, a probe or a project's files.
 
-**Where new projects go.** Into `~/Projects`, one folder per project named like it, unless you set `projects_root` in `config/settings.local.json`, for example `{"projects_root": "~/Code"}`. It must be a `~` or absolute path; the router makes the folder itself if it isn't there yet.
+**The task wins.** The notes go first, and the prompt says the task, the instructions after them and the reply format win any conflict. A checker never fails a result for not following them: at most it mentions it as a note.
 
-**Ready on the page.** The project shows under Projects in the sidebar; pick it, and the composer reads "Project: <name>".
+**Grok's room.** Grok Bot's prompt has a limit, so its share (All agents plus Grok) rides only on a call where it fits; past the limit the memory block gives way first, then the notes, whole, then the project's notes, and the card says when they were left out.
+
+**Keep them free of anything private.** They go to every agent's service with the prompt, Grok Bot's inbox included. A value from your `.env`, or anything that looks like a key, is refused when you save, at each task, and before each call, naming the line, never its text.
+
+**On the page.** Settings → Router notes → **Edit** opens the file in one box (the six empty headings when there's none yet), with each section's characters, the cap (6,000 characters) and Grok's share. **Save** checks the whole file and writes it; a refusal shows the router's words and keeps what you typed. A task takes the notes as they are when you send it, so an edit never changes a task that's running. In Terminal: `sr notes` prints them, and `sr notes save -- '<the whole file>'` saves them. The file is `config/router-notes.md`, this Mac's own; it is never committed or published.
+
+## Models
+
+**What it's for.** Each agent runs one model per call. Out of the box Claude runs Sonnet 5.5 on every call, and ChatGPT and Cursor run their pins. You can set other defaults, for example Opus 5.5 for a `code` task's builds, or Fable 5.1 for a plan's planning calls while Fable is on. A model never changes who makes a call, how many calls run or who checks.
+
+**Where the defaults live.** `config/models.json` (tracked) holds each agent's allowed list, Claude's default and the time limits, `config/models.local.json` (this Mac's own, never committed) holds your per-skill and per-stage defaults and the Fable switch; the router writes it only through `sr models`, never by hand from the page. ChatGPT's and Cursor's defaults are their pins in `config/agents.json`.
+
+**In Settings → Models.** Each agent's default, read only, with the file it comes from, and Claude's Opus and Fable calls this week (calls, never tokens: the router shares the weekly limit with your own Claude Code builds). Under them your own defaults, each row read first, with Change opening that one row's select: one per skill (Claude's do and fix calls on a routed task of that skill) and one per team, role and agent. A change runs `sr models set …` at once and shows the router's answer; a refusal leaves the default as it was. Default puts the layer back (`sr models clear …`). A name the allowed list doesn't hold is refused everywhere, and a default the router had to ignore at load turns Models red, saying why.
+
+**Fable 5.1 and usage credits.** On the Max plan, Fable 5.1 can charge usage credits once you've used half your weekly limit on it, and the router's Claude calls pay them without asking. The switch in Settings → Models is off until you turn it on, and turning it on is your confirmation that usage credits are off on your account. While it is off a Fable default runs on Opus 5.5 and the card says so, and a typed Fable is refused. If a call's own stream ever reports it was billed to usage credits, that task stops, the switch turns itself off, and the card and Settings → Models say so; nothing is retried.
+
+**Per task.** Team → **Models…** (or `/model`) picks the model each agent uses on one task, with Defaults first; a choice shows as a pill in the composer and goes as `--model <agent>=<model>`. On Route it applies to whatever calls that agent makes; on a team only to an agent the team's slots hold; on Split to the plan and the join (each piece uses its team's defaults). A chip and Run again carry no choice. In Terminal: `sr models` prints the defaults in effect, `sr models set --skill code --agent claude --model opus` writes one, `sr models fable on` or `off` is the switch, each with `--json`.
+
+**Records.** Every Claude and ChatGPT call row keeps the model asked, the model that answered (from the tool's own stream), its time limit and its effort; a card's Details lists them, and the card says when the model that answered differs from the one asked (Fable's safety fallback re-runs some requests on Opus). Time limits go by model: 600 seconds on Haiku and Sonnet, 1,200 on Opus and Fable.

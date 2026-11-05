@@ -1,0 +1,13 @@
+{
+ "api_version": 1,
+ "project": {
+  "name": "rain-gauge",
+  "test_status": {
+   "running": false,
+   "started": null,
+   "head": null,
+   "output": "",
+   "last": null
+  }
+ }
+}

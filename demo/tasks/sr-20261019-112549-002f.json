@@ -1,0 +1,283 @@
+{
+ "api_version": 1,
+ "task_id": "sr-20261019-112549-002f",
+ "n": 42,
+ "created_at": "2026-10-19T11:25:55+00:00",
+ "updated_at": "2026-10-19T11:26:13+00:00",
+ "sent_at": null,
+ "source": "cli",
+ "text": "Write a two-line sign for the compost bins.",
+ "status": "done",
+ "waiting_on": null,
+ "outcome": "passed",
+ "reason_code": null,
+ "mode": "route",
+ "preset": null,
+ "parent": null,
+ "project": null,
+ "chat": null,
+ "tag": null,
+ "skill": "writing",
+ "skill_source": "jev",
+ "agent": "claude",
+ "checker": "chatgpt",
+ "check_state": "passed",
+ "check_note": null,
+ "route_reason": "best",
+ "failed_stage": null,
+ "web": false,
+ "files": [],
+ "result": "Greens and browns, a layer at a time.\nTurn me weekly and I turn it to soil.",
+ "result_url": null,
+ "jev": {
+  "status": "ok",
+  "label": "writing",
+  "confidence": 0.94,
+  "tokens": 640,
+  "needs_split": 0.08,
+  "error": null
+ },
+ "slots": null,
+ "working": null,
+ "steps": {
+  "chain": null,
+  "now": null
+ },
+ "fallback": {
+  "ok": false,
+  "agent": null,
+  "reason": "not a double fail: it passed"
+ },
+ "resume": {
+  "ok": false,
+  "substitute": null,
+  "agent": null,
+  "checker": null,
+  "reason": "it is done; only a task stopped by a plan limit or by a process that ended can be resumed"
+ },
+ "pid": null,
+ "run_started_at": null,
+ "answered_by": null,
+ "stand_in": null,
+ "filled": null,
+ "card_line": null,
+ "takeover": null,
+ "late": null,
+ "project_files": null,
+ "notes": [
+  {
+   "n": 1,
+   "text": "The second line could name the bins' colours."
+  },
+  {
+   "n": 2,
+   "text": "A shorter first line would fit the sign's width better."
+  }
+ ],
+ "open_musts": [],
+ "land_anyway": false,
+ "no_split": null,
+ "piece_of": null,
+ "router_notes": {
+  "hash": "8b61a57199701a87",
+  "chars": 330,
+  "file": "tasks/sr-20261019-112549-002f/router-notes.md"
+ },
+ "spec": null,
+ "forgotten": null,
+ "save_path": "docs/write-a-two-line-sign-for-the.md",
+ "text_only": false,
+ "save_spec": null,
+ "card_actions": {
+  "pin": true,
+  "save": true,
+  "forget": false,
+  "remember": false
+ },
+ "next": [
+  {
+   "kind": "build_from",
+   "words": "Build from #42",
+   "later": false,
+   "fill": {
+    "team": "route",
+    "project": null,
+    "chat": null,
+    "text": "",
+    "from": "sr-20261019-112549-002f",
+    "idea": null,
+    "step": null
+   }
+  }
+ ],
+ "from": null,
+ "idea": null,
+ "plan": null,
+ "plan_step": null,
+ "one_step": null,
+ "questions": null,
+ "models": null,
+ "auto": null,
+ "calls": [
+  {
+   "call_id": "sr-20261019-112549-002f",
+   "order": 1,
+   "kind": "do",
+   "stage": null,
+   "role": null,
+   "agent": "claude",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T11:26:01+00:00",
+   "finished_at": "2026-10-19T11:26:04+00:00",
+   "round_file": "tasks/sr-20261019-112549-002f/01-do-claude.md",
+   "served": {
+    "asked": "claude-sonnet-5-5",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/models.json",
+    "key": null,
+    "layer": "agent",
+    "model": "claude-sonnet-5-5",
+    "note": null,
+    "source": "stream: init and modelUsage",
+    "time_limit": 600
+   },
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "off (probe not passed)",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 348,
+    "from": "sr-20261019-112549-002f",
+    "judge": false,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "claude": 25
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-112549-002f/01-do-claude-prompt.md",
+   "model": "claude-sonnet-5-5",
+   "effort": null,
+   "time_limit": 600
+  },
+  {
+   "call_id": "sr-20261019-112549-002f-c1",
+   "order": 2,
+   "kind": "check",
+   "stage": null,
+   "role": null,
+   "agent": "chatgpt",
+   "status": "done",
+   "verdict": "PASS",
+   "sent_at": "2026-10-19T11:26:07+00:00",
+   "finished_at": "2026-10-19T11:26:10+00:00",
+   "round_file": "tasks/sr-20261019-112549-002f/02-check-chatgpt.md",
+   "served": {
+    "asked": "gpt-6.1-sol",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/agents.json",
+    "key": null,
+    "layer": "agent",
+    "model": "gpt-6.1-sol",
+    "note": null,
+    "source": "codex header",
+    "time_limit": 600
+   },
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "allowed",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": "PASS",
+   "router_notes": {
+    "chars": 603,
+    "from": "sr-20261019-112549-002f",
+    "judge": true,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "chatgpt": 49
+    }
+   },
+   "spec": null,
+   "items": [
+    {
+     "n": 1,
+     "tag": "note",
+     "text": "The second line could name the bins' colours.",
+     "state": null
+    },
+    {
+     "n": 2,
+     "tag": "note",
+     "text": "A shorter first line would fit the sign's width better.",
+     "state": null
+    }
+   ],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-112549-002f/02-check-chatgpt-prompt.md",
+   "model": "gpt-6.1-sol",
+   "effort": null,
+   "time_limit": 600
+  }
+ ],
+ "handoff": null,
+ "memory_stored": [],
+ "memory_given": [],
+ "candidates": null,
+ "pick": null,
+ "votes": null,
+ "tally": null,
+ "attacks": null,
+ "pieces": null,
+ "join": null,
+ "estimate": null,
+ "menu": null,
+ "original_file": "tasks/sr-20261019-112549-002f/01-do-claude.md",
+ "result_file": "tasks/sr-20261019-112549-002f/01-do-claude.md",
+ "from_given": null
+}

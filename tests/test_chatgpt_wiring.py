@@ -11,8 +11,9 @@ import pytest
 from router import __main__ as cli
 from router import checking, log, routing
 from router.roster import Roster, load_roster, problems
-from tests.helpers import fake_label, shipped_roster
+from tests.helpers import fake_label, shipped_roster, today
 from tests.test_loop import CONFIG, Scripted, Webhook, _calls
+from tests.helpers import less_next
 
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 AGENTS_DOC = json.loads((CONFIG_DIR / "agents.json").read_text())
@@ -37,7 +38,7 @@ class ChatGPT:
     def __init__(self, *replies):
         self.replies, self.calls = list(replies), []
 
-    def __call__(self, prompt, *, web_search):
+    def __call__(self, prompt, *, web_search, **kwargs):  # brief 33.3: the worker gets choice= too
         self.calls.append((prompt, web_search))
         reply = self.replies.pop(0) if self.replies else "a chatgpt answer"
         if isinstance(reply, BaseException) or isinstance(reply, type):
@@ -147,7 +148,8 @@ def test_chatgpt_does_web_research_with_live_search_and_claude_sanity_checks_it(
     assert code == 0 and (row["agent"], row["checker"], row["check_state"]) == ("chatgpt", "claude", "passed")
     # rules v2.22: the do prompt carries the search line; claude's check, with the probe gate shut here, is still a
     # sanity check only (its row records `off (probe not passed)`)
-    assert chatgpt.calls == [("find sources on the new EU AI rules\n\n" + checking.SEARCH_LINE_GENERAL, "live")]
+    assert [(less_next(p), w) for p, w in chatgpt.calls] == [("find sources on the new EU AI rules\n\n" + checking.DELIVERABLE_LINE + "\n\n"  # 29.1
+                              + checking.SEARCH_LINE_GENERAL, "live")]
     assert "CHECKED (sanity check only): passed." in out
     assert _calls(conn, row["task_id"])[0] == (row["task_id"], "do", "chatgpt", "done", None)
 
@@ -161,7 +163,7 @@ def test_chatgpt_checks_claudes_code_with_search_on_and_may_browse(conn):
     prompt, web_search = chatgpt.calls[0]
     assert web_search == "live"
     assert prompt == checking.checker_prompt("write a parser for the log", "def parse(): ...", no_tools=False,
-                                             can_browse=True, search=True)
+                                             can_browse=True, search=True, sent_on=today())
     assert "can't open links" not in prompt and "may open links" in prompt
     assert "CHECKED: passed." in out and "sanity" not in out
 
@@ -174,7 +176,8 @@ def test_chatgpt_checks_groks_x_chatter_with_live_search_and_may_browse(conn):
     prompt, web_search = chatgpt.calls[0]
     assert web_search == "live"
     assert prompt == checking.checker_prompt("what is X saying about NVDA today", "People on X are saying... https://x.com/post/1",
-                                             no_tools=False, can_browse=True, search=True)  # rules v2.22: the line
+                                             no_tools=False, can_browse=True, search=True,  # rules v2.22: the line
+                                             could_search=True, sent_on=today())  # brief 29.1 (decision 16): Grok did it, so it could
     assert "may open links" in prompt.lower() and "verify" in prompt.lower()
 
 
@@ -189,15 +192,17 @@ def test_the_fix_round_goes_back_to_chatgpt_with_the_doers_search_setting(conn):
     code, out, row, chatgpt, _ = _route(conn, "find sources on the new EU AI rules", ok("web_research"),
                                         chatgpt=chatgpt, worker=Scripted("FIX\n1. Add a date.", "PASS"))
     assert code == 0 and row["check_state"] == "fixed" and row["result"] == "answer v2"
-    assert chatgpt.calls[1][1] == "live" and chatgpt.calls[1][0] == checking.fix_prompt(
-        "find sources on the new EU AI rules", "answer v1", "1. Add a date.", search=True, count=True)  # rules v2.22: the line
+    assert chatgpt.calls[1][1] == "live" and less_next(chatgpt.calls[1][0]) == checking.fix_prompt(
+        "find sources on the new EU AI rules", "answer v1", "1. Add a date.", search=True, count=True,  # rules v2.22: the line
+        reading=checking.read_check("FIX\n1. Add a date."), could_search=True)  # brief 29.1: the musts, and it could search
 
 
 def test_an_override_for_chatgpt_works_once_it_is_live(conn):
     chatgpt = ChatGPT("36")
     code, out, row, chatgpt, _ = _route(conn, "@chatgpt what is 15% of 240", ok("quick_answer"), chatgpt=chatgpt)
     assert code == 0 and (row["agent"], row["route_reason"], row["check_state"]) == ("chatgpt", "override", "not_needed")
-    assert chatgpt.calls == [("what is 15% of 240\n\n" + checking.SEARCH_LINE_GENERAL, "live")]  # rules v2.22
+    assert chatgpt.calls == [("what is 15% of 240\n\n" + checking.DELIVERABLE_LINE + "\n\n" + checking.SEARCH_LINE_GENERAL,
+                              "live")]  # rules v2.22; brief 29.1 (decision 20)
 
 
 # ---------- the login check ----------

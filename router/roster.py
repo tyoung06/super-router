@@ -132,6 +132,9 @@ def problems(agents_doc, table, send_paths):
     floor = labeler.get("min_confidence")
     if isinstance(floor, bool) or not isinstance(floor, (int, float)) or not 0 < floor <= 1:
         found.append(f"skill_table.json: labeler.min_confidence must be a number above 0 and up to 1, not {floor!r}.")
+    tagged = labeler.get("tagged_min_confidence")  # brief 29.1 (decision 24): a tagged task's floor, beside the 0.8 one
+    if tagged is not None and (isinstance(tagged, bool) or not isinstance(tagged, (int, float)) or not 0 < tagged <= 1):
+        found.append(f"skill_table.json: labeler.tagged_min_confidence must be a number above 0 and up to 1, not {tagged!r}.")
     for field in ("question", "fallback_label", "fallback_description"):
         if not isinstance(labeler.get(field), str) or not labeler[field].strip():
             found.append(f"skill_table.json: labeler.{field} is missing.")

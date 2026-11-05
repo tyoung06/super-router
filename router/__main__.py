@@ -7,6 +7,7 @@ Exit codes: 0 OK (for route: the result was printed, or the task was sent withou
 130 stopped with Ctrl+C. `sr show <n> --history` lists every call a task made.
 """
 import argparse
+import contextlib
 import dataclasses
 import functools
 import os
@@ -27,10 +28,13 @@ from pathlib import Path
 import requests
 from dotenv import dotenv_values
 
-from router import availability, cardline, chatgpt_worker, checking, claude_probe, claude_worker, codex_probe, context, cursor_probe, cursor_worker, drop, fallback, grok, ids, inbox, jev, jsonview, locks, log, media, memory, memory_auto, memory_server, online, page, plan_limit, presets, probes, projects, receipt, relay, resume, rounds, routing, runs, safety, search, settings, split, state, status, takeover, web_files_probe
+from router import availability, cardline, chatgpt_worker, checking, claude_probe, claude_worker, codex_probe, context, cursor_probe, cursor_worker, drop, fallback, copies, filecalls, filemode, files_probe, fromblock, gitops, grok, ideas, ids, inbox, jev, jsonview, landing, locks, log, media, memory, memory_auto, memory_server, online, page, plan_limit, plansection, presets, probes, projgit, projects, receipt, relay, resume, rounds, routing, runs, safety, search, settings, split, state, status, suggest, takeover, teams, testrun, web_files_probe, whatnow
+from router import auto, fileview, intake, models, nextsteps, notes, projnotes, projrun, projsecrets, projspec, projtest, splitview, versusfiles
+from router import spec as spec_mod  # noqa: E402 (brief 33.2): the project's SPEC.md
 from router.roster import RosterError, load_roster
 
 presets_mod = presets  # the module, inside functions whose `presets` parameter is the loaded file
+from router import plan as plan_mod  # noqa: E402 (brief 33.1) the module; many functions here keep a local `plan`
 
 TIMEOUT_MINUTES = 30
 WAIT_SECONDS = 10 * 60   # how long route waits for Grok by default
@@ -147,11 +151,10 @@ GROK_SKIPPED = takeover.GROK_SKIPPED  # brief 24 (the owner's C11)
 LIVE_SEARCH_SKILLS = checking.WEB_SKILLS
 
 
-SPLIT_PROJECT_REFUSAL = ("Refused: --project on sr split is refused in version 2; pieces carry no project. "
-                         "Nothing was logged or sent.")
 # Rules v2.27, Memory, "The tag": `--chat` is accepted by route and relay (and with an override), refused with --project
-# (one tag per task) and on a split, as --project is. Both refusals come in main, before any row.
-SPLIT_CHAT_REFUSAL = "Refused: --chat on sr split is refused in version 2; pieces carry no tag. Nothing was logged or sent."
+# (one tag per task) and on a split, in main, before any row. Brief 29 (decision 12): `--project` is taken on a split.
+SPLIT_CHAT_REFUSAL = ("Refused: --chat on sr split is refused: a split carries no chat tag (its pieces neither). Nothing "
+                      "was logged or sent.")
 ONE_TAG_REFUSAL = "Refused: one tag per task: --chat with --project. Nothing was logged or sent."
 
 
@@ -168,32 +171,32 @@ def _say_new_chat(conn, chat, out):
         out(f"new chat: {chat}")
 
 
-def _project_refusal(conn, project):
-    """Rules v2.25, intake: why `--project <name>` cannot be taken, or None. Before any row: the name is in the
-    registry (else the list), its HANDOFF.md can be read, and no task of the project is open (queued or sent).
-    Brief 21: (reason_code, the reason)."""
-    try:
-        registry = projects.read_registry()
-    except projects.ProjectError as e:
-        return "project_unknown", f"{safety.one_line(e)}"
-    if project not in registry:
-        if not registry:
-            return "project_unknown", f"no project {safety.one_line(project)}: the registry is empty (sr project add <name> <path>)"
-        return "project_unknown", f"no project {safety.one_line(project)}. Projects: {', '.join(sorted(registry))} (sr project list)"
-    try:
-        projects.read_handoff(registry[project])
-    except projects.ProjectError as e:
-        return "handoff_unreadable", f"project {project}: {safety.one_line(e)}"
-    open_row = log.open_task_for(conn, project)
-    if open_row is not None:
-        return "project_busy", f"project {project} has task {open_row['n']} open ({open_row['status']}). Finish or cancel it first"
-    return None
+# Brief 29 (decision 7): the intake helpers live in router/intake.py, where the split's approval reads them for each
+# piece as `sr route` and `sr relay` read them for a task; the old names stay for the callers here.
+_project_refusal = intake.project_refusal
+_build_slot_refusal = intake.build_slot_refusal
+_project_presets = intake.project_presets
+_grok_vote_refusal = intake.grok_vote_refusal
+_cursor_length_refusal = intake.cursor_length_refusal
 
 
-def _project_presets(loaded):
-    """The presets `--project` may run on (rules v2.25, Relay): a named checker after a chain that ends in one
-    agent's build; never a check stage, review stages or a tally."""
-    return [name for name, p in loaded.presets.items() if presets.takes_project(p)]  # brief 23: status reads the same
+def _file_mode_start(conn, task_id, project, agent, files_ready, out, *, read_only=False):
+    """Brief 28 (decision 1): whether a --project task works on a copy of the project, decided at intake once the doer is
+    known. Claude's file check is asked (and run once, under the probe lock) only when Claude builds and every other
+    condition holds. On: the copy is made and one line says so. Off: the record names why (the card's line); Terminal
+    prints nothing more, so a project without git reads as before. Brief 33.2 fix 1: `read_only` (`--no-files`), the copy
+    Claude reads and never writes; without it, handoff only with the reason."""
+    folder = projects.folder_of(project)
+    if folder is None:
+        if read_only:
+            log.set_project_files(conn, task_id, {"mode": "off", "state": "none", "copy": False, "why": spec_mod.TEXT_ONLY})
+        return None
+    ready = files_ready if agent == "claude" else (lambda: (True, None))
+    ready = ready or (lambda: (False, "Claude's file check can't be run by this command"))
+    found = filecalls.start(conn, task_id, project, filemode.decide(folder, files_ready=ready), agent, read_only=read_only)
+    if found.get("mode") == "on":
+        out(filecalls.start_words(project, found))
+    return found
 
 
 def _now():
@@ -208,15 +211,24 @@ def _project_entry(conn, task_id, out, *, force=False):
     entry while the earlier line stays. Nothing on a cancel. `force` writes again (tests)."""
     row = log.get_task(conn, task_id)
     name = log.project_of(row) if row is not None else None
-    if not name:
+    if not name or log.is_piece(row):  # brief 29 (decision 13): a piece writes no entry; its split writes one
+        return
+    if _mode(row) == "split" and row["status"] == "returned":  # waiting at its plan or on its pieces: not an ending
+        return
+    if plan_mod.waiting_answers(row):  # brief 33.4 (decision 1b): a plan waiting for answers: not an ending either
+        return
+    if _mode(row) == suggest.MODE:  # brief 33.4 (decisions 1b and 10): a suggest writes no entry, however it ends
+        return
+    if filecalls.waiting(row) and not force:  # brief 28 (decision 10): a change waiting to land gets its entry at the land
         return
     calls = log.calls_for(conn, task_id)
+    if row["status"] == "returned" and not calls:  # brief 29.1 (issue 15): it came back before any agent call
+        return
     state = f"{row['status']}/{row['check_state']}/{len(calls)}"
     writes = log.handoff_of(row)
     if writes and writes[-1].get("state") == state and not force:
         return
-    step = checking.ending_of(row, calls) if row["status"] == "done" else None
-    delivered = step.result if step is not None else None
+    delivered = _delivered_text(row, calls)
     root = media.MEDIA_ROOT.parent  # the image paths as `sr show` prints them: media/out/<task-id>/<name>.png
     images = [str(p.relative_to(root)) if p.is_relative_to(root) else str(p) for p in media.outputs(task_id)]
     found = context.entry_for(row, calls, date=f"{_now():%Y-%m-%d}", delivered_text=delivered, images=images)
@@ -227,14 +239,18 @@ def _project_entry(conn, task_id, out, *, force=False):
     if folder is None:
         out(f"No handoff entry for #{row['n']}: project {name} is no longer registered.")
         return
-    try:
-        lines, start = projects.write_entry(folder, entry)
+    try:  # brief 29.1 (decision 6): under the project's lock, waiting for a land, undo, discard or files in to end
+        with locks.held(f"project-{name}", folder=DB_PATH.parent / runs.FOLDER_NAME, task_id=task_id):
+            wrote = landing.write_entry(conn, folder, row["n"], entry, journal_dir=_journal_dir())  # Cleanup 1 (2.5)
     except projects.ProjectError as e:
         out(f"No handoff entry for #{row['n']}: {safety.one_line(e)}.")
         return
+    lines, start = wrote.lines, wrote.block_start
     log.add_handoff_write(conn, task_id, {"kind": kind, "text": entry, "lines": lines, "block_start": start,
                                           "state": state})
     out(f"HANDOFF.md: {'entry' if kind == 'entry' else 'line'} for #{row['n']} written ({name}, {lines} lines).")
+    if wrote.warning:
+        out(wrote.warning)
     warning = projects.size_warning(lines, start)
     if warning:
         out(warning)
@@ -256,7 +272,7 @@ def _memory_store(conn, task_id, out, *, hindsight, secrets):
     if hindsight is None:
         return
     row = log.get_task(conn, task_id)
-    if row is None or not log.tag_of(row):
+    if row is None or not log.tag_of(row) or log.is_piece(row):  # brief 29 (decision 13): the split stores one memory
         return
     found = memory.store(conn, row, log.calls_for(conn, task_id), hindsight, secrets)
     if found is None:
@@ -318,20 +334,77 @@ def _recall_came_back(conn, task, agent, kind, problem, out):
     return None, 4, None
 
 
-def _attach_context(conn, task, agent, prompt, secrets, out, *, hindsight=None, reuse=None, kind=None):
+def _notes_at_intake(config, out):
+    """Brief 30 (decision 4): the router notes read and checked once, at intake, before Jev and before any row. The
+    Parsed notes, or None when they are invalid: the task is refused with nothing written, naming the problem's line
+    (never its text) and where to fix it (`notes_invalid`, or `notes_key` for a key or a `.env` value)."""
+    found = notes.read(_secrets(config))
+    if found.problem is None:
+        return found
+    receipt.mark(out, code=found.code)
+    out(f"Refused: the router notes can't go with this task: {found.problem}. Fix it in {notes.WHERE}. "
+        "Nothing was logged or sent.")
+    return None
+
+
+def _spec_at_intake(project, config, out):
+    """Brief 33.2 (decision 2): the project's SPEC.md read and checked once, at intake, before Jev and before any row.
+    spec.Found, None when the project has none, or False once refused (`spec_refused`, nothing written, the line
+    named, never its text)."""
+    if project is None:
+        return None
+    folder = projects.folder_of(project)
+    if folder is None:
+        return None
+    try:
+        return spec_mod.read_for_task(folder, _secrets(config))
+    except spec_mod.Refused as e:
+        receipt.mark(out, code=e.code)
+        out(f"Refused: SPEC.md can't go with this task: {safety.one_line(e)}. Nothing was logged or sent.")
+        return False
+
+
+def _keep_spec(conn, task_id, found, out):
+    """Brief 33.2 (decision 2.1): the spec kept with the new task (`tasks/<task_id>/SPEC.md`), so every call on the task
+    sends from that copy; a split's pieces send from the split's. A copy that can't be written is said."""
+    if found is None:
+        return
+    try:
+        spec_mod.keep_copy(rounds.log_folder(conn), task_id, found.text)
+    except OSError as e:
+        out(f"SPEC.md could not be kept with {task_id} ({type(e).__name__}); its calls go without it.")
+
+
+def _keep_notes(conn, task_id, found, out):
+    """Brief 30 (decision 4): a valid file with text is kept with the new task (`tasks/<task_id>/router-notes.md`), and
+    every call on the task sends from that copy; a blank file keeps nothing and sends nothing. A copy that can't be
+    written is said, and the task's calls send none."""
+    try:
+        notes.keep_copy(rounds.log_folder(conn), task_id, found)
+    except OSError as e:
+        out(f"The router notes could not be kept with {task_id} ({type(e).__name__}); its calls go without them.")
+
+
+def _attach_context(conn, task, agent, prompt, secrets, out, *, hindsight=None, reuse=None, kind=None, role=None, handoff=None):
     """The handoff block, then the memory block, on a call about to be sent (rules v2.25 and v2.27): (prompt, context
     record, memory record), or (None, exit code 4, None) when the task came back to the owner instead (the handoff still
     looks like it holds a key, or the file is gone; or, rules v2.29, a tagged recall task's memory can't be had).
     `hindsight` is the store's client; `reuse` the earlier call row whose block this call gets again (router/memory.py,
-    for_call); `kind` the call about to be sent (do, check, fix, recheck, stage, reask), for the come-back line."""
+    for_call); `kind` the call about to be sent (do, check, fix, recheck, stage, reask), for the come-back line; `role` a
+    stage's role (brief 30: with `kind`, which says a judging call and a plan call for the router notes). Brief 30
+    (decision 4): router notes that look like a key on the send come back the same way (`notes_key`), nothing sent."""
     try:
-        prompt, record, mem = context.attach(prompt, task, agent, secrets, conn=conn, hindsight=hindsight, reuse=reuse)
-    except (context.ContextRefused, projects.ProjectError) as e:
+        prompt, record, mem = context.attach(prompt, task, agent, secrets, conn=conn, hindsight=hindsight, reuse=reuse,
+                                             kind=kind, role=role, handoff=handoff)  # brief 33.4: a suggest's, read under the lock
+    except (context.ContextRefused, projects.ProjectError, notes.Refused) as e:
         task_id = task["task_id"]
-        short = f"handoff line {e.line} looks like a key" if isinstance(e, context.ContextRefused) else safety.one_line(e)
-        folder = projects.folder_of(log.project_of(task))
-        where = f" (HANDOFF.md in {safety.one_line(str(folder))})" if folder else ""
-        code = "handoff_key" if isinstance(e, context.ContextRefused) else "handoff_unreadable"  # brief 21: from the exception
+        if isinstance(e, notes.Refused):
+            short, where, code = f"the router notes kept with it look like they hold a key (line {e.line})", "", e.code
+        else:
+            short = f"handoff line {e.line} looks like a key" if isinstance(e, context.ContextRefused) else safety.one_line(e)
+            folder = projects.folder_of(log.project_of(task))
+            where = f" (HANDOFF.md in {safety.one_line(str(folder))})" if folder else ""
+            code = "handoff_key" if isinstance(e, context.ContextRefused) else "handoff_unreadable"  # brief 21: from the exception
         with _hold_interrupts():
             try:
                 log.return_for_context(conn, task_id, short, code)
@@ -356,8 +429,14 @@ def cmd_route(task, *, conn, config, roster, environ, settings_paths, label, pos
               codex_login=None, cursor=None, cursor_ready=None, ask=None, fetch=None, close=None, sleep=None, clock=None, wait=False, source="cli",
               files=(), frames=None, drop_folder=None, ask_attach=None, convert=None, pages=None, claude_ready=None,
               web=False, project=None, chat=None, hindsight=None, skill=None, answers=None, available=None,
-              chatgpt_ready=None, out=print):
-    """Route one task. `project` (rules v2.25) is the registered project name from --project, or None; `chat`
+              chatgpt_ready=None, files_ready=None, from_ref=None, idea_ref=None, step_ref=None, model_flags=(),
+              effort_flags=(), auto_run=None, auto_start=None, no_files=False, out=print):
+    """Route one task. `no_files` (brief 33.2, decision 5; fix 1 and 1b): with --project, Claude reads a read-only copy and
+    answers in text, ChatGPT checking, whatever the label or `--skill` would pick (`routing.for_no_files`); without file
+    mode it runs handoff only, saying why; refused without --project. `auto_run` (brief 34, decision 2) names the run this task is a step of: the open-task rule is set
+    aside (the run holds it), the row names the run as its parent, and it builds in the run's copy from the snapshot
+    `auto_start`; the run's passed steps count as done for its `--step`. `from_ref` (brief 33, decision 8) names the earlier task whose delivered result it builds from;
+    `idea_ref` (decision 16) the project's idea it is sent from. `project` (rules v2.25) is the registered project name from --project, or None; `chat`
     (rules v2.27) the chat name from --chat, or None (main refuses both together); a task whose skill is recall
     with neither comes back after Jev's row, before any agent call (rules v2.28, Jev); `hindsight` the memory store's
     client (main passes memory.client(requests.request); None means no store, so no block and no retain).
@@ -377,6 +456,9 @@ def cmd_route(task, *, conn, config, roster, environ, settings_paths, label, pos
         _refuse_problems(out, problems, config, environ, settings_paths)
         return 2
     if _claude_refusal(available, out):  # brief 24 (decision 2): before any row, Jev included
+        return 2
+    kept_notes = _notes_at_intake(config, out)  # brief 30 (decision 4): read once, before Jev and before any row
+    if kept_notes is None:
         return 2
 
     tag, clean = routing.parse_override(task, roster.names)
@@ -412,30 +494,63 @@ def cmd_route(task, *, conn, config, roster, environ, settings_paths, label, pos
             given = {"--project": (project, log.project_of(floor)), "--chat": (chat, log.chat_of(floor)),
                      "--web": (web or None, log.web_of(floor) or None)}
             wrong = [flag for flag, (value, floor_value) in given.items() if value is not None and value != floor_value]
+            if from_ref is not None:  # brief 33 (decision 8): --answers carries the floor row's --from
+                named = log.find_task(conn, str(from_ref))[0]
+                if named is None or named["task_id"] != fromblock.source_of(floor):
+                    wrong.append("--from")
+            if idea_ref is not None and str(idea_ref).strip() != str(floor["idea"]):  # ...and its --idea
+                wrong.append("--idea")
             if files or wrong:
                 receipt.mark(out, code="flag_refused")
                 what = "--file" if files else wrong[0]
-                out(f"Refused: {what} with --answers: #{floor['n']}'s task goes again as it was (its tag, --web and files "
-                    "come from it). Nothing was logged or sent.")
+                out(f"Refused: {what} with --answers: #{floor['n']}'s task goes again as it was (its tag, --web, files "
+                    "and --from come from it). Nothing was logged or sent.")
                 return 2
             project, chat, web = log.project_of(floor), log.chat_of(floor), log.web_of(floor)
+            from_ref = fromblock.source_of(floor)
+            idea_ref = floor["idea"]
+    if no_files and project is None:  # brief 33.2 (decision 5): the switch is a project task's
+        receipt.mark(out, code="flag_refused")
+        out("Refused: --no-files goes with --project: it runs a project task handoff only. Nothing was logged or sent.")
+        return 2
     if project is not None:  # rules v2.25: every --project refusal before any row or call
         if tag:
             receipt.mark(out, code="override_refused")
             out(f"Refused: an override prefix with --project is refused (@{tag}): an override may run unchecked, and a "
                 "project's handoff is never written unchecked. Nothing was logged or sent.")
             return 2
-        refused = _project_refusal(conn, project)
+        refused = _project_refusal(conn, project, open_rule=auto_run is None)  # brief 34: the run holds the project
         if refused:
             receipt.mark(out, code=refused[0])
             out(f"Refused: {refused[1]}. Nothing was logged or sent.")
             return 2
+    kept_spec = _spec_at_intake(project, config, out)  # brief 33.2 (decision 2): read once, before Jev and before any row
+    if kept_spec is False:
+        return 2
     if chat is not None:  # rules v2.27: the shape only; no registry, nothing to create
         refused = _chat_refusal(chat)
         if refused:
             receipt.mark(out, code="bad_name")
             out(f"Refused: {refused}. Nothing was logged or sent.")
             return 2
+    if floor is not None and (model_flags or effort_flags):  # brief 33.3: a floor row's choices come from that row
+        receipt.mark(out, code="flag_refused")
+        out(f"Refused: --model with --answers: #{floor['n']}'s task goes again as it was (its models come from it). "
+            "Nothing was logged or sent.")
+        return 2
+    choices = (log.models_of(floor) if floor is not None  # brief 33.3 (decision 4): before Jev, before --step's file check and any probe
+               else _model_choices(model_flags, effort_flags, _route_models_allowed, out))
+    if choices is False:
+        return 2
+    source_row = _from_refusal(conn, from_ref, out)  # brief 33 (decision 8): before Jev, nothing written
+    if source_row is False:
+        return 2
+    idea = _idea_refusal(conn, idea_ref, project, out, floor=floor)  # brief 33 (decision 16): before Jev
+    if idea is False:
+        return 2
+    step = _step_refusal(conn, step_ref, project, files_ready, out, passed=_run_passed(conn, auto_run))  # brief 33.1 (decision 12): before Jev
+    if step is False:
+        return 2
     cursor_ok = None
     if tag == "cursor":  # rules v2.28 with the owner's 20 Oct change: ready before any row, or refused with the reason
         cursor_ok = _cursor_readiness(cursor, cursor_ready)
@@ -512,17 +627,24 @@ def cmd_route(task, *, conn, config, roster, environ, settings_paths, label, pos
             else:  # Jev gets the owner's text plus one line per file; the log keeps the text and the files apart.
                 answer = label(media.jev_text(clean, records), task_id=task_id,
                                tokens_this_month=log.jev_tokens_this_month(conn))
+                # brief 29.1 (decision 24): the stored status is judged against the task's own floor (0.4 when tagged)
+                answer = jev.judge(answer, roster, tagged=project is not None or chat is not None)
             first_of_chat = chat is not None and not log.chat_exists(conn, chat)
             try:
                 log.add_task(conn, task_id, clean, source, answer, files=records, web=web, project=project, chat=chat,
-                             run=runs.me(), owner_label=skill is not None,
-                             answers=floor["task_id"] if floor is not None else None)  # brief 22: born with its run
+                             run=runs.me(), owner_label=skill is not None, parent=auto_run,  # brief 34: a run's step
+                             answers=floor["task_id"] if floor is not None else None,  # brief 22: born with its run
+                             from_task=source_row["task_id"] if source_row else None,  # brief 33 (decision 17)
+                             idea=idea, plan_step=step or None,  # brief 33.1 (decision 19)
+                             models=choices or None)  # brief 33.3 (decision 4): the task's own choices
             except log.StateError:
                 receipt.mark(out, code="already_used")
                 out(f"Refused: #{floor['n']} was answered or closed a moment ago. Nothing was logged or sent.")
                 media.remove_task_folders(task_id)
                 return 2
             runs.adopt(task_id)
+            _keep_notes(conn, task_id, kept_notes, out)  # brief 30 (decision 4): the task's own copy
+            _keep_spec(conn, task_id, kept_spec, out)  # brief 33.2 (decision 2.1): its own copy (a run's step too)
         if first_of_chat:
             out(f"new chat: {chat}")
         if held.pressed:
@@ -540,6 +662,10 @@ def cmd_route(task, *, conn, config, roster, environ, settings_paths, label, pos
             choice = _ask_for_skill(ask, roster, out)
             decision = routing.decide(answer, roster, override=tag, answer=choice, files=has_files, tagged=tagged,
                                       available=table)
+        if no_files and project is not None and auto_run is None:  # brief 33.2 fix 1b: Claude reads, ChatGPT checks
+            decision = routing.for_no_files(decision, table, roster)
+        if decision.action == "send" and decision.agent == "grok" and source_row:  # brief 33 (decision 11)
+            decision = _grok_from_return(conn, task_id, decision, secrets) or decision
         if decision.action == "return":
             return _came_back(conn, task_id, answer, decision, roster, out)
         try:
@@ -551,9 +677,837 @@ def cmd_route(task, *, conn, config, roster, environ, settings_paths, label, pos
         if decision.reason == "override" and decision.skill is None:
             out(_jev_text(answer, roster))
         out(_route_text(task_id, answer, decision, roster))
+        if auto_run is not None:  # brief 34 (decision 2): the step builds in the run's copy from its snapshot
+            _auto_file_mode(conn, task_id, auto_run, auto_start, decision.agent, out)
+        elif project is not None and no_files:  # brief 33.2 fix 1 (the owner's decision 1): a read-only copy, text back
+            _file_mode_start(conn, task_id, project, decision.agent, files_ready, out, read_only=True)
+        elif project is not None:  # brief 28 (decision 1): file mode, now that the doer is known
+            _file_mode_start(conn, task_id, project, decision.agent, files_ready, out)
         return _run_loop(conn, task_id, deps, secrets, out)
     except KeyboardInterrupt:
         return _after_interrupt(conn, task_id, secrets, out, hindsight=hindsight)
+
+
+# ---------- Auto (build brief 34, rules 2.48's Auto section): the run ----------
+
+AUTO_USAGE = "sr auto <project> --on [--dry-run] | --off | --status"
+
+
+def _run_passed(conn, run_id):
+    """Brief 34 (decision 2): a run's passed steps, {k: row}, counted as done for its next step's --step; None without
+    a run (`auto.passed_rows`)."""
+    return auto.passed_rows(conn, run_id)
+
+
+def _auto_file_mode(conn, task_id, run_id, start, agent, out):
+    """Brief 34 (decision 2): a run's step builds in the run's copy from its starting snapshot, as a split's piece builds
+    in its split's copy; another doer than Claude can't change project files, and its result is text."""
+    run = log.get_task(conn, run_id)
+    copy = log.project_files_of(run) or {}
+    k = (log.plan_step_of(log.get_task(conn, task_id)) or {}).get("step")
+    if agent == "claude" and copy.get("mode") == "on":
+        found = {**filecalls.piece_record(run_id, k, copy), "start": start, "run": run_id}
+        out(f"Files: step {k} builds in run #{run['n']}'s copy from its snapshot {start}; the run lands the whole change "
+            "once.")
+    else:
+        found = {"mode": "off", "owner": run_id, "run": run_id, "state": "none", "copy": False,
+                 "why": f"{availability.name_of(agent)} can't change project files: its result is text"}
+    log.set_project_files(conn, task_id, found)
+    return found
+
+
+def _auto_run_row(conn, name):
+    """The project's run while it holds the project (`auto.run_row_of`)."""
+    return auto.run_row_of(conn, name)
+
+
+def _auto_can_start(conn, name, run=None, *, claude_ok=True, files_ready=None):
+    """Brief 34 (decision 1): why `sr auto <name> --on` would be refused now, or None (`auto.can_start`)."""
+    return auto.can_start(conn, name, run, claude_ok=claude_ok, files_ready=files_ready)
+
+
+def _project_auto(conn, name):
+    """Brief 34 (decision 10): a project's Auto state for the project list and status (`auto.project_entry`)."""
+    return auto.project_entry(conn, name)
+
+
+def _auto_note(conn, run_id, note):
+    conn.execute("UPDATE tasks SET check_note = ? WHERE task_id = ?", (note, run_id))
+    conn.commit()
+
+
+@_releases_its_runs
+def cmd_auto(words, *, conn, config, roster, loaded, environ, settings_paths, label, post, worker, chatgpt=None,
+             codex_login=None, cursor=None, cursor_ready=None, fetch=None, close=None, sleep=None, clock=None,
+             claude_ready=None, hindsight=None, available=None, chatgpt_ready=None, files_ready=None, on=False, off=False,
+             status=False, dry_run=False, source="cli", out=print):
+    """`sr auto <project> --on [--dry-run] | --off | --status` (brief 34). `--on` starts a run on the project's current
+    plan from its first open step, or goes on from where a stopped run stopped (decision 4), after every refusal of decision
+    1 (`auto_refused`, nothing written); `--dry-run` says what the run would cover and writes nothing; `--off` stops a
+    running run after the step in progress; `--status` prints the run. The run goes step to step in this process until a
+    stop (decision 5)."""
+    words = list(words or [])
+    if len(words) != 1 or sum(1 for x in (on, off, status) if x) != 1 or (dry_run and not on):
+        receipt.mark(out, code="usage", command=True)
+        out(f"Refused: {AUTO_USAGE}. Nothing was logged or sent.")
+        return 2
+    name = words[0]
+    if status:
+        return _auto_status(conn, name, out)
+    if off:
+        return _auto_off(conn, name, out)
+    problems = _refusals(config, environ, settings_paths)  # the billing switches, as every sending command checks
+    if problems:
+        _refuse_problems(out, problems, config, environ, settings_paths)
+        return 2
+    claude = available("claude") if available is not None else None
+    claude_ok, claude_why = teams.split_ready(claude) if claude is not None else (True, None)
+    run = _auto_run_row(conn, name)
+    why = _auto_can_start(conn, name, run, claude_ok=claude_ok, files_ready=files_ready)
+    if why is not None:
+        receipt.mark(out, code=auto.REFUSED, command=True)
+        out(f"Refused: Auto can't start on {name}: {why}. Nothing was logged or sent.")
+        return 2
+    deps = SimpleNamespace(config=config, post=post, worker=worker, chatgpt=chatgpt, codex_login=codex_login,
+                           codex_ok=None, cursor=cursor, cursor_ready=cursor_ready, cursor_ok=None, fetch=fetch,
+                           close=close, sleep=sleep, clock=clock, wait=True, presets=loaded, live=roster.live,
+                           claude_ready=claude_ready, hindsight=hindsight, chatgpt_ready=chatgpt_ready,
+                           available=available, roster=roster)
+    plan_row = plan_mod.current(conn, name)
+    plan_record = plan_mod.record_of(plan_row)
+    steps = plan_mod.steps_of(plan_record)
+    passed = _run_passed(conn, run["task_id"]) if run is not None else {}
+    nxt = plan_mod.first_open(conn, plan_row, found={**plan_mod.ticks(conn, plan_row), **(passed or {})})
+    k0 = nxt[0] if nxt is not None else None  # None only for a run that stopped on its last step: --on finishes it
+    upper = auto.upper_estimate(plan_mod.view(conn, plan_row, _plan_menu(deps)), k0) if k0 is not None else None
+    spec_now = spec_mod.folder_hash(projects.folder_of(name))  # brief 33.2 (decision 7.2): the SPEC.md the run runs under
+    spec_changed = False
+    if run is None:
+        record = auto.new_record(plan_row, steps, from_step=k0, budget=auto.budget_for(upper["max_calls"]), estimate=upper,
+                                 spec_hash=spec_now)
+    else:
+        record = auto.stale_running_stopped(auto.cleared(log.auto_of(run) or {}))
+        stop = (log.auto_of(run) or {}).get("stop") or {}
+        if stop.get("code") == "budget" and upper is not None:  # decision 7: going on gives used + ceil(1.5 × U_left)
+            record["budget"] = auto.budget_for(upper["max_calls"], used=record.get("used") or 0)
+            record["estimate"] = upper
+        spec_changed = record.get("spec_hash") != spec_now  # going on takes the new hash; the confirm says so
+        record["spec_hash"] = spec_now
+    if k0 is not None and k0 in auto.marks_of(plan_record):  # decision 6: a mark at the step an --on starts or goes on
+        record["passed_marks"] = sorted(set(record.get("passed_marks") or []) | {k0})  # at is passed, whatever stopped it
+    try:
+        hook = auto.hook_budget(environ, DB_PATH, root=ROOT, is_real_log=plan_limit.is_real_log)
+    except auto.AutoError as e:
+        receipt.mark(out, code=e.code, command=True)
+        out(f"Refused: {safety.one_line(e)} Nothing was logged or sent.")
+        return 2
+    record["hook"] = hook is not None  # read at every --on; a hook from an earlier --on never carries over
+    if hook is not None:
+        record["budget"] = hook
+    if dry_run:
+        doc = auto.dry_run_view(plan_row, record, plan_record, used=record.get("used") or 0, spec_changed=spec_changed)
+        if spec_changed:
+            out(auto.SPEC_ON_LINE)
+        out(doc["words"])
+        out(doc["overrun"])
+        receipt.attach(out, always=True, auto=doc)
+        return 0
+    secrets = _secrets(config)
+    if run is None:
+        run_id = ids.new_task_id()
+        folder = projects.folder_of(name)
+        decision = filemode.decide(folder, files_ready=files_ready or (lambda: (True, None)))
+        try:
+            made = copies.make(run_id, decision.repo.folder, decision.repo.head)
+        except (copies.CopyError, OSError) as e:
+            receipt.mark(out, code=auto.REFUSED, command=True)
+            out(f"Refused: the copy of {name} could not be made: {safety.one_line(str(e))[:200]}. Nothing was logged or sent.")
+            return 2
+        receipt.mark(out, task_id=run_id)
+        text = f"Auto: plan #{plan_row['n']}, steps {k0} to {len(steps)}"
+        with _hold_interrupts():
+            log.add_task(conn, run_id, text, source, {"status": "not_asked", "tokens": 0}, mode=auto.MODE, project=name,
+                         run=runs.me(), auto=record)
+            runs.adopt(run_id)
+            log.set_project_files(conn, run_id, {
+                "mode": "on", "state": "none", "copy": True, "base": decision.repo.head, "branch": decision.repo.branch,
+                "files": made.files, "left_out": made.left_out, "changed": [], "diff": None, "latest": None, "tests": None,
+                "commit": None, "undo_commit": None, "why": None})
+        out(f"{run_id}: Auto on {name}: {auto.dry_run_view(plan_row, record, plan_record)['words']}")
+        out(filecalls.start_words(name, log.project_files_of(log.get_task(conn, run_id))) + "; every step builds in it")
+    else:
+        run_id = run["task_id"]
+        receipt.mark(out, task_id=run_id)
+        with _hold_interrupts():
+            log.set_auto(conn, run_id, record)
+            log.reopen_run(conn, run_id, run=runs.me())
+            runs.adopt(run_id)
+        out(f"{run_id}: Auto goes on on {name}: {auto.dry_run_view(plan_row, record, plan_record, used=record.get('used') or 0)['words']}")
+    return _auto_run(conn, run_id, deps, secrets, out, environ=environ, settings_paths=settings_paths, label=label,
+                     source=source, files_ready=files_ready)
+
+
+def _auto_status(conn, name, out):
+    run = _auto_run_row(conn, name)
+    if run is None:
+        run = next((r for r in log.project_tasks(conn, name) if _mode(r) == auto.MODE), None)
+    found = _project_auto(conn, name)
+    if run is None:
+        out(f"Auto on {name}: no run yet" + (f" (the switch is hidden: {found['why']})" if found.get("why") else ""))
+    else:
+        out(f"Auto on {name}: #{run['n']} {run['task_id']} · {auto.words(run, log.auto_of(run) or {})}")
+    receipt.deliver(out, {"api_version": jsonview.API_VERSION, "auto": auto.view(conn, run) if run is not None else None,
+                          "project": found})
+    return 0
+
+
+def _auto_off(conn, name, out):
+    """`sr auto <project> --off` (decision 1): the running run stops after the step in progress, never mid-call; the loop
+    reads the request before each step."""
+    run = _auto_run_row(conn, name)
+    record = log.auto_of(run) if run is not None else None
+    if run is None or auto.run_state(run, record or {}) != "running":
+        receipt.mark(out, code=auto.REFUSED, command=True)
+        out(f"Refused: no run is running on {name}. Nothing was changed.")
+        return 2
+    receipt.mark(out, task_id=run["task_id"])
+    with _hold_interrupts():
+        log.set_auto(conn, run["task_id"], {**record, "off_requested": True})
+    out(f"Auto off: run #{run['n']} stops after the step in progress.")
+    return 0
+
+
+def cmd_plan_stop_here(ref, words, *, conn, out=print):
+    """`sr plan --stop-here <plan task>:<k> on|off` (brief 34, decision 6): the mark on the plan's record in the log, never in
+    docs/PLAN.md, so nothing is committed. A run stops before a marked step; a mark an `--on` passes stays passed."""
+    words = [w for w in (words or []) if w]
+    m = plan_mod.STEP_REF.match(str(ref or ""))
+    if not m or len(words) != 1 or words[0] not in ("on", "off"):
+        receipt.mark(out, code="usage", command=True)
+        out("Refused: sr plan --stop-here <plan task>:<step> on|off. Nothing was changed.")
+        return 2
+    row, missing, _ = log.find_task(conn, m.group(1).lstrip("#"))
+    if row is None or not plan_mod.is_plan(row):
+        receipt.mark(out, code="bad_step", command=True)
+        out(f"Refused: {safety.one_line(missing) if row is None else f'#{row['n']} is not a plan task'}. Nothing was changed.")
+        return 2
+    try:
+        marks = plan_mod.stop_here(conn, row, int(m.group(2)), words[0] == "on")
+    except ValueError as e:
+        receipt.mark(out, code="bad_step", command=True)
+        out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+        return 2
+    receipt.mark(out, task_id=row["task_id"])
+    receipt.attach(out, stop_here=marks)
+    out(f"Stop here {words[0]} for step {int(m.group(2))} of plan #{row['n']}: Auto stops before "
+        f"{'steps ' + ', '.join(str(k) for k in marks) if marks else 'no step'}. Nothing is committed.")
+    return 0
+
+
+def _auto_run(conn, run_id, deps, secrets, out, *, environ, settings_paths, label, source, files_ready):
+    """The run's process (decision 5): step to step until a stop, under the run's own hold."""
+    with runs.held(conn, run_id) as ok:
+        if not ok:
+            out(f"Run {run_id} is running in another window; it goes on there.")
+            return 1
+        try:
+            return _auto_loop(conn, run_id, deps, secrets, out, environ=environ, settings_paths=settings_paths,
+                              label=label, source=source, files_ready=files_ready)
+        except KeyboardInterrupt:  # outside a step's own command: the step in progress reads as stopped
+            record = auto.stale_running_stopped(log.auto_of(log.get_task(conn, run_id)) or {})
+            with _hold_interrupts():
+                log.set_auto(conn, run_id, record)
+            return _auto_stop(conn, run_id, "cancelled", "Ctrl+C", step=auto.next_open(record), out=out, code=130)
+        except Exception as e:  # Cleanup 1 (2.0, #162): a crash never leaves the row queued and its step running for good
+            return _auto_crashed(conn, run_id, e, out)
+
+
+def _auto_crashed(conn, run_id, error, out):
+    """Any other exception out of the run's loop: the run stops as any stop does, waiting in Needs you with its copy kept,
+    the reason the error's type only (`_describe`, never its text). The step in progress reads as stopped. Its row is named
+    on the record when it got that far, so `--on` handles it as a stopped step's (`_auto_step_again`: resume, or closed and
+    the copy put back); with no row the attempt is given back, as a refused intake's is, and nothing else is read."""
+    record = log.auto_of(log.get_task(conn, run_id)) or {}
+    k = next((s["k"] for s in record.get("steps") or () if s.get("state") == "running"), None)
+    if k is not None:
+        entry = auto.step_entry(record, k)
+        known = {s.get("task_id") for s in record.get("steps") or ()}
+        row = next((r for r in reversed(log.pieces_of(conn, run_id))
+                    if r["status"] in ("queued", "sent", "returned") and r["task_id"] not in known), None)
+        if row is not None:
+            entry["task_id"] = row["task_id"]
+        else:
+            entry.update(task_id=None, attempt=max(int(entry.get("attempt") or 1) - 1, 0))
+    record = auto.stale_running_stopped(record)
+    with _hold_interrupts():
+        log.set_auto(conn, run_id, record)
+    receipt.mark(out, task_id=run_id, code="internal_error", command=True)
+    where = f"step {k}" if k is not None else "the run"
+    return _auto_stop(conn, run_id, "stopped", f"{where} crashed ({_describe(error)})", step=auto.next_open(record) or k,
+                      out=out, code=1)
+
+
+def _auto_loop(conn, run_id, deps, secrets, out, *, environ, settings_paths, label, source, files_ready):
+    run = log.get_task(conn, run_id)
+    name = log.project_of(run)
+    while True:
+        run = log.get_task(conn, run_id)
+        record = log.auto_of(run) or {}
+        plan_row = log.get_task(conn, record.get("plan"))
+        plan_record = plan_mod.record_of(plan_row)
+        total = len(plan_mod.steps_of(plan_record))
+        k = auto.next_open(record)
+        if k is None:
+            return _auto_finish(conn, run_id, plan_row, out)
+        if record.get("off_requested"):  # decision 1: --off, after the step in progress, never mid-call
+            return _auto_stop(conn, run_id, "off", "the switch was turned off", step=k, out=out)
+        if auto.mark_blocks(record, plan_record, k):  # decision 6
+            return _auto_stop(conn, run_id, "stop_here", f"stop here before step {k}", step=k, out=out)
+        if spec_mod.folder_hash(projects.folder_of(name)) != record.get("spec_hash"):  # brief 33.2 (decision 7.2)
+            return _auto_stop(conn, run_id, auto.SPEC_CHANGED, auto.SPEC_STOP_WHY, step=k, out=out)
+        used = auto.used_calls(conn, run_id)
+        record["used"] = used
+        _auto_save(conn, run_id, record)
+        if auto.over_budget(record, used):  # decision 7: before each step and each retry
+            return _auto_stop(conn, run_id, "budget", f"the budget is reached: {auto.budget_words(record, used)} used",
+                              step=k, out=out)
+        need = plan_mod.unmet_need(plan_record, name, k)
+        if need is not None:  # decision 4: never a step with an unmet need
+            return _auto_stop(conn, run_id, "need", need["words"], step=k, out=out)
+        claude = deps.available("claude") if getattr(deps, "available", None) is not None else None
+        ok, why = teams.split_ready(claude) if claude is not None else (True, None)
+        if not ok:
+            return _auto_stop(conn, run_id, "unavailable", f"Claude isn't available: {why}", step=k, out=out)
+        entry = auto.step_entry(record, k)
+        if entry.get("state") == "stopped" and entry.get("task_id"):  # decision 4: the step it stopped on
+            row, code, how = _auto_step_again(conn, run, k, entry, deps, out, environ=environ, settings_paths=settings_paths)
+            if how != "again":
+                found = _auto_outcome(conn, run_id, k, row, code, start=f"step-{k}-{entry.get('attempt') or 1}-start",
+                                      deps=deps, out=out)
+                if found is not None:
+                    return found
+                continue
+            entry["state"] = "open"
+            with _hold_interrupts():
+                log.set_auto(conn, run_id, record)
+        attempt = int(entry.get("attempt") or 0) + 1
+        start = f"step-{k}-{attempt}-start"
+        try:
+            copies.snapshot(run_id, start)  # decision 2: the copy as each step starts
+        except (copies.CopyError, OSError) as e:
+            return _auto_stop(conn, run_id, "copy", f"the copy could not be snapshotted: {safety.one_line(str(e))[:120]}",
+                              step=k, out=out)
+        entry.update(state="running", attempt=attempt)
+        _auto_save(conn, run_id, record)
+        step_def = plan_mod.steps_of(plan_record)[k - 1]
+        out(f"Auto: step {k} of {total}{' (the retry)' if attempt > 1 else ''} · {step_def.get('team') or 'route'}: "
+            f"{safety.one_line(step_def.get('text') or '')[:120]}")
+        row, code = _auto_step(conn, run, plan_row, k, step_def, start, deps, out, environ=environ,
+                               settings_paths=settings_paths, label=label, source=source, files_ready=files_ready)
+        found = _auto_outcome(conn, run_id, k, row, code, start=start, deps=deps, out=out)
+        if found is not None:
+            return found
+
+
+def _auto_save(conn, run_id, record):
+    """The record written with an `--off` that came in since it was read (`_auto_off` writes only that key), so a request
+    that lands between the loop's read and its write is never lost."""
+    stored = log.auto_of(log.get_task(conn, run_id)) or {}
+    if stored.get("off_requested"):
+        record["off_requested"] = True
+    with _hold_interrupts():
+        log.set_auto(conn, run_id, record)
+
+
+def _auto_outcome(conn, run_id, k, row, code, *, start, deps, out):
+    """What the step's row says now, on the run's record (decisions 3 and 4): None when the run goes on to the next
+    step, else the exit code of the stop."""
+    record = log.auto_of(log.get_task(conn, run_id)) or {}
+    entry = auto.step_entry(record, k)
+    if row is None:  # refused at intake: nothing was written for the step, so the attempt is given back
+        entry.update(state="open", attempt=max(int(entry.get("attempt") or 1) - 1, 0))
+        with _hold_interrupts():
+            log.set_auto(conn, run_id, record)
+        return _auto_stop(conn, run_id, "refused", f"step {k} was refused at intake (exit {code})", step=k, out=out)
+    row = log.get_task(conn, row["task_id"])
+    calls = log.calls_for(conn, row["task_id"])
+    found = jsonview.state_of(conn, row, calls, getattr(deps, "presets", None))
+    entry.update(task_id=row["task_id"], calls=sum(1 for c in calls if c["agent"] in auto.COUNTED_AGENTS),
+                 outcome=found.outcome)
+    if code == 130:  # Ctrl+C during the step: its row is as the command left it
+        entry["state"] = "stopped"
+        with _hold_interrupts():
+            log.set_auto(conn, run_id, record)
+        return _auto_stop(conn, run_id, "cancelled", f"step {k} (#{row['n']}) was interrupted (Ctrl+C)", step=k, out=out,
+                          code=130)
+    if found.outcome in ("passed", "fixed"):
+        entry["state"] = "done"
+        with _hold_interrupts():
+            log.set_auto(conn, run_id, record)
+        _auto_tick(conn, run_id, log.get_task(conn, record.get("plan")))
+        out(f"Auto: step {k} {found.outcome} (#{row['n']}); {auto.budget_words(record, auto.used_calls(conn, run_id))} used.")
+        return None
+    if found.outcome == "unchecked":  # decision 4: the owner decides
+        entry["state"] = "done"
+        with _hold_interrupts():
+            log.set_auto(conn, run_id, record)
+        _auto_tick(conn, run_id, log.get_task(conn, record.get("plan")))
+        return _auto_stop(conn, run_id, "unchecked", f"step {k} (#{row['n']}) was delivered unchecked", step=k, out=out)
+    if found.outcome == "failed_check":
+        if int(entry.get("attempt") or 1) == 1:  # decision 3: one retry, from the step's starting snapshot
+            copies.restore(run_id, start)
+            entry["state"] = "retried"
+            with _hold_interrupts():
+                log.set_auto(conn, run_id, record)
+            out(f"Auto: step {k} (#{row['n']}) failed its check twice; the copy is back at {start} and the step goes once more.")
+            return None
+        entry["state"] = "failed"
+        with _hold_interrupts():
+            log.set_auto(conn, run_id, record)
+        return _auto_stop(conn, run_id, "failed", f"step {k} (#{row['n']}) failed its check twice, on its retry too",
+                          step=k, out=out)
+    if found.outcome == "blocked":
+        entry["state"] = "failed"
+        with _hold_interrupts():
+            log.set_auto(conn, run_id, record)
+        return _auto_stop(conn, run_id, "blocked", f"step {k} (#{row['n']}) is blocked: {checking_blocked(row)}",
+                          step=k, out=out)
+    entry["state"] = "stopped"
+    with _hold_interrupts():
+        log.set_auto(conn, run_id, record)
+    if found.outcome == "cancelled":
+        return _auto_stop(conn, run_id, "cancelled", f"step {k} (#{row['n']}) was cancelled", step=k, out=out)
+    if found.waiting_on == "needs_label":
+        return _auto_stop(conn, run_id, "label", f"step {k} (#{row['n']}) waits for your label", step=k, out=out)
+    if found.waiting_on:
+        return _auto_stop(conn, run_id, "stopped", f"step {k} (#{row['n']}) is waiting on {found.waiting_on}", step=k, out=out)
+    return _auto_stop(conn, run_id, "stopped", f"step {k} (#{row['n']}) stopped: {found.outcome or 'ended'}", step=k, out=out)
+
+
+ENDED_OUTCOMES = ("passed", "fixed", "unchecked", "failed_check", "blocked")
+
+
+def _auto_step_again(conn, run, k, entry, deps, out, *, environ, settings_paths):
+    """Decision 4, going on from the step the run stopped on: (its row, the exit code, how). `resumed`: the step was
+    resumed as Resume allows, in the same copy, by `sr resume`'s own path; `as-is`: it ended since (a resume by hand, a
+    check that came in), read as it stands; `again`: it can't be resumed, so an open row of it is cancelled, the copy is
+    put back at the attempt's start, and the loop starts the step again as a new attempt."""
+    row = log.get_task(conn, entry["task_id"])
+    if row is None:
+        return None, 0, "again"
+    calls = log.calls_for(conn, row["task_id"])
+    found = jsonview.state_of(conn, row, calls, getattr(deps, "presets", None))
+    preset = None
+    if _mode(row) in log.CHAINED_MODES:
+        preset, _ = presets.for_task(row, getattr(deps, "presets", None))
+    plan = resume.decide(row, calls, live=deps.live, preset=preset)
+    if plan.ok:
+        out(f"Auto: step {k} (#{row['n']}) goes on where it stopped (Resume, {plan.substitute}).")
+        step_out = receipt.Receipt()
+        code = cmd_resume([row["task_id"]], conn=conn, config=deps.config, roster=deps.roster, loaded=deps.presets,
+                          environ=environ, settings_paths=settings_paths, post=deps.post, worker=deps.worker,
+                          chatgpt=deps.chatgpt, codex_login=deps.codex_login, fetch=deps.fetch, close=deps.close,
+                          sleep=deps.sleep, clock=deps.clock, wait=True, claude_ready=deps.claude_ready,
+                          hindsight=deps.hindsight, cursor=deps.cursor, cursor_ready=deps.cursor_ready,
+                          available=deps.available, chatgpt_ready=deps.chatgpt_ready, out=step_out)
+        for line in step_out.lines:
+            out(f"  {line}")
+        return log.get_task(conn, row["task_id"]), code, "resumed"
+    if found.outcome in ENDED_OUTCOMES:
+        out(f"Auto: step {k} (#{row['n']}) ended since the stop ({found.outcome}); read as it stands.")
+        return row, 0, "as-is"
+    if row["status"] in ("queued", "sent", "returned"):  # an open row of the step: Auto never asks, so it is closed
+        with _hold_interrupts():
+            log.set_cancelled(conn, row["task_id"], allowed_from=("queued", "sent", "returned"))
+            conn.execute("UPDATE tasks SET check_note = ? WHERE task_id = ?",
+                         (f"cancelled: Auto started step {k} again", row["task_id"]))
+            conn.commit()
+    start = f"step-{k}-{entry.get('attempt') or 1}-start"
+    if copies.has_snapshot(run["task_id"], start):
+        copies.restore(run["task_id"], start)
+    out(f"Auto: step {k} (#{row['n']}) can't be resumed ({safety.one_line(plan.reason).rstrip('.')}); the copy is back at "
+        f"{start} and the step starts again.")
+    return None, 0, "again"
+
+
+def checking_blocked(row):
+    return str(row["check_note"] or "").split("; ")[0].removeprefix("blocked: ") or "what it needed wasn't given"
+
+
+def _auto_step(conn, run, plan_row, k, step_def, start, deps, out, *, environ, settings_paths, label, source, files_ready):
+    """One step as a task of its team, as Build step k sends it (decision 2): the same command, `--step`, `--project`, the
+    same prompts; the run as its parent, its copy and snapshot. (the step row or None, the command's exit code)."""
+    name = log.project_of(run)
+    team = step_def.get("team") or "route"
+    step_out = receipt.Receipt()
+    common = dict(conn=conn, config=deps.config, roster=deps.roster, environ=environ, settings_paths=settings_paths,
+                  post=deps.post, worker=deps.worker, chatgpt=deps.chatgpt, codex_login=deps.codex_login, cursor=deps.cursor,
+                  cursor_ready=deps.cursor_ready, fetch=deps.fetch, close=deps.close, sleep=deps.sleep, clock=deps.clock,
+                  wait=True, source=source, claude_ready=deps.claude_ready, hindsight=deps.hindsight,
+                  available=deps.available, chatgpt_ready=deps.chatgpt_ready, files_ready=files_ready, project=name,
+                  step_ref=f"{plan_row['task_id']}:{k}", auto_run=run["task_id"], auto_start=start, out=step_out)
+    text = step_def.get("text") or ""
+    if team == "route":
+        code = cmd_route(text, label=label, **common)
+    else:
+        code = cmd_relay(team, text, loaded=deps.presets, **common)
+    for line in step_out.lines:
+        out(f"  {line}")
+    row = log.get_task(conn, step_out.task_id) if step_out.task_id else None
+    return row, code
+
+
+def _auto_ticks(conn, run_id, plan_row):
+    """The plan's ticks as the run sees them: the landed ones, plus the run's passed steps."""
+    found = plan_mod.ticks(conn, plan_row)
+    for k, row in (_run_passed(conn, run_id) or {}).items():
+        found.setdefault(k, row)
+    return found
+
+
+def _auto_tick(conn, run_id, plan_row):
+    """Decision 2: a passed step's tick goes into the copy's docs/PLAN.md, never committed mid-run."""
+    text = plan_mod.render(plan_mod.record_of(plan_row), n=plan_row["n"], date=plan_mod.date_of(plan_row),
+                           ticks=plan_mod.tick_numbers(_auto_ticks(conn, run_id, plan_row)))
+    folder = copies.folder_of(run_id)
+    docs = folder / plan_mod.FOLDER
+    if docs.is_symlink():
+        docs.unlink()
+    docs.mkdir(exist_ok=True)
+    target = docs / "PLAN.md"
+    if target.is_symlink():
+        target.unlink()
+    target.write_text(text, encoding="utf-8")
+
+
+def _auto_stop(conn, run_id, stop, why, *, step=None, out=print, code=4):
+    """Decision 4: the run stops, waiting in Needs you with why; its copy is kept."""
+    run = log.get_task(conn, run_id)
+    record = auto.with_stop({**(log.auto_of(run) or {}), "used": auto.used_calls(conn, run_id)}, stop, why, step=step)
+    with _hold_interrupts():
+        log.set_auto(conn, run_id, record)
+        if run["status"] in ("queued", "sent"):
+            if run["status"] == "sent":
+                conn.execute("UPDATE tasks SET status = 'queued' WHERE task_id = ?", (run_id,))
+            log.set_returned(conn, run_id, f"returned: {safety.one_line(why)[:200]}",
+                             reason_code=auto.BUDGET if stop == "budget" else None)
+        _auto_note(conn, run_id, f"{auto.STOP_NOTE}{safety.one_line(why)[:200]}")
+    if stop == "budget":
+        receipt.mark(out, code=auto.BUDGET, command=True)
+    out(f"Auto stopped: {why}. The run keeps its copy; sr auto {log.project_of(run)} --on goes on from here"
+        + (" once that is fixed" if stop in ("need", "unavailable", "failed", "blocked") else "") + ".")
+    return code
+
+
+def _auto_finish(conn, run_id, plan_row, out):
+    """Decision 8: at the plan's end the router writes docs/PLAN.md in the copy with every passed step ticked, reads the
+    whole change against the base, and the run waits to land."""
+    run = log.get_task(conn, run_id)
+    _auto_tick(conn, run_id, plan_row)
+    found = filecalls.after_build(conn, run, "end")
+    with _hold_interrupts():
+        log.set_auto(conn, run_id, {**(log.auto_of(run) or {}), "used": auto.used_calls(conn, run_id)})
+        log.update_project_files(conn, run_id, state="waiting")
+        log.set_done(conn, run_id, "Auto finished: every step passed; the run waits to land.", check_state="passed")
+        _auto_note(conn, run_id, auto.FINISHED_NOTE)
+    out(f"Auto finished: every step of plan #{plan_row['n']} passed. {filecalls.change_words(log.project_files_of(log.get_task(conn, run_id)))}. "
+        f"Land run: sr land {run['n']} puts the whole change in the folder as one commit; sr discard {run['n']} drops it.")
+    return 0
+
+
+def _auto_process_ended(conn, row, pid, out):
+    """Decision 5: a run whose process ended is a stopped run; its step in progress is handled as its own row."""
+    record = log.auto_of(row) or {}
+    for step in record.get("steps") or ():
+        if step.get("state") == "running":
+            step["state"] = "stopped"
+    with _hold_interrupts():
+        log.set_auto(conn, row["task_id"], record)
+    _auto_stop(conn, row["task_id"], "stopped", f"the process ended (pid {pid})", step=auto.next_open(record), out=out)
+
+
+def _auto_land_so_far(conn, row, out):
+    """Decision 8: a stopped run lands as it stands: the copy as it was at the starting snapshot of the step it stopped on,
+    so only the steps it passed land, with their ticks. None once the run waits to land; an exit code when refused."""
+    record = log.auto_of(row) or {}
+    state = auto.run_state(row, record)
+    if state == "finished":
+        return None
+    if state != "stopped":
+        receipt.mark(out, code="wrong_state")
+        out(f"Refused: #{row['n']} is {state}; a run lands once it is finished or stopped. Nothing was changed.")
+        return 2
+    stop = record.get("stop") or {}
+    k = stop.get("step")
+    entry = auto.step_entry(record, k) if k else None
+    copies.snapshot(row["task_id"], SO_FAR_BEFORE)  # put back if the land is refused after this
+    put_back = False
+    if entry is not None and entry.get("attempt") and entry.get("state") != "done":
+        start = f"step-{k}-{entry['attempt']}-start"
+        if copies.has_snapshot(row["task_id"], start):
+            copies.restore(row["task_id"], start)
+            put_back = True
+    plan_row = log.get_task(conn, record.get("plan"))
+    if plan_row is not None:
+        _auto_tick(conn, row["task_id"], plan_row)
+    found = filecalls.after_build(conn, row, "so-far")
+    with _hold_interrupts():
+        log.reopen_run(conn, row["task_id"], run=runs.me())
+        log.update_project_files(conn, row["task_id"], state="waiting")
+        log.set_done(conn, row["task_id"], "Auto: landed so far (the steps it passed).", check_state="passed")
+        _auto_note(conn, row["task_id"], auto.FINISHED_NOTE)
+    change = filecalls.change_words(log.project_files_of(log.get_task(conn, row["task_id"])))
+    if put_back:
+        out(f"Land the run so far: the copy is back at the start of step {k}; {change}.")
+    else:
+        out(f"Land the run so far: the run stopped after step {k} (delivered unchecked), so it lands as it stands, that "
+            f"step included; {change}.")
+    return None
+
+
+SO_FAR_BEFORE = "before-so-far"
+
+
+def _so_far_back(conn, row, so_far, out):
+    """Brief 34 (decision 8): Land's refusals apply to "so far" too: after one, the run is stopped again as it was."""
+    if not so_far:
+        return
+    _auto_unland_so_far(conn, log.get_task(conn, row["task_id"]))
+    out(f"Run #{row['n']} is stopped again as it was, its copy as before; Land the run so far once that is fixed.")
+
+
+def _auto_unland_so_far(conn, row):
+    """A land refused after "so far" put the copy back and moved the run on: the run is stopped again as it was (its stop
+    kept on the record), and the copy as it stood before."""
+    record = log.auto_of(row) or {}
+    stop = record.get("stop") or {}
+    if copies.has_snapshot(row["task_id"], SO_FAR_BEFORE):
+        copies.restore(row["task_id"], SO_FAR_BEFORE)
+    with _hold_interrupts():
+        conn.execute("UPDATE tasks SET status = 'returned', check_state = NULL, result = NULL, pid = NULL, "
+                     "run_started_at = NULL WHERE task_id = ?", (row["task_id"],))
+        conn.commit()
+        log.update_project_files(conn, row["task_id"], state="none")
+        _auto_note(conn, row["task_id"], f"{auto.STOP_NOTE}{safety.one_line(stop.get('why') or 'it stopped')[:200]}")
+
+
+def _auto_tests_words(conn, row):
+    """Brief 33.2 (decision 16, 34's D2): a run's entry ends with one line summed from its passed steps' build and fix
+    calls' test runs, each step judged by its last run (Land the run so far: the landed steps only); None for any other
+    task, whose entry ends with its own row's tests line."""
+    if _mode(row) != auto.MODE:
+        return None
+    return auto.tests_sum(auto.step_test_runs(conn, log.auto_of(row) or {}))
+
+
+def _auto_entry(conn, row):
+    """Decision 2: the run's one handoff entry, built from its steps' sections: each step's Produced line, the last
+    step's Status and Next. Brief 33.2 (decision 16): the passed steps' rows alone (the ones the land puts in the
+    folder; a stopped or failed attempt's section never describes what landed)."""
+    passed = set(auto.passed_steps(log.auto_of(row) or {}).values())
+    steps = [s for s in log.pieces_of(conn, row["task_id"]) if s["task_id"] in passed]
+    sections = {}
+    for step in steps:
+        calls = log.calls_for(conn, step["task_id"])
+        section = context.split_handoff(_delivered_text(step, calls) or "")[1]
+        if section:
+            sections[step["task_id"]] = context.raw_parts(section)
+    return auto.run_entry(row, steps, sections, date=f"{_now():%Y-%m-%d}")
+
+
+def _auto_plan_md(conn, row, verb):
+    """Decision 8: the run's land commits docs/PLAN.md with its passed steps ticked, each naming its task; Undo writes it
+    with those steps open."""
+    record = log.auto_of(row) or {}
+    plan_row = log.get_task(conn, record.get("plan"))
+    folder = projects.folder_of(log.project_of(row))
+    if plan_row is None or folder is None:
+        return {}, None
+    case, words = plan_mod.folder_case(folder, plan_mod.record_of(plan_row))
+    note = plan_mod.note_of(case, words, kind=verb)
+    if case in ("dirty", "link"):
+        return {}, note
+    if verb == "land":
+        text = plan_mod.rendered(conn, plan_row, extra=_run_passed(conn, row["task_id"]) or {})
+    else:
+        text = plan_mod.rendered(conn, plan_row, without=row["task_id"])
+    return {plan_mod.FILE: text.encode("utf-8")}, note
+
+
+def _auto_memory_store(conn, run_id, out, *, hindsight, secrets):
+    """Decision 2: each step's memory is stored when the run lands (a discarded run stores none)."""
+    if hindsight is None:
+        return
+    for step in log.pieces_of(conn, run_id):
+        calls = log.calls_for(conn, step["task_id"])
+        found = memory.store(conn, step, calls, hindsight, secrets, as_step=True)
+        if found is None:
+            continue
+        record, line = found
+        log.add_memory_write(conn, step["task_id"], record)
+        out(line)
+
+
+def _model_choices(model_flags, effort_flags, agents_allowed, out):
+    """Brief 33.3 (decision 4): the task's own choices from `--model <agent>=<model>` and `--effort <agent>=<level>`,
+    checked before Jev, before any probe and before any row; refused with nothing written (`bad_model`, naming why, or
+    `usage` for a doubled agent or a bad shape). {} without flags; False once refused."""
+    if not model_flags and not effort_flags:
+        return {}
+    try:
+        return models.choices_from_flags(list(model_flags or ()), list(effort_flags or ()), agents_allowed=agents_allowed,
+                                         fable_on=models.local().fable_on)
+    except models.ModelsError as e:
+        receipt.mark(out, code=e.code)
+        out(f"Refused: {safety.one_line(e)}. Nothing was logged or sent.")
+        return False
+
+
+def _route_models_allowed(agent):
+    """On `sr route` any agent with a model choice may be named: the choice applies to whatever calls it makes."""
+    return (True, None) if agent in models.AGENTS else (False, models.NO_CHOICE.get(agent, f"{agent} has no model choice"))
+
+
+def _relay_models_allowed(preset, name):
+    """On `sr relay` (and a plan) only an agent the preset's filled slots hold, or its checker."""
+    held = set(presets.slot_map(preset).values()) | ({preset.check_agent} if preset.check_agent else set())
+    held.discard(None)
+
+    def allowed(agent):
+        if agent in held:
+            return True, None
+        return False, f"{agent} makes no call on {name} (its agents are {', '.join(sorted(held))})"
+    return allowed
+
+
+def _split_models_allowed(agent):
+    """On `sr split` the choice reaches the plan and the join (Claude) and the join's check (ChatGPT); the pieces use
+    their teams' defaults."""
+    if agent in (split.PLANNER, split.CHECKER):
+        return True, None
+    return False, (f"{agent} makes no call of the split's own (Claude plans and joins, ChatGPT checks the join); a piece "
+                   "uses its team's defaults")
+
+
+def _choice_for(task, agent, call_id, kind, stage, role, deps):
+    """Brief 33.3 (decision 1): the model, effort and time limit of this call (router/models.py). A takeover's call
+    (`<stopped>-takeover`) reads the layers without the task's own choice (decision 4: the substitute's own defaults)."""
+    roster = getattr(deps, "roster", None)
+    pins = {name: roster.model(name) for name in ("chatgpt", "cursor")} if roster is not None else {}
+    return models.resolve(task, agent, kind=kind, stage=stage, role=role, pins=pins,
+                          takeover=str(call_id).endswith(relay.TAKEOVER_SUFFIX))
+
+
+def _cursor_model(choice):
+    """Brief 33.3: Cursor's worker is bound to its pin (`_workers`); a task's own choice or a layer's default names another
+    pinned Grok model for this call, and the pin itself needs no keyword."""
+    return {"model": choice.model} if choice.model and choice.layer != "agent" else {}
+
+
+def _credits_stop(task_id, out):
+    """Decision 6: a call billed to usage credits stops its task, Fable turns off, and nothing is retried."""
+    try:
+        was, _ = models.set_fable(False, by=f"{models.CREDITS_TURNED_OFF}: {task_id}",
+                                  lock_folder=DB_PATH.parent / runs.FOLDER_NAME)
+    except (models.ModelsError, OSError) as e:
+        out(f"Fable could not be turned off: {safety.one_line(e)}")
+        return
+    out("Usage credits: this call was billed to usage credits, so the task stops and Fable is off"
+        + (" (it was on)" if was else "") + "; nothing is retried. Check your account's usage page.")
+
+
+def _from_limited(record, kind, call_id):
+    """Brief 33 (decision 11): a Grok call carrying a from-block hands Grok an earlier result, so Relay's Grok rule holds
+    it to the limit (never trimmed; the call fails past it), as a stage given an earlier stage's result is. A fix round
+    and a re-ask stay exempt, as the rule says."""
+    return bool((record or {}).get("from")) and kind not in ("fix", "reask") and not str(call_id).endswith(context.DO_REASK)
+
+
+def _from_refusal(conn, from_ref, out):
+    """Brief 33 (decision 8): the source row `--from` names, None without one, or False once refused (`bad_from`, with
+    the reason), before Jev and before any row."""
+    if from_ref is None:
+        return None
+    row, why = fromblock.refusal(conn, from_ref, _status_word)
+    if row is None:
+        receipt.mark(out, code="bad_from")
+        out(f"Refused: --from: {why}. Nothing was logged or sent.")
+        return False
+    return row
+
+
+def _step_refusal(conn, step_ref, project, files_ready, out, passed=None):
+    """Brief 33.1 (decision 12): the step `--step <plan task>:<k>` names, {plan, step}; None without one; or False once
+    refused (`bad_step`, with the reason), before Jev and before any row. `passed` (brief 34, decision 2): a run's passed
+    steps, {k: row}, counted as done for its next step."""
+    if step_ref is None:
+        return None
+
+    def file_mode():
+        folder = projects.folder_of(project) if project else None
+        if folder is None:
+            return False, "no project"
+        found = filemode.decide(folder, files_ready=files_ready or (
+            lambda: (False, "Claude's file check can't be run by this command")))
+        return found.on, found.why
+    found, why = plan_mod.step_refusal(conn, step_ref, project, file_mode=file_mode, passed=passed)
+    if found is None:
+        receipt.mark(out, code="bad_step")
+        out(f"Refused: --step: {why}. Nothing was logged or sent.")
+        return False
+    return found
+
+
+def _idea_refusal(conn, idea_ref, project, out, floor=None):
+    """Brief 33 (decision 16): the idea id `--idea` names, None without one, or False once refused (`bad_idea`), before
+    Jev and before any row: not a number, no such idea, another project's, a task without that --project, or an idea that
+    isn't open. A floor row answered by flag (`floor`) passes its own idea on, which it holds while it waits."""
+    if idea_ref is None:
+        return None
+    text = str(idea_ref).strip()
+    if not text.isdigit():
+        why = f"an idea is its number from sr ideas <project>, not {safety.one_line(text)[:40]!r}"
+    else:
+        found = ideas.get(conn, int(text))
+        held = (floor is not None and found is not None and found.state == ideas.SENT  # the floor row holds it
+                and found.task["task_id"] == floor["task_id"])
+        why = None if held and found.project == project else ideas.intake_refusal(conn, int(text), project)
+    if why:
+        receipt.mark(out, code="bad_idea")
+        out(f"Refused: --idea: {why}. Nothing was logged or sent.")
+        return False
+    return int(text)
+
+
+def _grok_from_return(conn, task_id, decision, secrets):
+    """Brief 33 (decision 11): Grok would do a task built from an earlier result, and the block would push the doer's
+    prompt past Grok's limit: the task comes back after the label, with both lengths (`too_long`), as a task with files
+    comes back when its doer would be Grok. None when it fits."""
+    task = {**dict(log.get_task(conn, task_id)), "agent": "grok", "skill": decision.skill}
+    record = fromblock.for_call(conn, task, secrets)
+    prompt = _plan_call(task, checking.Step("do"))[3]
+    lengths = fromblock.grok_length(prompt, record) if record is not None else None
+    if lengths is None:
+        return None
+    return routing.Decision("return", decision.skill, decision.skill_source, code="too_long",
+                            reason=f"returned: too long for grok: {fromblock.grok_words(lengths, 'its prompt')}")
+
+
+def _grok_from_refusal(preset, task, record):
+    """Brief 33 (decision 11): on `sr relay`, the first stage Grok fills whose prompt the block would push past Grok's
+    limit, in words with both lengths, or None. Measured on the stage's prompt with an empty earlier stage, the least it
+    can be. A Grok check already passes the limit without the block and is skipped when the checker is chosen."""
+    for stage in preset.stages:
+        if stage.agent != "grok" or stage.is_check:
+            continue
+        alone = stage.input == "task"
+        prompt = relay.prompt_for(stage.role, task, None if alone else "", task_alone=alone)
+        lengths = fromblock.grok_length(prompt, record)
+        if lengths is not None:
+            return (f"the task is too long for grok in stage {stage.n} ({stage.role}): "
+                    f"{fromblock.grok_words(lengths, 'its prompt')}. Put another agent in that stage, or build from a "
+                    "shorter result.")
+    return None
 
 
 def _routing_table(available, roster, skill=None):
@@ -573,6 +1527,9 @@ def _skill_refusal(conn, roster, tag, skill, answers, clean):
     floor row `--answers` names (None without it). Before any row and before Jev."""
     if skill is None:
         return "usage", "--answers <n> goes with --skill <key>: your label for the floor row's task"
+    if skill == routing.FOLLOW_UP:  # brief 29.1 (decision 24): the router's route, never a skill to pick
+        return "usage", (f"{routing.FOLLOW_UP} is the router's route for a tagged task Jev isn't sure of, not a skill. "
+                         f"Skills: {', '.join(roster.skill_order)}")
     if tag:
         return "flag_refused", f"--skill with an override prefix (@{tag}): the agent is already chosen"
     if skill not in roster.skills:
@@ -585,10 +1542,11 @@ def _skill_refusal(conn, roster, tag, skill, answers, clean):
     if row is None:
         return code, safety.one_line(missing).rstrip(".")
     n = row["n"]
-    if _mode(row) == "piece":
+    if log.is_piece(row):
         return "wrong_state", f"#{n} is a piece: its split's approval labels it (sr split --go <split> --answer y --skill <k>=<key>)"
-    if not (row["status"] == "returned" and row["reason_code"] == "needs_label"):
-        return "wrong_state", f"#{n} is not a Jev floor question waiting for its label (it is {_status_word(row)})"
+    if not (row["status"] == "returned" and row["reason_code"] in log.ANSWERABLE_CODES):  # brief 29.1 (decision 3): a
+        return "wrong_state", (f"#{n} is not a Jev floor question waiting for its label, nor a task Jev labeled with a "  # not_routed
+                               f"skill version 2 doesn't route (it is {_status_word(row)})")  # return is sent again too
     if row["answered_by"]:
         return "already_used", f"#{n} was answered already ({row['answered_by']})"
     if row["task"] != clean:
@@ -607,7 +1565,8 @@ def _set_route(conn, task_id, decision, roster):
 def cmd_relay(preset_name, task, *, conn, config, roster, loaded, environ, settings_paths, post, worker, chatgpt=None,
               codex_login=None, cursor=None, cursor_ready=None, fetch=None, close=None, sleep=None, clock=None, wait=False, source="cli", files=(),
               claude_ready=None, slots=(), project=None, chat=None, hindsight=None, available=None, chatgpt_ready=None,
-              out=print):
+              files_ready=None, from_ref=None, idea_ref=None, step_ref=None, model_flags=(), effort_flags=(), auto_run=None,
+              auto_start=None, out=print):
     """`sr relay <preset> "task"` (rules v2.13): run a preset's chain, then the usual check, or, on a
     preset whose last stage is the check, that stage's verdict (never both), or, on a preset with
     review stages (versus, rules v2.16), the candidates with their reviews, awaiting the owner's pick. Jev is never called. Refused before any log row: a file, no or unknown or bad preset, an override
@@ -624,6 +1583,9 @@ def cmd_relay(preset_name, task, *, conn, config, roster, loaded, environ, setti
         _refuse_problems(out, problems, config, environ, settings_paths)
         return 2
     if _claude_refusal(available, out):  # brief 24 (decision 2)
+        return 2
+    kept_notes = _notes_at_intake(config, out)  # brief 30 (decision 4): read once, before any row
+    if kept_notes is None:
         return 2
     if not preset_name:
         receipt.mark(out, code="bad_preset")
@@ -662,7 +1624,7 @@ def cmd_relay(preset_name, task, *, conn, config, roster, loaded, environ, setti
             out(f"Refused: {why}. Nothing was logged or sent.")
             return 2
         flagged = filled
-    preset = flagged
+    preset = presets.project_shape(flagged) if project is not None else flagged  # brief 29.1 (decision 8)
     tag, clean = routing.parse_override(task, roster.names)
     clean = safety.redact(clean, _secrets(config))  # brief 22 (decision 10): before the row
     if tag:
@@ -684,34 +1646,73 @@ def cmd_relay(preset_name, task, *, conn, config, roster, loaded, environ, setti
         out(f"Refused: {refused} Nothing was logged or sent.")
         return 2
     if project is not None:  # rules v2.25: research-build and redteam only; every refusal before any row
-        held = [s for s, a in presets.slot_map(preset).items() if a in presets.PROJECT_REFUSES]  # rules v2.28: no handoff to Cursor
+        held = presets.project_held(preset)  # rules v2.28: no handoff to Cursor; brief 32 (decision 13): but its attack slots
         if held:
             receipt.mark(out, code="tag_refused")
-            out(f"Refused: --project with cursor in slot {', '.join(held)} is refused: a Cursor slot on a --project task "
-                "(rules v2.28, Cursor). Nothing was logged or sent.")
+            out(f"Refused: --project with cursor in slot {', '.join(held)} is refused: on a --project task Cursor may fill "
+                "redteam's attack or attack2 only (rules v2.28, Cursor; brief 32). Nothing was logged or sent.")
             return 2
         if preset_name not in _project_presets(loaded):
             receipt.mark(out, code="tag_refused")
             out(f"Refused: --project is not allowed on {preset_name} ({' and '.join(_project_presets(loaded))} only). "
                 "Nothing was logged or sent.")
             return 2
-        refused = _project_refusal(conn, project)
+        refused = _project_refusal(conn, project, open_rule=auto_run is None)  # brief 34: the run holds the project
         if refused:
             receipt.mark(out, code=refused[0])
             out(f"Refused: {refused[1]}. Nothing was logged or sent.")
             return 2
+        refused = _build_slot_refusal(preset, project)  # brief 28 (decision 3): only Claude changes project files
+        if refused:
+            receipt.mark(out, code="slot_refused")
+            out(f"Refused: {refused}. Nothing was logged or sent.")
+            return 2
+        refused = _versus_project_refusal(preset, project, clean, _secrets(config))  # brief 29.1 (decision 9)
+        if refused:
+            receipt.mark(out, code=refused[0])
+            out(f"Refused: {refused[1]}. Nothing was logged or sent.")
+            return 2
+    kept_spec = _spec_at_intake(project, config, out)  # brief 33.2 (decision 2): read once, before any row
+    if kept_spec is False:
+        return 2
     if chat is not None:  # rules v2.27: any preset; the shape only
         refused = _chat_refusal(chat)
         if refused:
             receipt.mark(out, code="bad_name")
             out(f"Refused: {refused}. Nothing was logged or sent.")
             return 2
+    choices = _model_choices(model_flags, effort_flags, _relay_models_allowed(preset, preset_name), out)  # brief 33.3 (decision 4): before Cursor's canaries and --step's file check
+    if choices is False:
+        return 2
     cursor_ok = None
     if "cursor" in presets.slot_map(preset).values():  # rules v2.28 with the owner's 20 Oct change: ready before any row
         cursor_ok = _cursor_readiness(cursor, cursor_ready)
-        if not cursor_ok[0]:
+        flagged_slots = {slot for slot, _ in slots}
+        optional = [s for s in presets.optional_slots(preset) if s.agent == "cursor" and s.name not in flagged_slots]
+        others = [s for s in preset.slots if s.agent == "cursor" and s not in optional]
+        if not cursor_ok[0] and optional and not others:  # brief 32 (decision 11): a default second attack is left out
+            for slot in optional:
+                fills.append({"slot": slot.name, "agent": None, "default": "cursor", "why": cursor_ok[1]})
+                preset = presets.leave_out(preset, slot.name)
+            cursor_ok = None
+        elif not cursor_ok[0]:
             receipt.mark(out, code=cursor_ok.code)
             out(f"Refused: {cursor_ok[1]}. Nothing was logged or sent.")
+            return 2
+    source_row = _from_refusal(conn, from_ref, out)  # brief 33 (decision 8): before any row
+    if source_row is False:
+        return 2
+    idea = _idea_refusal(conn, idea_ref, project, out)  # brief 33 (decision 16)
+    if idea is False:
+        return 2
+    step = _step_refusal(conn, step_ref, project, files_ready, out, passed=_run_passed(conn, auto_run))  # brief 33.1 (decision 12)
+    if step is False:
+        return 2
+    if source_row:  # brief 33 (decision 11): the block is never cut to fit Grok
+        refused = _grok_from_refusal(preset, clean, fromblock.make(source_row, _secrets(config)))
+        if refused:
+            receipt.mark(out, code="too_long")
+            out(f"Refused: {refused} Nothing was logged or sent.")
             return 2
     task_id = ids.new_task_id()
     receipt.mark(out, task_id=task_id)
@@ -724,8 +1725,13 @@ def cmd_relay(preset_name, task, *, conn, config, roster, loaded, environ, setti
     with _hold_interrupts():  # the row is written whole, with its route, before anything is sent
         first_of_chat = chat is not None and not log.chat_exists(conn, chat)
         log.add_task(conn, task_id, clean, source, {"status": "not_asked", "tokens": 0}, mode="relay", preset=preset_name,
-                     slots=presets.slot_map(preset), project=project, chat=chat, run=runs.me())
+                     slots=presets.row_slots(preset), project=project, chat=chat, run=runs.me(),  # brief 32: attack2 null when left out
+                     parent=auto_run,  # brief 34 (decision 2): a run's step
+                     from_task=source_row["task_id"] if source_row else None, idea=idea,  # brief 33 (decision 17)
+                     plan_step=step or None, models=choices or None)  # brief 33.1 (decision 19); 33.3 (decision 4)
         runs.adopt(task_id)  # brief 22 (decision 4): born with its run
+        _keep_notes(conn, task_id, kept_notes, out)  # brief 30 (decision 4): the task's own copy
+        _keep_spec(conn, task_id, kept_spec, out)  # brief 33.2 (decision 2.1)
         log.set_route(conn, task_id, agents=roster.names, agent=preset.doer, route_reason=presets.fills_reason(fills),
                       checker=preset.check_agent, check_state="pending")
     if first_of_chat:
@@ -740,8 +1746,320 @@ def cmd_relay(preset_name, task, *, conn, config, roster, loaded, environ, setti
         by = f"stage {check.n} ({check.agent})" if check else preset.checker
         out(f"{task_id}: relay {preset_name}: {chain}, checked by {by}.")
     for found in fills:  # brief 24 (decision 8): the card and Terminal say which slot was filled and why
+        if found.get("agent") is None:  # brief 32 (decision 11): the second attack left out
+            out(f"One attacker: {availability.name_of(found['default'])} isn't available ({found['why']}).")
+            continue
         out(f"Slot {found['slot']} filled by {found['agent']}: {found['why']}.")
+    if project is not None and preset.has_reviews:  # brief 29.1 (decision 9): two copies, one per candidate
+        found = versusfiles.start(conn, task_id, project, filemode.decide(
+            projects.folder_of(project), files_ready=files_ready or (lambda: (False, "Claude's file check can't be run by "
+                                                                                  "this command"))), preset)
+        out(versusfiles.start_words(project, found))
+    elif auto_run is not None and not preset.tallies:  # brief 34 (decision 2): the step builds in the run's copy
+        _auto_file_mode(conn, task_id, auto_run, auto_start, "claude", out)
+    elif project is not None and not preset.tallies:  # brief 28 (decision 1): the build slots are Claude's (refused
+        _file_mode_start(conn, task_id, project, "claude", files_ready, out)  # above otherwise); a vote has no copy
     return run_relay(conn, task_id, deps, secrets, out)
+
+
+def cmd_plan_edit(args, *, conn, config, roster=None, loaded=None, available=None, out=print):
+    """`sr plan --edit <task> --step <k>` with exactly one of `--team <team>`, `--up`, `--down`, `--drop`, `--text -- <words>`
+    or `--done-when -- <words>` (brief 33.1, decision 11): one change to a plan that waits for approval. It passes the
+    contract's rules in code (the menu stored with the plan), renumbers the needs after a move or a drop, renders
+    docs/PLAN.md in the copy again, and is logged beside the planner's version. Never after the land. Refusals write
+    nothing: `usage`, `wrong_state`, `bad_task`."""
+    changes = [name for name, given in (("team", args.team is not None), ("up", args.up), ("down", args.down),
+                                        ("drop", args.drop), ("text", args.text), ("done_when", args.done_when),
+                                        ("covers", getattr(args, "covers", False))) if given]  # brief 33.2 (decision 6)
+    words = " ".join(args.task) if getattr(args, "task", None) else None
+    usage = ("sr plan --edit <n> --step <k> takes exactly one of --team <team>, --up, --down, --drop, --text -- '<words>', "
+             "--done-when -- '<words>' or --covers -- '<labels>'")
+    if args.edit is None or args.step is None or len(changes) != 1 or (changes[0] in ("text", "done_when", "covers")) != bool(words):
+        receipt.mark(out, code="usage")
+        out(f"Refused: {usage}. Nothing was changed.")
+        return 2
+    row = _task_target(conn, [args.edit], out, "plan --edit")
+    if row is None:
+        return 2
+    if _mode(row) != "plan":
+        receipt.mark(out, code="wrong_state")
+        out(f"Refused: #{row['n']} is not a plan task. Nothing was changed.")
+        return 2
+    found = log.project_files_of(row) or {}
+    if found.get("state") in ("landed", "undone"):
+        receipt.mark(out, code="wrong_state")
+        out(f"Refused: #{row['n']}'s plan is {found['state']}: a landed plan changes only by its ticks. Nothing was "
+            "changed.")
+        return 2
+    if not (filecalls.waiting(row) or landing.anyway_refusal(row, found) is None):
+        receipt.mark(out, code="wrong_state")
+        out(f"Refused: #{row['n']}'s plan isn't waiting for your approval (it is {_status_word(row)}"
+            f"{', ' + found['state'] if found.get('state') not in (None, 'none') else ''}). Nothing was changed.")
+        return 2
+    if not re.fullmatch(r"[0-9]+", str(args.step).strip()):
+        receipt.mark(out, code="usage")
+        out(f"Refused: --step takes the step's number. Nothing was changed.")
+        return 2
+    record = plan_mod.record_of(row)
+    try:
+        with _project_lock(row["project"], task_id=row["task_id"], conn=conn, code="wrong_state"):
+            edited, why = plan_mod.edit(record, int(args.step), changes[0], args.team if changes[0] == "team" else words,
+                                        record.get("menu"))
+            if edited is None:
+                receipt.mark(out, code="bad_task")
+                out(f"Refused: {why}. Nothing was changed.")
+                return 2
+            plan_mod.write_into_copy(conn, row, edited)
+    except landing.Refused as e:
+        receipt.mark(out, code=e.code)
+        out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+        return 2
+    receipt.mark(out, task_id=row["task_id"])
+    shown = {"text": "its text", "done_when": "its finish line", "team": f"its team ({edited['steps'][int(args.step) - 1]['team'] if changes[0] == 'team' else ''})",
+             "up": "moved up", "down": "moved down", "drop": "dropped",
+             "covers": f"covers {plan_mod.covers_words(edited['steps'][int(args.step) - 1]) if changes[0] == 'covers' else ''}"}[changes[0]]
+    out(f"Step {args.step} of plan #{row['n']}: {shown}. docs/PLAN.md written again in the copy "
+        f"({len(edited['steps'])} step{'' if len(edited['steps']) == 1 else 's'}).")
+    return 0
+
+
+def _plan_refused(out, why, code="plan_refused"):
+    """Brief 33.1 (decision 1): `sr plan` refused at intake, before any row, naming why."""
+    receipt.mark(out, code=code)
+    out(f"Refused: {why}. Nothing was logged or sent.")
+    return 2
+
+
+def cmd_plan(task, *, conn, config, roster, loaded, environ, settings_paths, post, worker, chatgpt=None,
+             codex_login=None, cursor=None, cursor_ready=None, fetch=None, close=None, sleep=None, clock=None, wait=False,
+             source="cli", project=None, from_ref=None, hindsight=None, available=None, chatgpt_ready=None,
+             files_ready=None, claude_ready=None, idea_ref=None, chat=None, files=(), web=False, model_flags=(), effort_flags=(),
+             inject_questions=False, out=print):
+    """`sr plan --project <name> [--from <task>] -- <text>` (rules 2.47, The plan; build brief 33.1, decisions 1 to 8).
+    Plan is a team on a project only: it runs redteam's chain as it is filled now, in its plan shape: Claude plans read only
+    in a copy of the project, ChatGPT and Cursor attack the plan, Claude revises it, ChatGPT checks it. Refused at intake
+    with nothing written (`plan_refused`, naming why): `--idea`, `--chat`, a file, `--web`, an override (a slot flag is
+    refused in main), no project, a project without file mode (with file mode's why), a project whose current plan still has
+    an open step. Jev is never called. The copy is made before the row, so a copy that can't be made refuses the task too."""
+    problems = _refusals(config, environ, settings_paths)
+    if problems:
+        _refuse_problems(out, problems, config, environ, settings_paths)
+        return 2
+    if _claude_refusal(available, out):  # brief 24 (decision 2): Claude plans
+        return 2
+    for flag, given in (("--chat", chat), ("a file", files), ("--web", web)):
+        if given:
+            return _plan_refused(out, f"{flag} on sr plan is refused: a plan takes a project and the text of what to plan")
+    kept_notes = _notes_at_intake(config, out)  # brief 30 (decision 4): read once, before any row
+    if kept_notes is None:
+        return 2
+    tag, clean = routing.parse_override(task, roster.names)
+    clean = safety.redact(clean, _secrets(config))
+    if tag:
+        return _plan_refused(out, f"an override prefix on sr plan is refused (@{tag}): a plan's agents are redteam's")
+    if not clean.strip():
+        receipt.mark(out, code="bad_task")
+        out("Refused: the task is empty: say what to plan, or \"Plan the first version.\". Nothing was logged or sent.")
+        return 2
+    if clean.lstrip().startswith("/"):
+        receipt.mark(out, code="bad_task")
+        out("Refused: a task can't start with / (claude could read it as a slash command). Nothing was logged or sent.")
+        return 2
+    if project is None:
+        return _plan_refused(out, "Plan works on a project only: name one with --project <name> (sr project list)")
+    refused = _project_refusal(conn, project)
+    if refused:
+        receipt.mark(out, code=refused[0])
+        then = ", then revise" if refused[0] == "project_busy" and refused[1].endswith("Discard run first") else ""  # 33.2 (9)
+        out(f"Refused: {refused[1]}{then}. Nothing was logged or sent.")
+        return 2
+    kept_spec = _spec_at_intake(project, config, out)  # brief 33.2 (decision 2): read once, before any row
+    if kept_spec is False:
+        return 2
+    idea = _idea_refusal(conn, idea_ref, project, out)  # brief 33.2 (decision 12): Add to plan, route's rules (`bad_idea`)
+    if idea is False:
+        return 2
+    current = plan_mod.current(conn, project)  # decision 1: one plan at a time; brief 33.2 (decision 9): a revision
+    revises, inherited = None, 0
+    if current is not None:
+        found = plan_mod.first_open(conn, current)
+        if found is not None:  # the current plan has an open step: this plan revises it, keeping the done steps
+            kept = _kept_failed_step(conn, current)
+            if kept is not None:  # landing it later would tick a step the revision may have changed
+                return _plan_refused(out, f"step {kept[0]}'s failed change (#{kept[1]['n']}) is still kept: "
+                                          f"sr land {kept[1]['n']} --anyway (Land anyway) or sr discard {kept[1]['n']} "
+                                          "first, then revise")
+            revises, inherited = current, found[0] - 1
+    base = loaded.presets.get(plan_mod.PRESET) if loaded is not None else None
+    if base is None:
+        return _plan_refused(out, "redteam isn't in config/presets.json, so a plan can't run")
+    table = _relay_table(available, base, [])
+    preset, fills = base, []
+    if table is not None:  # brief 24 (decision 8): a slot whose default isn't available is filled, or the plan refused
+        preset, fills, why = presets.fill_unavailable(base, [], roster, table, send_paths=tuple(SENDERS),
+                                                      contracts=relay.CONTRACTS, roles=relay.ROLES, verdicts=relay.VERDICTS)
+        if preset is None:
+            return _plan_refused(out, f"redteam can't run now: {why}")
+    held = presets.project_held(preset)
+    if held:
+        return _plan_refused(out, f"cursor in slot {', '.join(held)} can't run on a project")
+    refused = _build_slot_refusal(preset, project)  # only Claude plans in the copy
+    if refused:
+        return _plan_refused(out, refused)
+    choices = _model_choices(model_flags, effort_flags, _relay_models_allowed(preset, "plan"), out)  # brief 33.3 (decision 4): before Cursor's canaries
+    if choices is False:
+        return 2
+    cursor_ok = None
+    if "cursor" in presets.slot_map(preset).values():  # brief 32 (decision 11): a default second attack is left out
+        cursor_ok = _cursor_readiness(cursor, cursor_ready)
+        optional = [s for s in presets.optional_slots(preset) if s.agent == "cursor"]
+        others = [s for s in preset.slots if s.agent == "cursor" and s not in optional]
+        if not cursor_ok[0] and optional and not others:
+            for slot in optional:
+                fills.append({"slot": slot.name, "agent": None, "default": "cursor", "why": cursor_ok[1]})
+                preset = presets.leave_out(preset, slot.name)
+            cursor_ok = None
+        elif not cursor_ok[0]:
+            return _plan_refused(out, cursor_ok[1])
+    preset = presets.plan_shape(preset)
+    source_row = _from_refusal(conn, from_ref, out)  # brief 33 (decision 8); brief 33.1 (decision 18)
+    if source_row is False:
+        return 2
+    if source_row:
+        refused = _grok_from_refusal(preset, clean, fromblock.make(source_row, _secrets(config)))
+        if refused:
+            receipt.mark(out, code="too_long")
+            out(f"Refused: {refused} Nothing was logged or sent.")
+            return 2
+    folder = projects.folder_of(project)
+    decision = filemode.decide(folder, files_ready=files_ready or (
+        lambda: (False, "Claude's file check can't be run by this command")))
+    if not decision.on:  # decision 1: the planner reads the project's files, so a plan needs file mode
+        why = str(decision.why or "file mode is off")
+        if why.endswith("Turn on undo"):
+            why += " first"
+        return _plan_refused(out, f"Plan reads the project's files, and {project} has no file mode: {why}")
+    deps = SimpleNamespace(config=config, post=post, worker=worker, chatgpt=chatgpt, codex_login=codex_login,
+                           codex_ok=None, cursor=cursor, cursor_ready=cursor_ready, cursor_ok=cursor_ok, fetch=fetch,
+                           close=close, sleep=sleep, clock=clock, wait=wait, presets=loaded, live=roster.live,
+                           claude_ready=claude_ready, hindsight=hindsight, chatgpt_ready=chatgpt_ready,
+                           available=available, roster=roster, inject_questions=inject_questions)
+    found = _plan_menu(deps)
+    record = plan_mod.new_record(plan_mod.menu_names(found))
+    record["menu_text"] = plan_mod.menu_block(found)
+    tests_then = projects.tests_of(project)
+    if tests_then:  # brief 33.2 (the review, 33.1's D5): the command the plan was made with is the need once it is cleared
+        record["test_command_then"] = shlex.join(tests_then)
+    if kept_spec is not None:  # brief 33.2 (decisions 6 and 7): the spec the plan reads, its hash and its lists
+        record["spec_hash"] = kept_spec.hash
+        record["spec"] = {"examples": list(kept_spec.parsed.examples), "done_when": list(kept_spec.parsed.done_when)}
+    if revises is not None:  # brief 33.2 (decisions 9 and 10): the old plan, the done steps byte for byte, covers by text
+        record.update(revises=revises["task_id"], revises_n=revises["n"], inherited=inherited,
+                      decided=plan_mod.decided_of(plan_mod.record_of(revises)),  # brief 33.4 (decision 6b): carried over
+                      done_steps=plan_mod.inherited_steps(plan_mod.record_of(revises), inherited,
+                                                          (record.get("spec") or {}).get("examples") or []))
+    task_id = ids.new_task_id()
+    repo = decision.repo
+    try:  # the copy before the row: a copy that can't be made is a refusal with nothing written
+        made = copies.make(task_id, repo.folder, repo.head)
+    except (copies.CopyError, OSError) as e:
+        return _plan_refused(out, f"the copy of {project} could not be made: {safety.one_line(str(e))[:200]}")
+    receipt.mark(out, task_id=task_id)
+    secrets = _secrets(config)
+    with _hold_interrupts():  # the row is written whole, with its route and its copy's record, before anything is sent
+        log.add_task(conn, task_id, clean, source, {"status": "not_asked", "tokens": 0}, mode="plan",
+                     preset=plan_mod.PRESET, slots=presets.row_slots(preset), project=project, run=runs.me(),
+                     from_task=source_row["task_id"] if source_row else None, plan=record,
+                     models=choices or None, idea=idea)  # brief 33.3 (decision 4); 33.2 (decision 12): the idea
+        runs.adopt(task_id)
+        _keep_notes(conn, task_id, kept_notes, out)
+        _keep_spec(conn, task_id, kept_spec, out)  # brief 33.2 (decision 2.1): the plan reads this spec
+        log.set_route(conn, task_id, agents=roster.names, agent=preset.doer, route_reason=presets.fills_reason(fills),
+                      checker=preset.check_agent, check_state="pending")
+        log.set_project_files(conn, task_id, {
+            "mode": "on", "state": "none", "copy": True, "base": repo.head, "branch": repo.branch, "files": made.files,
+            "left_out": made.left_out, "changed": [], "diff": None, "latest": None, "tests": None, "commit": None,
+            "undo_commit": None, "why": None})
+    chain = " -> ".join(f"{_stage_words(stage)} by {stage.agent}" for stage in preset.stages)
+    out(f"{task_id}: plan on {project}: {chain}, checked by {preset.checker}.")
+    if revises is not None:  # brief 33.2 (decision 9)
+        out(f"A revision of plan #{revises['n']}: " + (
+            f"step{'' if inherited == 1 else 's'} 1 to {inherited} {'is' if inherited == 1 else 'are'} done and stay; the "
+            "planner returns the steps after." if inherited else "no step is done yet; the planner returns the whole plan again."))
+    for item in fills:
+        if item.get("agent") is None:
+            out(f"One attacker: {availability.name_of(item['default'])} isn't available ({item['why']}).")
+            continue
+        out(f"Slot {item['slot']} filled by {item['agent']}: {item['why']}.")
+    out(filecalls.start_words(project, log.project_files_of(log.get_task(conn, task_id))) + "; the plan reads it, read only")
+    return run_relay(conn, task_id, deps, secrets, out)
+
+
+def cmd_plan_answer(ref, *, conn, config, roster, loaded, environ, settings_paths, post, worker, chatgpt=None, codex_login=None,
+                    cursor=None, cursor_ready=None, fetch=None, close=None, sleep=None, clock=None, wait=False, hindsight=None,
+                    available=None, chatgpt_ready=None, claude_ready=None, picks=(), others=(), best_guess=False, out=print):
+    """`sr plan --answer <task> [--pick <k>=<letter>]… [--other <k>=<text>]…` or `--best-guess` (brief 33.4, decisions 3 to
+    5): the owner's answers to a plan waiting on them, kept on its record; stage 1 then runs once more, carrying them, and
+    the chain goes on. It never prompts. Refused with nothing written: `bad_answers` (a question left unanswered, an
+    unknown letter, a typed answer the text rule refuses, named and never quoted), `wrong_state` (a task not waiting)."""
+    problems = _refusals(config, environ, settings_paths)
+    if problems:
+        _refuse_problems(out, problems, config, environ, settings_paths)
+        return 2
+    if _claude_refusal(available, out):
+        return 2
+    row = _task_target(conn, [ref], out, "answer")
+    if row is None:
+        return 2
+    if not plan_mod.waiting_answers(row):
+        receipt.mark(out, code="wrong_state", task_id=row["task_id"])
+        out(f"Refused: #{row['n']} isn't a plan waiting for your answers. Nothing was changed.")
+        return 2
+    secrets = _secrets(config)
+    record = plan_mod.record_of(row)
+    answers, why = plan_mod.answers_from(record, picks, others, best_guess, secrets)
+    if why:
+        receipt.mark(out, code="bad_answers", task_id=row["task_id"])
+        out(f"Refused: {safety.one_line(why)}. Nothing was changed.")
+        return 2
+    receipt.mark(out, task_id=row["task_id"])
+    with _hold_interrupts():
+        log.set_plan(conn, row["task_id"], {**record, "answers": answers})
+        log.answers_given(conn, row["task_id"], run=runs.me())
+        runs.adopt(row["task_id"])
+    out(f"Answers kept for #{row['n']}: planning with them.")
+    deps = SimpleNamespace(config=config, post=post, worker=worker, chatgpt=chatgpt, codex_login=codex_login,
+                           codex_ok=None, cursor=cursor, cursor_ready=cursor_ready, cursor_ok=None, fetch=fetch,
+                           close=close, sleep=sleep, clock=clock, wait=wait, presets=loaded, live=roster.live,
+                           claude_ready=claude_ready, hindsight=hindsight, chatgpt_ready=chatgpt_ready,
+                           available=available, roster=roster, inject_questions=False)
+    return run_relay(conn, row["task_id"], deps, secrets, out)
+
+
+def _kept_failed_step(conn, plan_row):
+    """Brief 33.2 (decision 9): (k, the step task) of the current plan's step whose failed change is still kept (Land anyway
+    would take it), or None."""
+    for row in plan_mod.step_tasks(conn, plan_row["task_id"]):
+        found = log.project_files_of(row) or {}
+        if landing.anyway_refusal(row, found) is None:
+            return (plan_mod.step_of(row) or {}).get("step"), row
+    return None
+
+
+def _versus_project_refusal(preset, project, task, secrets):
+    """Brief 29.1 (decision 9): on a project whose folder is a git repository's top level (file mode's ground), versus takes
+    Claude and ChatGPT only, and the ChatGPT slot's file view passes the redactor, the key scan and its size, read from git
+    before any call or row. (code, why) or None."""
+    if not versusfiles.is_versus(preset):
+        return None
+    folder = projects.folder_of(project)
+    repo = gitops.inspect(folder) if folder is not None else None
+    if repo is None or repo.why:
+        return None  # handoff only: both candidates return the section, no copy
+    refused = versusfiles.slot_refusal(preset)
+    if refused:
+        return "slot_refused", refused
+    return versusfiles.view_refusal(folder, repo.head, secrets)
 
 
 def _relay_table(available, preset, flags):
@@ -752,26 +2070,6 @@ def _relay_table(available, preset, flags):
     names = [s.agent for s in preset.slots] + [agent for _, agent in flags if agent] + ["chatgpt", "claude"]
     available.of(list(dict.fromkeys(names)))
     return available
-
-
-def _grok_vote_refusal(preset, task):
-    """Decision 13 with the owner's flag B: a Grok voter gets the task alone, so `grok_prompt_limit` is never applied
-    to its send; instead the whole prompt it would get is measured here, before any row or call, and a task that
-    would carry it past the limit is refused with both lengths. None when it fits (or no slot holds Grok)."""
-    if not preset.tallies:
-        return None
-    most, _ = settings.grok_prompt_limit()
-    for slot in preset.slots:
-        for n in slot.stages:
-            stage = preset.stage(n)
-            if stage.agent != "grok":
-                continue
-            prompt = relay.prompt_for(stage.role, task, None, search=False, task_alone=True)
-            if len(prompt) > most:
-                return (f"the task is too long for grok's vote (slot {slot.name}): its prompt would be {len(prompt)} "
-                        f"characters, the task alone {len(task)}; grok's limit is {most}. Shorten the task, or put "
-                        f"another agent in slot {slot.name}.")
-    return None
 
 
 def _cursor_readiness(cursor, cursor_ready):
@@ -789,27 +2087,25 @@ def _cursor_readiness(cursor, cursor_ready):
     return cursor_worker.Readiness((ok, reason), getattr(found, "code", None) or (None if ok else "probe_failed"))
 
 
-def _cursor_length_refusal(preset, task):
-    """Decision 2 (rules v2.28, Cursor): the prompt is the command's one argument, so a task whose Cursor prompt would
-    pass cursor_worker.PROMPT_LIMIT characters is refused at intake with both lengths, before any row (as a Grok vote
-    is measured). Measured on the task-alone build prompt with the opener; a review prompt, which carries the other
-    candidate too, is guarded again by the worker at send time. None when it fits, or when no slot holds Cursor."""
-    for slot in preset.slots:
-        if slot.agent != "cursor":
-            continue
-        for n in slot.stages:
-            stage = preset.stage(n)
-            if getattr(stage, "input", None) != "task":
-                continue
-            prompt = cursor_worker.wrap(relay.prompt_for(stage.role, task, None, search=False, task_alone=True))
-            if len(prompt) > cursor_worker.PROMPT_LIMIT:
-                return (f"the task is too long for cursor (slot {slot.name}): its prompt would be {len(prompt)} characters, "
-                        f"the task alone {len(task)}; cursor's limit is {cursor_worker.PROMPT_LIMIT}. Shorten the task, or "
-                        f"put another agent in slot {slot.name}.")
-    return None
+def cmd_pick(words, *, conn, loaded, secrets=(), hindsight=None, go_on=None, out=print):
+    """`sr pick <n> a|b|none` (_pick), then, on a piece of a split, the split goes on in the same command (brief 29,
+    decision 11): `go_on(row)` runs the refusals and Claude's gate first; when one refuses, the pick stands and the split
+    waits, saying why. The pick's exit code stands unless the going on was stopped (130)."""
+    code = _pick(words, conn=conn, loaded=loaded, secrets=secrets, hindsight=hindsight, out=out)
+    row = _picked_row(conn, words) if code == 0 and go_on is not None else None
+    if row is not None and log.is_piece(row):
+        went = go_on(row)
+        if went == 130:
+            return 130
+    return code
 
 
-def cmd_pick(words, *, conn, loaded, secrets=(), hindsight=None, out=print):
+def _picked_row(conn, words):
+    words = list(words)
+    return log.find_task(conn, " ".join(words[:-1]).strip())[0] if len(words) >= 2 else None
+
+
+def _pick(words, *, conn, loaded, secrets=(), hindsight=None, out=print):
     """`sr pick <n> a|b|none` (rules v2.16, Relay): the owner picks a candidate of a versus task whose
     reviews are in. a or b: that candidate's stored text becomes the task's result, byte for byte,
     with its review as the task's check; none: the task fails with both candidates kept. The owner's
@@ -876,20 +2172,24 @@ def cmd_pick(words, *, conn, loaded, secrets=(), hindsight=None, out=print):
                              choice="none")
             else:
                 pick = next(c for c in found if c.letter == choice)
-                log.set_pick(conn, task_id, agents=(pick.agent, pick.reviewer), choice=choice, result=pick.text,
+                result = context.split_handoff(pick.text)[0] if log.project_of(row) else pick.text  # brief 29.1
+                log.set_pick(conn, task_id, agents=(pick.agent, pick.reviewer), choice=choice, result=result,
                              agent=pick.agent, checker=pick.reviewer, verdict=pick.verdict)
         except log.StateError:
             receipt.mark(out, code="state_changed")
             out(f"Refused: #{n} is already {_status_text(log.get_task(conn, task_id))}. Nothing was changed.")
             return 2
+    versusfiles.picked(conn, task_id, choice, out)  # brief 29.1 (decision 9): one copy waits to land; none, neither
     if choice == "none":
         out(f"#{n} {task_id}: picked none. The task failed (no pick); both candidates are kept "
             f"(`sr show {n} --stages`).")
+        _project_entry(conn, task_id, out)
         return 0
     out(f"#{n} {task_id}: picked {choice.upper()} ({pick.agent}), reviewed by {pick.reviewer}: "
         f"{pick.verdict.upper()}. It is the task's result (`sr show {n}`).")
     if pick.verdict == "fail":
         out(f"Warning: {pick.reviewer}'s review of {choice.upper()} said FAIL; picked anyway.")
+    _project_entry(conn, task_id, out)  # brief 29.1 (decision 9): handoff only, the picked one's section; a change waits
     _memory_store(conn, task_id, out, hindsight=hindsight, secrets=secrets)  # rules v2.27: a picked candidate is stored
     return 0
 
@@ -941,6 +2241,7 @@ def _vote_pick(conn, row, preset, choice, out, *, secrets=(), hindsight=None):
         return 0
     out(f"#{n} {task_id}: picked {choice.upper()} ({pick.agent}): {safety.for_terminal(pick.answer or '')}. It is the "
         f"task's result, unchecked: no two voters agreed on it (`sr show {n}`).")
+    _project_entry(conn, task_id, out)  # brief 29.1 (decision 10): a vote on a project gets the router's one line
     _memory_store(conn, task_id, out, hindsight=hindsight, secrets=secrets)  # unchecked: never stored (choice 14)
     return 0
 
@@ -974,7 +2275,7 @@ def cmd_resume(words, *, conn, config, roster, loaded, environ, settings_paths, 
         return 2
     calls = log.calls_for(conn, task_id)
     preset = split.PRESET if _mode(row) == "split" else None  # a split's plan and integration resume like any call
-    if _mode(row) == "relay":  # rules v2.21: the task's filled preset, never the defaults
+    if _mode(row) in log.CHAINED_MODES:  # rules v2.21: the task's filled preset, never the defaults
         preset, problem = presets.for_task(row, loaded)
         if preset is None:
             receipt.mark(out, code="bad_preset")
@@ -993,13 +2294,18 @@ def cmd_resume(words, *, conn, config, roster, loaded, environ, settings_paths, 
     view = {**dict(row), "status": "queued", "agent": plan.agent, "checker": plan.checker,
             "check_state": plan.check_state, "check_note": plan.check_note, "result": None, "failed_stage": None}
     try:
-        prompt, web_search, files, searching = _resume_call(view, calls, plan, preset, claude_ready)
+        menu = (_split_menu(view, SimpleNamespace(presets=loaded, roster=roster, available=available))
+                if _mode(row) == "split" else None)  # brief 29: a resumed plan call gets the menu as it stands now
+        prompt, web_search, files, searching = _resume_call(view, calls, plan, preset, claude_ready, menu=menu)
         # rules v2.25: the handoff, last; rules v2.27: the block the stopped call got; both before any call
-        prompt, record, mem = context.attach(prompt, view, sub, secrets, conn=conn, hindsight=hindsight, reuse=plan.stopped)
-    except (ValueError, context.ContextRefused, projects.ProjectError) as e:
+        prompt, record, mem = context.attach(prompt, view, sub, secrets, conn=conn, hindsight=hindsight, reuse=plan.stopped,
+                                             kind=plan.kind, role=plan.role if plan.kind in log.STAGE_KINDS else None)
+    except (ValueError, context.ContextRefused, projects.ProjectError, notes.Refused) as e:
         receipt.mark(out, code=_attach_refusal_code(e))
         out(f"Refused: #{n} can't be resumed: {safety.one_line(e)}. Nothing was logged or sent.")
         return 2
+    role = plan.role if plan.kind in log.STAGE_KINDS else None
+    prompt = filecalls.with_blocks(conn, view, plan.kind, role, sub, prompt, secrets)  # brief 28 (decision 9)
     problem = _recall_memory_problem(view, mem, hindsight, plan.stopped)  # rules v2.29: never a recall call without memory
     if problem:
         receipt.mark(out, code="memory_down")
@@ -1032,21 +2338,32 @@ def cmd_resume(words, *, conn, config, roster, loaded, environ, settings_paths, 
             return 2
     for line in resume.describe(row, plan):
         out(line)
+    if filecalls.build_call(row, plan.stopped):  # brief 28 (decision 18): the copy as it was before the stopped call
+        copies.restore(filecalls.copy_id(row), f"before-{plan.stopped['call_id']}")  # brief 29: a piece's is its split's
+        out(f"Files: the copy is back as it was before {plan.stopped['call_id']}; Claude makes the call again.")
+    choice = _choice_for(view, sub, plan.call_id, plan.kind, plan.stage if plan.kind in log.STAGE_KINDS else None, role,
+                         SimpleNamespace(roster=roster))  # brief 33.3 (decision 4): the task's choice holds on a resume
     if sub == "claude":
-        call = functools.partial(worker, search=True) if searching == search.ALLOWED else worker
+        chosen = functools.partial(worker, choice=choice)
+        call = functools.partial(chosen, search=True) if searching == search.ALLOWED else chosen
+        if filecalls.in_copy(view, plan.kind, role, "claude"):  # brief 28 (decision 3): in the copy
+            call = filecalls.wrap(conn, view, plan.call_id, plan.kind, role, chosen, search=searching == search.ALLOWED,
+                                  secrets=secrets, out=out)
     elif sub == "cursor":
         def call(text):  # the prompt the Claude worker would get for the role, opened as every Cursor prompt is
             try:
-                found = cursor(cursor_worker.wrap(text), call_id=plan.call_id)
+                found = cursor(cursor_worker.wrap(text), call_id=plan.call_id, **_cursor_model(choice))
             except cursor_worker.WorkerError as e:
                 _keep_stream(task_id, plan.call_id, e, secrets)
                 raise
             _keep_stream(task_id, plan.call_id, found, secrets)
             return found
     else:
-        call = functools.partial(chatgpt, web_search=web_search)
+        call = functools.partial(chatgpt, web_search=web_search, choice=choice)
     answer = None
     reason_code = None
+    rounds.keep_prompt(conn, task_id, plan.call_id, plan.kind, sub, prompt, secrets, role=role, stage=plan.stage,
+                       preset=preset)  # brief 30: every call's prompt is kept
     try:
         answer = call(prompt, files=files, tag=task_id) if files else call(prompt)
         text, failed = safety.redact(answer, secrets), False
@@ -1068,12 +2385,15 @@ def cmd_resume(words, *, conn, config, roster, loaded, environ, settings_paths, 
                 "so this answer was not saved:")
             out(safety.for_terminal(text, secrets))
             return 1
-        verdict = checking.read_verdict(text)[0] if not failed and plan.kind in ("check", "recheck") else None
+        verdict = (checking.verdict_for(plan.kind, text, log.calls_for(conn, task_id))
+                   if not failed and plan.kind in ("check", "recheck") else None)
         log.add_call(conn, plan.call_id, task_id, plan.kind, sub, status="failed" if failed else "done", text=text,
                      verdict=verdict, stage=plan.stage if stage_kind else None, role=plan.role if stage_kind else None,
                      reason_code=reason_code, resume_of=plan.stopped["call_id"],
                      search=_search_record(searching, None if failed else answer), context=record, memory=mem,
-                     served=getattr(answer, "served", None))  # rules v2.28: a Cursor call's served record
+                     served=getattr(answer, "served", None),  # rules v2.28: a Cursor call's served record
+                     tests=None if failed else getattr(answer, "tests", None),  # brief 28: a build call's tests
+                     **_choice_columns(choice))  # brief 33.3 (decision 7)
         if failed and plan.kind == "do":
             log.set_failed(conn, task_id, text)
     if failed and plan.kind == "do":
@@ -1094,10 +2414,9 @@ def cmd_resume(words, *, conn, config, roster, loaded, environ, settings_paths, 
         out(f"Stopped (Ctrl+C). {sub}'s call was saved and #{n} is open again; run `sr check` to finish it.")
         return 130
     code = run_relay(conn, task_id, deps, secrets, out)
-    hint = _piece_hint(conn, log.get_task(conn, task_id))
-    if hint:
-        out(hint)
-    return code
+    went = _go_on(conn, log.get_task(conn, task_id), deps, secrets, out, environ=environ,
+                  settings_paths=settings_paths)  # brief 29 (decision 11): a resumed piece goes on with its split
+    return went if went == 130 else code
 
 
 @_releases_its_runs
@@ -1135,8 +2454,9 @@ def cmd_fallback(words, *, conn, config, roster, loaded, environ, settings_paths
         prompt, web_search, files, searching = _fallback_call(row, calls, plan, preset, claude_ready)
         # rules v2.25: the handoff, last; rules v2.27: the block the replaced call got; both before any call
         prompt, record, mem = context.attach(prompt, row, plan.doer, secrets, conn=conn, hindsight=hindsight,
-                                             reuse=plan.replaces)
-    except (ValueError, context.ContextRefused, projects.ProjectError) as e:
+                                             reuse=plan.replaces, kind="stage" if plan.stage is not None else "do",
+                                             role=plan.role if plan.stage is not None else None)
+    except (ValueError, context.ContextRefused, projects.ProjectError, notes.Refused) as e:
         receipt.mark(out, code=_attach_refusal_code(e))
         out(f"Refused: #{n} can't fall back: {safety.one_line(e)}. Nothing was logged or sent.")
         return 2
@@ -1166,11 +2486,17 @@ def cmd_fallback(words, *, conn, config, roster, loaded, environ, settings_paths
             return 2
     for line in fallback.describe(row, plan):
         out(line)
+    choice = _choice_for(row, plan.doer, plan.call_id, "stage" if plan.stage is not None else "do", plan.stage,
+                         plan.role if plan.stage is not None else None, SimpleNamespace(roster=roster))  # brief 33.3
     if plan.doer == "claude":
-        call = functools.partial(worker, search=True) if searching == search.ALLOWED else worker
+        chosen = functools.partial(worker, choice=choice)
+        call = functools.partial(chosen, search=True) if searching == search.ALLOWED else chosen
     else:
-        call = functools.partial(chatgpt, web_search=web_search)
+        call = functools.partial(chatgpt, web_search=web_search, choice=choice)
     answer, reason_code = None, None
+    rounds.keep_prompt(conn, task_id, plan.call_id, "stage" if plan.stage is not None else "do", plan.doer, prompt,
+                       secrets, role=plan.role if plan.stage is not None else None, stage=plan.stage,
+                       preset=preset)  # brief 30: every call's prompt is kept
     try:
         answer = call(prompt, files=files, tag=task_id) if files else call(prompt)
         text, failed = safety.redact(answer, secrets), False
@@ -1198,7 +2524,8 @@ def cmd_fallback(words, *, conn, config, roster, loaded, environ, settings_paths
         log.add_call(conn, plan.call_id, task_id, kind, plan.doer, status="failed" if failed else "done", text=text,
                      stage=plan.stage if relay_stage else None, role=plan.role if relay_stage else None,
                      reason_code=reason_code, fallback_of=plan.replaces["call_id"],
-                     search=_search_record(searching, answer), context=record, memory=mem)
+                     search=_search_record(searching, answer), context=record, memory=mem,
+                     served=getattr(answer, "served", None), **_choice_columns(choice))  # brief 33.3 (decision 7)
     if failed:
         out(f"{plan.doer}'s redo failed: {safety.for_terminal(text, secrets)}")
         line = _plan_limit_line(conn, task_id, SimpleNamespace(presets=loaded, live=roster.live))
@@ -1217,10 +2544,9 @@ def cmd_fallback(words, *, conn, config, roster, loaded, environ, settings_paths
     if after["status"] == "done" and after["check_state"] == "failed":
         for line in _both_attempts_lines(after, log.calls_for(conn, task_id), preset, secrets):
             out(line)
-    hint = _piece_hint(conn, after)
-    if hint:
-        out(hint)
-    return code
+    went = _go_on(conn, after, deps, secrets, out, environ=environ,
+                  settings_paths=settings_paths)  # brief 29 (decision 11): a piece's fallback goes on with its split
+    return went if went == 130 else code
 
 
 def _fallback_call(row, calls, plan, preset, claude_ready=None):
@@ -1240,8 +2566,9 @@ def _fallback_call(row, calls, plan, preset, claude_ready=None):
     elif getattr(preset, "revise_stage", None) is not None and plan.stage == preset.revise_stage.n:
         # rules v2.23, decision 12: the check agent builds from the task and the same attack list, never stage 1 or
         # the revision; the attack is not run again
-        attacks = relay.accepted(log.fallback_view(calls), preset.revise_stage.against)["text"]
-        allowed.append(attacks)
+        attacks = relay.attacks_for(row, log.fallback_view(calls))  # brief 32 (decision 10): the same lists, labeled
+        allowed += ([text for l in attacks for text in (l.text, relay.labeled_text(l.text, l.letter))]
+                    if isinstance(attacks, tuple) else [attacks])
         searching = search.state(view, kind="stage", role="revise", agent=plan.doer, files=(), ready=ready)
         on = searching == search.ALLOWED
         base = relay.redo_prompt(row["task"], attacks, search=on, handoff=context.needs_handoff(view, plan.doer))
@@ -1256,7 +2583,10 @@ def _fallback_call(row, calls, plan, preset, claude_ready=None):
                                agent=plan.doer, handoff=context.needs_handoff(view, plan.doer))  # the redo is the build
         base, _, web_search, searching = _stage_call(view, step, ready)
         files = ()
+    base = base.replace(f"\n\n{checking.NEXT_LINE}", "")  # brief 33 (decision 5): said once, after the fix list
     prompt = fallback.prompt(base, plan.fix_list)
+    if nextsteps.asks_next(view, "redo"):
+        prompt = f"{prompt}\n\n{checking.NEXT_LINE}"
     fallback.assert_clean(prompt, plan.failed_texts, allowed=allowed)
     return prompt, web_search, files, searching
 
@@ -1311,10 +2641,12 @@ def _attach_refusal_code(e):
     """Brief 21: the reason_code of a resume or fallback refused while its context was attached."""
     if isinstance(e, context.ContextRefused):
         return "handoff_key"
+    if isinstance(e, notes.Refused):  # brief 30 (decision 4): the router notes' scan on the send
+        return e.code
     return "handoff_unreadable" if isinstance(e, projects.ProjectError) else "stuck"
 
 
-def _resume_call(view, calls, plan, preset, claude_ready=None):
+def _resume_call(view, calls, plan, preset, claude_ready=None, menu=None):
     """What the stopped agent was sent, rebuilt by the same prompt builders from the rows before the
     stop, with the task row as it will be after the reopen (`view`: the substitute is its doer or
     checker). Returns (prompt, web_search, files, search state); search follows the call's preset
@@ -1325,11 +2657,12 @@ def _resume_call(view, calls, plan, preset, claude_ready=None):
     if stopped["kind"] in log.STAGE_KINDS:
         if stopped["kind"] == "reask":
             before = [c for c in before if not (c["kind"] in log.STAGE_KINDS and c["stage"] == stopped["stage"])]
-        step = relay.next_stage(view, before, preset)
+        step = relay.next_stage(view, before, preset, checks=split.stored_checks(view))
         if step.action != "stage" or step.n != stopped["stage"]:
             raise ValueError(f"the log does not lead to stage {stopped['stage']} (it leads to {step.action})")
         step = dataclasses.replace(step, agent=plan.substitute)
-        prompt, _, web_search, searching = _stage_call(view, step, _ready_once(SimpleNamespace(claude_ready=claude_ready)))
+        prompt, _, web_search, searching = _stage_call(view, step, _ready_once(SimpleNamespace(claude_ready=claude_ready)),
+                                                       menu=menu)  # brief 29: a split's plan call gets its TEAMS list
         return prompt, web_search, (), searching
     if stopped["kind"] == "fix" and checking.FIX_REASK in stopped["call_id"]:
         before = [c for c in before if c["kind"] != "fix"]  # a stopped fix re-ask is redone as a fresh fix (D8's shape)
@@ -1446,8 +2779,8 @@ def _fallback_line(conn, task_id, deps):
     calls = log.calls_for(conn, task_id)
     if calls and log.fallback_of(calls[-1]) and calls[-1]["status"] == "failed":
         return None
-    preset = _preset_for(task, deps)[0] if _mode(task) in ("relay", "split") else None
-    if _mode(task) in ("relay", "split") and preset is None:
+    preset = _preset_for(task, deps)[0] if _mode(task) in ("relay", "split", "plan") else None
+    if _mode(task) in ("relay", "split", "plan") and preset is None:
         return None
     return fallback.stop_line(task, calls, live=getattr(deps, "live", None), preset=preset)
 
@@ -1457,12 +2790,26 @@ def _plan_limit_line(conn, task_id, deps):
     task = log.get_task(conn, task_id)
     if task is None:
         return None
-    preset = _preset_for(task, deps)[0] if _mode(task) in ("relay", "split") else None
+    preset = _preset_for(task, deps)[0] if _mode(task) in ("relay", "split", "plan") else None
     return resume.stop_line(task, log.calls_for(conn, task_id), live=getattr(deps, "live", None), preset=preset)
+
+
+def _order_hold(conn, task_id, out):
+    """Brief 29 (decision 13): a piece of a project split takes no step while an earlier piece is neither done nor
+    skipped; checked before every step, here, since `sr check` steps every queued task. True when it held."""
+    row = log.get_task(conn, task_id)
+    holder = jsonview.order_holder(conn, row) if row is not None else None
+    if holder is None:
+        return False
+    plan = log.split_plan_of(log.get_task(conn, row["parent"]))
+    out(f"#{row['n']} {task_id} {split.order_words(plan, holder)}.")
+    return True
 
 
 def _steps(conn, task_id, deps, secrets, out):
     while True:
+        if _order_hold(conn, task_id, out):  # brief 29 (decision 13): beside the Grok hold, before any step
+            return 0
         code = _take_over(conn, task_id, deps, secrets, out)  # brief 24 (decision 6): before any stop is written
         if code is _TOOK:
             continue
@@ -1470,8 +2817,8 @@ def _steps(conn, task_id, deps, secrets, out):
             return code
         task = log.get_task(conn, task_id)
         calls = log.fallback_view(log.calls_for(conn, task_id))  # rules v2.17: the redo's rows after a fallback
-        if _mode(task) in ("relay", "split"):
-            stepper = _split_step if _mode(task) == "split" else _relay_step
+        if _mode(task) in ("relay", "split", "plan"):
+            stepper = _split_step if _mode(task) == "split" else _relay_step  # brief 33.1: a plan is a relay chain
             code = stepper(conn, task, calls, deps, secrets, out)
             if code is None:
                 continue
@@ -1511,12 +2858,15 @@ def _steps(conn, task_id, deps, secrets, out):
                                               hindsight=getattr(deps, "hindsight", None), reuse=reuse, kind=kind)
         if prompt is None:
             return record
+        prompt = filecalls.with_blocks(conn, task, kind, None, agent, prompt, secrets)  # brief 28 (decision 9)
         if agent == "grok" and kind in ("check", "recheck") and len(prompt) > settings.grok_prompt_limit()[0]:
             _skip_grok_check(conn, task, calls, len(prompt), deps, out)  # brief 24 (the owner's C11)
             continue
+        rounds.keep_prompt(conn, task_id, call_id, kind, agent, prompt, secrets)  # brief 29.1 (decision 22)
         code = SENDERS[agent](conn, task, call_id, kind, prompt, deps, secrets=secrets, out=out, web_search=web_search,
                               files=_delivery(task, step), searching=searching,
-                              limited=kind in ("check", "recheck"), context=record, memory=mem)  # rules v2.21: a fix round is exempt
+                              limited=kind in ("check", "recheck") or _from_limited(record, kind, call_id),  # rules v2.21:
+                              context=record, memory=mem)  # a fix round is exempt
         if code is not None:
             return code
 
@@ -1546,11 +2896,19 @@ def _take_over(conn, task_id, deps, secrets, out, own=False):
         if overdue is None:
             return None
         stopped, calls = overdue, [overdue if c["call_id"] == overdue["call_id"] else c for c in calls]
-    preset = _preset_for(task, deps)[0] if _mode(task) in ("relay", "split") else None
+    preset = _preset_for(task, deps)[0] if _mode(task) in ("relay", "split", "plan") else None
+    if overdue is not None and takeover._optional_stage(overdue, preset):  # brief 32 (decision 11): an optional Grok
+        with _hold_interrupts():  # stage still out at overdue is marked so, and the chain skips it; never taken over
+            if log.mark_overdue(conn, overdue["call_id"]):
+                log.set_grok_note(conn, task_id, None)
+                if log.get_task(conn, task_id)["status"] == "sent":
+                    log.set_open_status(conn, task_id, "queued")
+        return None
     roster, gate = getattr(deps, "roster", None), deps.available
     if hasattr(gate, "of"):
         gate.of(["claude", "chatgpt", "grok"], fresh=True)  # side by side, asked again: the stop came minutes later
-    table, skills, exclude = routing._table(gate, roster), roster.skills if roster is not None else {}, {}
+    table, exclude = routing._table(gate, roster), {}
+    skills = {**roster.skills, routing.FOLLOW_UP: routing.FOLLOW_UP_ROW} if roster is not None else {}  # brief 29.1
     while True:
         plan = takeover.decide(task, calls, stopped, available=table, skills=skills, preset=preset, exclude=exclude)
         if not plan.ok:
@@ -1560,8 +2918,9 @@ def _take_over(conn, task_id, deps, secrets, out, own=False):
         view = {**dict(task), "agent": plan.agent, "checker": plan.checker, "check_state": plan.check_state,
                 "check_note": plan.check_note}
         try:
-            prompt, web_search, files, searching = _resume_call(view, _before_stop(calls, stopped), plan, preset,
-                                                                getattr(deps, "claude_ready", None))
+            prompt, web_search, files, searching = _resume_call(
+                view, _before_stop(calls, stopped), plan, preset, getattr(deps, "claude_ready", None),
+                menu=_split_menu(task, deps) if _mode(task) == "split" else None)  # brief 29: the plan's TEAMS list
         except ValueError as e:  # the rows don't lead to the stopped call (never expected): the stop stands
             out(f"No takeover: {safety.one_line(str(e), secrets)}.")
             return None
@@ -1580,7 +2939,8 @@ def _take_over(conn, task_id, deps, secrets, out, own=False):
             if log.get_task(conn, task_id)["status"] == "sent":
                 log.set_open_status(conn, task_id, "queued")
     prompt, record, mem = _attach_context(conn, view, plan.to, prompt, secrets, out,
-                                          hindsight=getattr(deps, "hindsight", None), reuse=stopped, kind=plan.kind)
+                                          hindsight=getattr(deps, "hindsight", None), reuse=stopped, kind=plan.kind,
+                                          role=plan.role if plan.kind in log.STAGE_KINDS else None)  # brief 30: its own notes
     if prompt is None:
         return record
     with _hold_interrupts():
@@ -1594,9 +2954,12 @@ def _take_over(conn, task_id, deps, secrets, out, own=False):
             return 1
     out(_takeover_line(plan, task))
     stage_kind = plan.kind in log.STAGE_KINDS
+    rounds.keep_prompt(conn, task_id, plan.call_id, plan.kind, plan.to, prompt, secrets,  # brief 29.1 (decision 22)
+                       role=plan.role if stage_kind else None, stage=plan.stage if stage_kind else None, preset=preset)
     code = SENDERS[plan.to](conn, log.get_task(conn, task_id), plan.call_id, plan.kind, prompt, deps, secrets=secrets,
                             out=out, web_search=web_search, files=files, stage=plan.stage if stage_kind else None,
-                            role=plan.role if stage_kind else None, searching=searching, limited=False,
+                            role=plan.role if stage_kind else None, searching=searching,
+                            limited=_from_limited(record, plan.kind, plan.call_id),  # brief 33 (decision 11)
                             context=record, memory=mem, resume_of=stopped["call_id"])
     return _TOOK if code is None else code
 
@@ -1667,6 +3030,9 @@ def _before_stop(calls, stopped):
 def _takeover_line(plan, task):
     """Terminal's one line, the card's words: `ChatGPT took over the first call · Grok Bot was overdue · done without Meta`."""
     line = takeover.words(plan)
+    own = models.models_of(task).get(plan.to) if plan.to in models.AGENTS else None  # brief 33.3 (decision 4)
+    if own and (own.get("model") or own.get("effort")):
+        line += f" · {availability.name_of(plan.to)} on its own defaults, not the task's choice"
     extra = cardline.note(task, plan.to) if plan.kind in ("do", "fix") else None
     return f"{line} · {extra}" if extra else line
 
@@ -1713,6 +3079,12 @@ def _relay_step(conn, task, calls, deps, secrets, out):
         receipt.mark(out, code="stuck")
         out(f"#{task['n']} {task_id} can't go on: {problem}. It stays open; fix config/presets.json or cancel it.")
         return 1
+    found = _one_step_answer(task, calls)  # brief 33.1 (decision 6): read before the contract, as `## No split` is
+    if found is not None:
+        return _one_step(conn, task, found, out)
+    asked = _questions_answer(task, calls)  # brief 33.4 (decision 4): ends stage 1 as One step does
+    if asked is not None:
+        return _ask_questions(conn, task, asked, secrets, out)
     step = relay.next_stage(task, calls, preset)
     if step.action in ("check", "finish"):
         return _CHECK
@@ -1730,26 +3102,51 @@ def _relay_step(conn, task, calls, deps, secrets, out):
         return _wait_for_call(conn, task_id, step.call, deps, secrets, out)
     if step.action == "stop":
         return _stop_chain(conn, task, step, secrets, out, preset)
+    if step.action == "skip":  # brief 32 (decision 11): the optional stage is skipped; the chain goes on without its list
+        with _hold_interrupts():
+            log.mark_skipped(conn, step.call["call_id"])
+        out(f"Second attack skipped: {safety.for_terminal(step.reason, secrets)}")
+        return None
+    if (step.agent or step.stage.agent) == "grok":  # rules v2.19, brief 29: at most one piece of a split out with Grok
+        holder = _grok_holder(conn, task)
+        if holder is not None:
+            out(f"#{task['n']} {task_id} {split.held_words(holder)}.")
+            return 0
     return _send_stage(conn, task, step, deps, secrets, out)
 
 
 def _send_stage(conn, task, step, deps, secrets, out):
     """Send a stage or its re-ask to the stage's agent. Returns None to go round again, or an exit code."""
     stage, agent = step.stage, step.agent or step.stage.agent
+    if (getattr(deps, "inject_questions", False) and _mode(task) == "plan" and stage.role == plan_mod.PLAN_ROLE
+            and step.action == "stage" and plan_mod.may_ask(plan_mod.record_of(task))):
+        with _hold_interrupts():  # brief 33.4 (decision 17): three fixed questions in place of the model call
+            log.add_call(conn, step.call_id, task["task_id"], "stage", agent, status="done",
+                         text=plan_mod.INJECTED_QUESTIONS, stage=step.n, role=stage.role)
+        return None
     if step.action == "reask":
         out(f"Stage {step.n} ({stage.role} by {agent}) missed its contract; re-asked once for: "
             + "; ".join(step.missing) + ".")
-    prompt, kind, web_search, searching = _stage_call(task, step, _ready_once(deps))
+    menu = _split_menu(task, deps) if stage.role == split.PLAN_ROLE else None  # brief 29: the TEAMS list it is sent
+    prompt, kind, web_search, searching = _stage_call(task, step, _ready_once(deps), menu=menu)
     reuse = None
     if step.action == "reask":  # rules v2.27: a re-ask gets the block its first row got
         reuse = relay.stage_rows(log.fallback_view(log.calls_for(conn, task["task_id"])), step.n)[0]
     prompt, record, mem = _attach_context(conn, task, agent, prompt, secrets, out,
-                                          hindsight=getattr(deps, "hindsight", None), reuse=reuse, kind=kind)
+                                          hindsight=getattr(deps, "hindsight", None), reuse=reuse, kind=kind,
+                                          role=stage.role)  # brief 30: a review or attack judges; a split's plan plans
     if prompt is None:
         return record
+    if versusfiles.active(task):  # brief 29.1 (decision 9): each stage works in, or judges, one candidate's copy
+        prompt = versusfiles.with_blocks(conn, task, _versus_preset(task, deps), step.n, agent, prompt, secrets)
+    else:
+        prompt = filecalls.with_blocks(conn, task, kind, stage.role, agent, prompt, secrets)  # brief 28 (decision 9)
+    rounds.keep_prompt(conn, task["task_id"], step.call_id, kind, agent, prompt, secrets, role=stage.role,
+                       stage=step.n, preset=_preset_for(task, deps)[0])  # brief 30: every call's prompt is kept
     return SENDERS[agent](conn, task, step.call_id, kind, prompt, deps, secrets=secrets, out=out,
                           web_search=web_search, files=(), stage=step.n, role=stage.role, searching=searching,
-                          limited=step.action == "stage" and step.prior is not None, context=record, memory=mem)
+                          limited=(step.action == "stage" and step.prior is not None) or _from_limited(record, kind, step.call_id),
+                          context=record, memory=mem)
 
 
 # ---------- split (rules v2.18, build brief 11) ----------
@@ -1761,7 +3158,7 @@ def _split_step(conn, task, calls, deps, secrets, out):
     line = _no_split_answer(task, calls)
     if line is not None:
         return _no_split(conn, task, line, out)
-    step = relay.next_stage(task, calls, split.PRESET)
+    step = relay.next_stage(task, calls, split.PRESET, checks=_split_checks(task, deps))
     if step.action in ("check", "finish"):
         return _CHECK
     if step.action == "stop":
@@ -1783,9 +3180,35 @@ def _split_step(conn, task, calls, deps, secrets, out):
     return _send_stage(conn, task, step, deps, secrets, out)
 
 
+def _split_menu(task, deps):
+    """Brief 29 (decisions 4 and 6): the teams a piece of this split may take now, from config/presets.json and this
+    command's availability (its gate; without one, the live flags), only the project's teams on a project split."""
+    loaded = getattr(deps, "presets", None) or _presets_quietly()
+    roster = getattr(deps, "roster", None) or load_roster(send_paths=tuple(SENDERS))
+    return teams.menu(loaded, roster, getattr(deps, "available", None), project=bool(log.project_of(task)),
+                      send_paths=tuple(SENDERS))
+
+
+def _split_checks(task, deps):
+    """The planner's contract with the menu its answer is read against (decision 5): before the plan is stored, the
+    menu as it stands now (this command's, which sent the call); once stored, the names stored with it
+    (split.stored_checks)."""
+    stored = split.stored_checks(task)
+    if stored is not None or _mode(task) != "split":
+        return stored
+    return {split.PLAN_ROLE: functools.partial(split.split_plan, menu=teams.names(_split_menu(task, deps)))}
+
+
+def _plan_project_paragraph(task, agent):
+    """The planner's one added paragraph on a project split (decision 13): the copy's when Claude plans in it (file
+    mode), else the handoff-only line (ChatGPT never runs in a copy)."""
+    name = log.project_of(task)
+    return split.project_paragraph(name, filecalls.active(task) and agent == "claude") if name else None
+
+
 def _grok_holder(conn, task):
     """The piece of the same split that is out with Grok, or None (also None for any task that is not a piece)."""
-    if _mode(task) != "piece":
+    if not log.is_piece(task):  # brief 29: a piece of any team
         return None
     parent = log.get_task(conn, task["parent"])
     plan = log.split_plan_of(parent) if parent is not None else None
@@ -1795,13 +3218,23 @@ def _grok_holder(conn, task):
                              lambda tid: log.calls_for(conn, tid), plan)
 
 
-def _held_by(conn, row):
+def _held_text(conn, row):
+    """How a queued piece that waits reads (brief 29): `waits for piece <k>` when an earlier piece of its project split
+    isn't done (the order hold), `queued (after #n with grok)` when its next call waits for another piece's Grok call;
+    None when nothing holds it."""
+    holder = jsonview.order_holder(conn, row)
+    if holder is not None:
+        return split.order_words(log.split_plan_of(log.get_task(conn, row["parent"])), holder)
+    holder = _held_by(conn, row)
+    return split.held_words(holder) if holder is not None else None
+
+
+def _held_by(conn, row, loaded=None):
     """The piece a queued piece waits for, when its next call would go to Grok (E2, E3); else None."""
-    if _mode(row) != "piece" or row["status"] != "queued":
+    if not log.is_piece(row) or row["status"] != "queued":
         return None
-    step = checking.next_step(row, log.fallback_view(log.calls_for(conn, row["task_id"])))
-    agent = row["agent"] if step.action in ("do", "fix") else (row["checker"] if step.action in ("check", "recheck")
-                                                               else None)
+    agent = split.next_agent(row, log.fallback_view(log.calls_for(conn, row["task_id"])),
+                             loaded if loaded is not None else _presets_quietly())
     return _grok_holder(conn, row) if agent == "grok" else None
 
 
@@ -1827,13 +3260,223 @@ def _no_split(conn, task, line, out):
             receipt.mark(out, code="state_changed")
             out(f"{task['task_id']} is already {_status_text(log.get_task(conn, task['task_id']))}.")
             return 1
+    _drop_split_copy(conn, task["task_id"], out)  # brief 29 (decision 12): no piece will build in it
     for text in _no_split_lines(task, line):
         out(text)
     return 1
 
 
+def _drop_split_copy(conn, task_id, out):
+    """Brief 29 (decision 12): a project split whose plan will never run (rejected, answered `## No split`, stopped
+    before it was stored, cancelled) has its copy removed; the folder is as it was."""
+    if filecalls.active(log.get_task(conn, task_id)):
+        filecalls.remove_copy(conn, task_id)
+        out("Its copy of the project is removed; the folder is as it was.")
+
+
 def _no_split_lines(task, line):
     return [f"No split: {safety.for_terminal(line)}", f"Route it instead: sr route {shlex.quote(task['task'])}"]
+
+
+# ---------- the plan (rules 2.47, build brief 33.1) ----------
+
+def _one_step_answer(task, calls):
+    """Brief 33.1 (decision 6): the planner's `## One step` (why, task, team), read before the contract on stage 1's
+    latest answer while a plan task is open; else None."""
+    if _mode(task) != "plan" or task["status"] not in ("queued", "sent"):
+        return None
+    if plan_mod.inherited_of(plan_mod.record_of(task)) is not None:  # brief 33.2 (decision 9): never on a revision
+        return None
+    first, reask, _ = relay.stage_rows(log.fallback_view(calls), 1)
+    latest = reask if reask is not None else first
+    if latest is None or latest["status"] != "done":
+        return None
+    return plan_mod.one_step_of(latest["text"], (plan_mod.record_of(task) or {}).get("menu"))
+
+
+def _questions_answer(task, calls):
+    """Brief 33.4 (decision 4): the planner's questions, read as `## One step` is, on stage 1's latest answer while a new
+    plan with no answers yet is open; else None."""
+    if _mode(task) != "plan" or task["status"] not in ("queued", "sent"):
+        return None
+    record = plan_mod.record_of(task)
+    if not plan_mod.may_ask(record):  # decisions 2b and 3: a revision, and the call that carries the answers, never ask
+        return None
+    first, reask, _ = relay.stage_rows(log.fallback_view(calls), 1)
+    latest = reask if reask is not None else first
+    if latest is None or latest["status"] != "done":
+        return None
+    return plan_mod.questions_of(latest["text"], (record or {}).get("menu"))
+
+
+def _ask_questions(conn, task, found, secrets, out):
+    """Brief 33.4 (decisions 3 to 5): the plan waits for the owner's answers: nothing attacked or checked, its copy kept, no
+    entry. Terminal prints the questions and the exact command, and never prompts. Exit 0."""
+    record = {**(plan_mod.record_of(task) or {}), "questions": found}
+    with _hold_interrupts():
+        try:
+            log.set_plan(conn, task["task_id"], record)
+            log.set_awaiting_answers(conn, task["task_id"])
+        except log.StateError:
+            receipt.mark(out, code="state_changed")
+            out(f"{task['task_id']} is already {_status_text(log.get_task(conn, task['task_id']))}.")
+            return 1
+    for line in plan_mod.question_lines(task, record, secrets):
+        out(line)
+    return 0
+
+
+def _one_step(conn, task, found, out):
+    """`## One step` is an answer, as a split's `## No split` is: the plan task ends `failed` at stage 1 with
+    `one step: <why>`, nothing attacked, its copy removed, no handoff entry. Its card offers Build it."""
+    with _hold_interrupts():
+        try:
+            log.set_failed(conn, task["task_id"], f"{plan_mod.ONE_STEP_REASON}{found['why']}", failed_stage=1)
+        except log.StateError:
+            receipt.mark(out, code="state_changed")
+            out(f"{task['task_id']} is already {_status_text(log.get_task(conn, task['task_id']))}.")
+            return 1
+    if filecalls.active(log.get_task(conn, task["task_id"])):
+        filecalls.remove_copy(conn, task["task_id"])
+    out(f"One step: {safety.for_terminal(found['why'])}")
+    out(f"Build it: {plan_mod.build_it_command(task, found)}")
+    return 1
+
+
+def _tick_delivered(conn, task_id, out):
+    """Brief 33.1 (decision 14): a step task delivered with no change is done; the router ticks it in its own commit,
+    docs/PLAN.md alone, under the project's lock, by the same rules as a land's (uncommitted edits or a link: left out,
+    and said; an outside commit: written over, and said). The tick counts whatever the commit does: it is derived."""
+    row = log.get_task(conn, task_id)
+    step = plan_mod.step_of(row) if row is not None else None
+    if not step or not plan_mod.step_done(conn, row) or plan_mod.landed(row):
+        return None
+    plan_row = log.get_task(conn, step["plan"])
+    folder = projects.folder_of(log.project_of(row))
+    if plan_row is None or folder is None:
+        return None
+    why = plan_mod.no_longer_current(conn, plan_row)
+    if why:
+        note = plan_mod.note_of("dirty", f"{why}, so docs/PLAN.md was left as it is", kind="tick")
+    else:
+        case, words = plan_mod.folder_case(folder, plan_mod.record_of(plan_row))
+        note = plan_mod.note_of(case, words, kind="tick")
+        if case not in ("dirty", "link"):
+            text = plan_mod.rendered(conn, plan_row)
+            message = f"sr: step {step['step']} of plan #{plan_row['n']} done ({task_id})"
+            try:
+                with _project_lock(row["project"], task_id=task_id, conn=conn), _hold_interrupts():
+                    done = landing.commit_files(conn, folder, {plan_mod.FILE: text.encode("utf-8")}, message,
+                                                journal_dir=_journal_dir(), task_id=task_id)
+                    found = gitops.blob_at(done.folder, done.commit, plan_mod.FILE)
+                    if found is not None:
+                        plan_mod.add_write(conn, plan_row, blob=found[1], commit=done.commit, task_id=task_id,
+                                           kind="tick")
+            except (landing.Refused, landing.Partial, gitops.GitError) as e:
+                note = plan_mod.note_of("dirty", f"docs/PLAN.md not updated: {safety.one_line(e)}", kind="tick")
+            else:
+                out(f"Step {step['step']} of plan #{plan_row['n']} is done: docs/PLAN.md ticked as {done.short}.")
+    if log.project_files_of(row):
+        log.update_project_files(conn, task_id, plan_md=note)
+    if note.get("why"):
+        out(note["why"] + ".")
+    return note
+
+
+def _plan_written(conn, row, out):
+    """Brief 33.1 (decision 9): when a plan's check ends (passed, fixed, unchecked or failed twice), the router keeps the
+    plan on the task row and writes docs/PLAN.md into the task's copy from it, so the plan waits to land like any file-mode
+    change (Approve is Land, Reject is Discard). The task's tests record says a plan runs no tests."""
+    record = plan_mod.record_of(row) or plan_mod.new_record([])
+    parsed, missing = plan_mod.read(row["result"] or "", record.get("menu"), one_step=False,
+                                    examples=plan_mod.example_labels(record),  # brief 33.2 (decision 6): the covers
+                                    revision=plan_mod.inherited_of(record))  # (decision 9): the steps after the done ones
+    if missing or not parsed.steps:  # every plan result met the contract; this is only a guard
+        out(f"docs/PLAN.md not written: the plan can't be read ({'; '.join(missing)[:200]}).")
+        return None
+    record = plan_mod.with_plan(record, parsed)
+    found = plan_mod.write_into_copy(conn, row, record)
+    out(f"docs/PLAN.md written into the copy: {len(parsed.steps)} step{'' if len(parsed.steps) == 1 else 's'}. "
+        f"Approve lands it (sr land {row['n']}); Reject drops it (sr discard {row['n']}); "
+        f"sr plan --edit {row['n']} --step <k> changes a step first.")
+    return found
+
+
+def _get_idea(task):
+    try:
+        return task["idea"]
+    except (KeyError, IndexError):
+        return None
+
+
+def _plan_show_lines(conn, row, secrets):
+    """Brief 33.2 (decision 11): `sr show` on a plan task prints its steps, each ticked or open with the task that did it,
+    the inherited ones marked done; on a revision the plan it revises and the planner's `## Changed`."""
+    record = plan_mod.record_of(row) if plan_mod.is_plan(row) else None
+    if not record or not plan_mod.steps_of(record):
+        return []
+    done = plan_mod.ticks(conn, row)
+    d = plan_mod.inherited_of(record) or 0
+    lines = []
+    if record.get("revises"):
+        lines.append(f"Plan: revises #{record.get('revises_n')} · {d} step{'' if d == 1 else 's'} inherited")
+    for k, step in enumerate(plan_mod.steps_of(record), 1):
+        mark = "x" if k in done else " "
+        by = f" · done by #{done[k]['n']}" if k in done else ""
+        lines.append(f"  [{mark}] {k}. {safety.for_terminal(step.get('text') or '', secrets)} ({step.get('team') or '-'}){by}")
+    for item in record.get("changed") or []:
+        lines.append(f"Changed: step {item['step']}: {safety.for_terminal(item['why'], secrets)}")
+    return lines
+
+
+def _plan_menu(deps):
+    """The plan's menu as it stands now (decision 3): a project split's, without vote."""
+    loaded = getattr(deps, "presets", None) or _presets_quietly()
+    roster = getattr(deps, "roster", None) or load_roster(send_paths=tuple(SENDERS))
+    return plan_mod.menu(loaded, roster, getattr(deps, "available", None), send_paths=tuple(SENDERS))
+
+
+def _plan_facts(task):
+    """(lines, skeleton rule applies, has a test command) for the plan's prompts (decisions 3 and 5)."""
+    return plan_mod.test_facts(log.project_of(task), runs.FOLDER or (DB_PATH.parent / runs.FOLDER_NAME))
+
+
+def _plan_stage_call(task, step, ready):
+    """The prompt, kind, web-search setting and search state of a plan task's stage or re-ask (decisions 3 to 8):
+    the planner's prompt at stage 1, the attack on a plan, the plan's revise, and their re-asks with the plan's shape."""
+    stage = step.stage
+    kind = "reask" if step.action == "reask" else "stage"
+    agent = step.agent or stage.agent
+    searching = search.state(task, kind=kind, role=stage.role, agent=agent, files=(), ready=ready)
+    on = searching == search.ALLOWED
+    record = plan_mod.record_of(task) or {}
+    menu_text = record.get("menu_text") or ""
+    facts, skeleton, has_command = _plan_facts(task)
+    covers = bool(plan_mod.example_labels(record))  # brief 33.2 (decision 6): the spec the plan read has examples
+    revision = plan_mod.inherited_of(record)  # brief 33.2 (decision 9): d on a revision, None on a plan
+    idea = _get_idea(task) is not None  # brief 33.2 (decision 12): the keep-unless words on a revision from an idea
+    asks, answered = plan_mod.may_ask(record), bool(record.get("answers"))  # brief 33.4 (decisions 3 and 4)
+    lists = len(step.against) if isinstance(getattr(step, "against", None), tuple) else None
+    if step.action == "reask":
+        shape = (plan_mod.reask_shape(menu_text, one_step=True, covers=covers, revision=revision, idea=idea, questions=asks,
+                                      answered=answered) if stage.role == plan_mod.PLAN_ROLE
+                 else plan_mod.reask_shape(menu_text, one_step=False, labels=lists, covers=covers, revision=revision, idea=idea)
+                 if stage.role == "revise" else None)
+        prompt = relay.reask_prompt(stage.role, task["task"], checking.without_next(step.result), step.missing,
+                                    shape=shape, search=on)
+    elif stage.role == plan_mod.PLAN_ROLE:
+        prompt = plan_mod.planner_prompt(task["task"], name=log.project_of(task), menu_text=menu_text, facts=facts,
+                                         skeleton=skeleton, has_command=has_command, search=on, covers=covers,
+                                         revision=revision, idea=idea, questions=asks, answered=answered)
+    elif stage.role == "attack":
+        labels, examples = plan_mod.uncovered_of(step.prior, record)  # decision 6: the uncovered examples, named
+        prompt = plan_mod.attack_prompt(task["task"], step.prior, facts=facts, skeleton=skeleton, search=on,
+                                        uncovered=plan_mod.uncovered_line(labels, examples))
+    else:
+        prompt = plan_mod.revise_prompt(task["task"], step.prior, against=step.against, menu_text=menu_text,
+                                        facts=facts, skeleton=skeleton, has_command=has_command, search=on, covers=covers,
+                                        revision=revision, idea=idea)
+    return prompt, kind, "live" if on else "disabled", searching
 
 
 def _new_ids(conn, k):
@@ -1850,7 +3493,8 @@ def _plan_ready(conn, task, plan_text, deps, out):
     """Stage 1's accepted text met the contract: store the plan with a task id per piece and wait for
     the owner (`returned`, awaiting approval). No piece row is written here: only the approval writes one."""
     pieces, join = split.parse(plan_text)
-    plan = split.new_plan(pieces, join, _new_ids(conn, len(pieces)))
+    plan = split.new_plan(pieces, join, _new_ids(conn, len(pieces)), teams=split.parse_teams(plan_text),
+                          menu=teams.names(_split_menu(task, deps)))  # brief 29: each piece's team and why
     with _hold_interrupts():
         log.set_split_plan(conn, task["task_id"], plan)
         log.set_split_returned(conn, task["task_id"], log.AWAITING_APPROVAL)
@@ -1860,22 +3504,44 @@ def _plan_ready(conn, task, plan_text, deps, out):
     return 0
 
 
-def _piece_hint(conn, row):
-    """After `sr resume` or `sr fallback` on a piece: the line naming its split and how it goes on."""
-    if _mode(row) != "piece":
+def _go_on(conn, row, deps, secrets, out, *, environ, settings_paths):
+    """Brief 29 (decision 11): whatever ended a piece (its run, a resume, a pick, a skip, a fallback, a cancel) goes on
+    with its split in the same command, under the split's run: the next queued piece starts (the holds in _steps decide),
+    and when every piece is in, the join starts. First today's refusals (the billing switches and the setup) and Claude's
+    gate, as `sr split --go` runs them; when one refuses, what the command did stands and the split waits, with the
+    reason and `sr split --go <n>`. Never two joins: only the split's own run goes on. Returns an exit code, or None when
+    there was nothing to go on with."""
+    if row is None or not log.is_piece(row):
         return None
     parent = log.get_task(conn, row["parent"])
-    k = split.piece_index(log.split_plan_of(parent) or {"pieces": []}, row["task_id"])
-    return f"This is piece {k} of split #{parent['n']}: sr split --go {parent['n']} goes on."
+    if parent is None or not (parent["status"] == "returned"
+                              and (parent["check_note"] or "").startswith(log.WAITING_PIECES)):
+        return None
+    n = parent["n"]
+    problems = _refusals(getattr(deps, "config", None) or {}, environ or {}, settings_paths or ())
+    claude = deps.available("claude") if getattr(deps, "available", None) is not None else None
+    if problems or (claude is not None and not teams.split_ready(claude)[0]):
+        why = problems[0] if problems else claude.why
+        out(f"Split #{n} waits: {safety.one_line(why)}. When that is fixed: sr split --go {n}")
+        return None
+    with runs.held(conn, parent["task_id"]) as ok:
+        if not ok:
+            out(f"Split #{n} is running in another window; it goes on there.")
+            return None
+        if _run_pieces(conn, parent["task_id"], deps, secrets, out) == 130:
+            return 130
+        return _split_advance(conn, log.get_task(conn, parent["task_id"]), deps, secrets, out)
 
 
-def _piece_route(answer, roster, choice=None, available=None):
+def _piece_route(answer, roster, choice=None, available=None, tagged=False):
     """Where the skill table would send a piece, for the approval screen: `writing · claude / chatgpt`,
     `ask` when Jev is below the floor (asked at the yes), or why it would come back. `available` (brief 24): the preview's
     availability, the parts that run nothing."""
-    decision = routing.decide(answer, roster, answer=choice, can_ask=choice is None, available=available)
+    decision = routing.decide(answer, roster, answer=choice, can_ask=choice is None, available=available, tagged=tagged)
     if decision.action == "ask":
         return "ask"
+    if decision.skill == routing.FOLLOW_UP and decision.action == "send":  # brief 29.1 (decision 24)
+        return splitview.follow_up_words(decision)
     if decision.action == "return":
         return "comes back: " + decision.reason.removeprefix("returned: ")
     if decision.check_state == "not_needed":
@@ -1887,18 +3553,44 @@ def _piece_route(answer, roster, choice=None, available=None):
     return f"{decision.skill} · {decision.agent} / {check}"
 
 
-def _plan_screen(row, plan, roster, secrets, preview=None):
-    """The approval screen (brief 11, section 7): each piece's text as it would run, where it would go, and
-    the joining line. Text made safe to print. `preview` (brief 24): availability from what runs nothing."""
-    lines = [f"Task {row['n']} · split · plan", ""]
-    for k, piece in enumerate(plan["pieces"], 1):
-        text = safety.for_terminal(split.text_of(piece), secrets)
-        lines.append(f"{k}. {text}  → {_piece_route(piece['label'], roster, piece.get('choice'), preview)}")
-    lines += [f"Join: {safety.for_terminal(plan['join'], secrets)}", ""]
+def _plan_screen(conn, row, plan, deps, secrets):
+    """The approval screen (brief 29, decision 7): each piece's text, its team (marked when you changed it), the
+    planner's why, where it goes, Jev's label and the pick it will need; the joining line, the project line, the call
+    count and Jev's labels (router/splitview.py, which the JSON reads too). Text made safe to print."""
+    lines, _ = splitview.screen(row, plan, conn=conn, roster=deps.roster, loaded=getattr(deps, "presets", None),
+                                available=_preview(deps), send_paths=tuple(SENDERS), secrets=secrets,
+                                safe=lambda text: safety.for_terminal(text, secrets))
     return lines
 
 
-def _label_pieces(conn, task_id, plan, label):
+def _plan_refusal(conn, row, plan, deps):
+    """Brief 29 (decision 7): the first piece whose own command would refuse it now, as (k, code, reason), or None. The
+    one pure check (router/intake.py): no write, no copy, no Jev, no probe; availability as the preview reads it."""
+    project = log.project_of(row)
+    for k, piece in enumerate(plan["pieces"], 1):
+        found = intake.piece_refusal(piece, project=project, conn=conn, roster=deps.roster,
+                                     loaded=getattr(deps, "presets", None), available=_preview(deps),
+                                     send_paths=tuple(SENDERS))
+        if found is not None:
+            return (k, *found)
+    return None
+
+
+def _asks_skill(piece, roster, tagged=False):
+    """A route piece Jev left under the floor, with no skill chosen yet: it needs the owner's skill at the yes. A piece
+    of another team never does (decision 9): its label routes nothing. On a project split (`tagged`) a piece under the
+    0.4 floor is a follow-up (brief 29.1, decision 24), so it asks nothing either."""
+    return (split.team_of(piece) == teams.ROUTE and piece.get("choice") is None
+            and routing.decide(piece["label"], roster, can_ask=True, tagged=tagged).action == "ask")
+
+
+def _split_tagged(conn, task_id):
+    """Brief 29.1 (decision 24): a project split's pieces carry its project, so their labels are judged on the tagged
+    floor."""
+    return log.project_of(log.get_task(conn, task_id)) is not None
+
+
+def _label_pieces(conn, task_id, plan, label, roster=None):
     """Jev labels each piece that has no stored label yet (its one Jev call; an edit clears the label, so
     the edited text is labeled again). The call is seeded by the piece's own task id. Its tokens go on the
     split row (the owner's D2); the label is stored in the plan and reused when the piece runs."""
@@ -1906,34 +3598,135 @@ def _label_pieces(conn, task_id, plan, label):
         if piece["label"] is not None:
             continue
         with _hold_interrupts():
+            count = splitview.jev_labels(plan)
             answer = label(split.text_of(piece), task_id=piece["id"], tokens_this_month=log.jev_tokens_this_month(conn))
+            if roster is not None:  # brief 29.1 (decision 24): judged on the piece's own floor
+                answer = jev.judge(answer, roster, tagged=_split_tagged(conn, task_id))
             log.add_jev_tokens(conn, task_id, int(answer.get("tokens") or 0))
             piece["label"] = answer
+            plan["jev_labels"] = count + 1  # brief 29 (decision 7): the approval counts Jev's labels apart
             log.set_split_plan(conn, task_id, plan)
 
 
 def _edit_piece(conn, task_id, plan, deps, out):
-    """`e`: the owner edits one piece's text. The planner's text stays beside the edit; the edit is labeled
-    again by Jev. An edit that breaks a piece's rules (split.piece_problem) is not taken."""
+    """`e` (brief 29, decision 8): the owner picks a piece, then its new text (Enter keeps it), then its team (Enter keeps
+    it), and the change is the one `sr split --edit` makes (_apply_edit). Nothing changes on a refusal."""
     k = len(plan["pieces"])
     reply = (deps.ask(f"Edit which piece? [1-{k}] ") or "").strip()
     if not re.fullmatch(r"[0-9]+", reply) or not 1 <= int(reply) <= k:
         out(f"Not a piece number: {_one_line(reply, 20) or '(empty)'}. Nothing changed.")
         return
     i = int(reply)
-    text = safety.redact(deps.ask(f"New text for piece {i}: ") or "", _secrets(deps.config))  # brief 22 (decision 10)
-    why = split.piece_problem(text)
-    if why:
-        out(f"Not changed: the new text {why}.")
-        return
-    piece = plan["pieces"][i - 1]
-    if text == split.text_of(piece):
-        out(f"Not changed: piece {i} already reads that.")
-        return
-    piece.update(edited_text=None if text == piece["planner_text"] else text, label=None, choice=None)
+    text = deps.ask(f"New text for piece {i} (Enter keeps it): ") or ""
+    if not text.strip():
+        text = None  # Enter keeps the text
+    else:
+        why = split.piece_problem(safety.redact(text, _secrets(deps.config)))
+        if why:
+            out(f"Not changed: the new text {why}.")
+            return
+    names = teams.names(_split_menu(log.get_task(conn, task_id), deps))
+    current = split.team_of(plan["pieces"][i - 1])
+    team = (deps.ask(f"Team for piece {i} ({', '.join(names)}) [{current}]: ") or "").strip() or None
+    slots = []
+    loaded = getattr(deps, "presets", None) or _presets_quietly()
+    chosen = split.team_name(team) if team else current
+    if loaded is not None and chosen in loaded.presets:  # brief 29.1 (decision 12): each slot after the team; Enter keeps it
+        held = {} if chosen != current else (plan["pieces"][i - 1].get("slots") or {})
+        for slot in loaded.presets[chosen].slots:
+            allowed = [a for a in deps.roster.live if presets.slot_allowed(a, chosen, slot.name)]
+            now = held.get(slot.name, slot.default)
+            reply = (deps.ask(f"Slot {slot.name} for piece {i} ({', '.join(allowed)}) [{now}]: ") or "").strip()
+            if reply:
+                slots.append(f"{slot.name}={reply}")
+    found = _apply_edit(conn, log.get_task(conn, task_id), plan, i, text, team, deps, out, slots=slots or None)
+    if found is not None:
+        out(f"Not changed: {found[1]}.")
+
+
+def _slot_words(slots):
+    """[(slot, agent or None for its default)] from `--slot <slot>=<agent>` words, or (None, why)."""
+    found = []
+    for word in slots or ():
+        slot, eq, agent = str(word).partition("=")
+        if not eq or not slot.strip() or not agent.strip():
+            return None, f"a slot is given as <slot>=<agent> (not {safety.one_line(str(word))[:40]!r})"
+        found.append((slot.strip(), None if agent.strip() == "default" else agent.strip()))
+    return found, None
+
+
+def _apply_edit(conn, row, plan, k, text, team, deps, out, slots=None):
+    """Brief 29 (decision 8): change piece k's text and/or team on a plan that waits. A new text passes today's piece
+    rules (split.piece_problem), clears the label, and Jev labels it in this command (one call, its tokens on the split
+    row); the planner's text stays beside it. A new team must be on this split's menu now. Going back to the planner's
+    text or team reads as unedited. Returns None when done, or (reason_code, why) with nothing written."""
+    task_id, piece = row["task_id"], plan["pieces"][k - 1]
+    if text is not None:
+        text = safety.redact(text, _secrets(deps.config))  # brief 22 (decision 10): before it is stored
+        why = split.piece_problem(text)
+        if why:
+            return "bad_task", f"the new text {why}"
+    if team is not None:
+        team = split.team_name(team)
+        problem = teams.team_problem(team, _split_menu(row, deps))
+        if problem:
+            return "bad_preset", problem
+    changed_text = text is not None and text != split.text_of(piece)
+    changed_team = team is not None and team != split.team_of(piece)
+    new_slots, said_slots = None, []
+    if slots:  # brief 29.1 (decision 12): the owner's agents on a preset piece, as `sr relay <team> --<slot>` takes them
+        words, why = _slot_words(slots)
+        if why:
+            return "usage", why
+        after = team if changed_team else split.team_of(piece)
+        if after == teams.ROUTE:
+            return "slot_refused", f"piece {k} is a route piece: slots go on a preset's piece"
+        loaded = getattr(deps, "presets", None) or _presets_quietly()
+        defaults = {s.name: s.default for s in loaded.presets[after].slots} if loaded and after in loaded.presets else {}
+        new_slots = {} if changed_team else dict(piece.get("slots") or {})
+        for slot, agent in words:
+            if agent is None or agent == defaults.get(slot):
+                new_slots.pop(slot, None)
+                said_slots.append(f"slot {slot} is {defaults.get(slot, 'its default')} again (its default)")
+            else:
+                new_slots[slot] = agent
+                said_slots.append(f"slot {slot} is {agent} (you set it)")
+        trial = {**piece, "team": after, "slots": new_slots}
+        found = intake.piece_slots_refusal(trial, project=log.project_of(row), conn=conn, roster=deps.roster,
+                                           loaded=loaded, available=_preview(deps), send_paths=tuple(SENDERS))
+        if found:
+            return found
+    changed_slots = new_slots is not None and new_slots != (piece.get("slots") or {})
+    if not changed_text and not changed_team and not changed_slots:
+        out(f"Piece {k} already reads that; nothing changed.")
+        return None
+    if changed_text:
+        piece.update(edited_text=None if text == piece["planner_text"] else text, label=None, choice=None)
+    if changed_team:
+        planner = piece.get("planner_team") or teams.ROUTE
+        piece.update(team=team, team_source="planner" if team == planner else "owner")
+        piece.pop("slots", None)  # brief 29.1 (decision 12): a team change clears the owner's slots
+        if team != teams.ROUTE:
+            piece["choice"] = None  # a skill answered for a route piece routes nothing on another team
+    if new_slots is not None:
+        if new_slots:
+            piece["slots"] = new_slots
+        else:
+            piece.pop("slots", None)
     with _hold_interrupts():
         log.set_split_plan(conn, task_id, plan)
-    _label_pieces(conn, task_id, plan, deps.label)
+    if changed_text:
+        _label_pieces(conn, task_id, plan, deps.label, deps.roster)
+    said = []
+    if changed_text:
+        said.append("its text changed, labeled again by Jev" if piece.get("edited_text") is not None
+                    else "its text is the planner's again")
+    if changed_team:
+        said.append(f"its team is {team}" + (f" (you changed it from {piece['planner_team']})"
+                                             if piece.get("team_source") == "owner" else " (the planner's)"))
+    said += said_slots
+    out(f"Piece {k}: {'; '.join(said)}.")
+    return None
 
 
 def _approval(conn, row, deps, secrets, out):
@@ -1942,12 +3735,12 @@ def _approval(conn, row, deps, secrets, out):
     cancels the split with the plan kept; no answer at all leaves it waiting."""
     task_id, n = row["task_id"], row["n"]
     plan = log.split_plan_of(row)
-    _label_pieces(conn, task_id, plan, deps.label)
+    _label_pieces(conn, task_id, plan, deps.label, deps.roster)
     while True:
-        for line in _plan_screen(row, plan, deps.roster, secrets, _preview(deps)):
+        for line in _plan_screen(conn, row, plan, deps, secrets):
             out(line)
-        if deps.ask is None:
-            out(f"No terminal to ask in. Approve it in Terminal: sr split --go {n}")
+        if deps.ask is None:  # brief 29 (decision 3): the page, or Claude Code, answers by flag
+            out(f"The plan waits for your approval: sr split --go {n} --answer y|n")
             return 0
         try:
             reply = (deps.ask(f"Run these {len(plan['pieces'])} pieces? [y/N/e] ") or "").strip().lower()
@@ -1963,6 +3756,7 @@ def _approval(conn, row, deps, secrets, out):
         with _hold_interrupts():
             log.set_cancelled(conn, task_id, allowed_from=("returned",))
         out(f"Cancelled: no piece was made. The plan is kept: sr show {n}.")
+        _drop_split_copy(conn, task_id, out)  # brief 29 (decision 12)
         return 0
 
 
@@ -1972,21 +3766,22 @@ PIECE_SKILL = re.compile(r"([0-9]+)=([a-z_]+)")
 
 def _answer_plan(conn, row, deps, secrets, out, answer, skills):
     """Brief 22 (decisions 2 and 9; Phase 0 choice 9): `sr split --go <n> --answer y|n [--skill <k>=<key> ...]`, the
-    plan's y/N without a terminal. Editing a piece stays Terminal-only. A piece Jev left under the floor needs its
+    plan's y/N without a terminal. A piece is changed with `sr split --edit` (brief 29). A piece Jev left under the floor needs its
     `--skill`; without one `--answer y` is refused before any piece row (`needs_label`). `n` cancels with the plan kept."""
     task_id, n, roster = row["task_id"], row["n"], deps.roster
     word = (answer or "").strip().lower()
-    if word in ("e", "edit"):
+    if word in ("e", "edit"):  # brief 29 (decision 8): editing has its own command now
         receipt.mark(out, code="usage")
-        out(f"Refused: editing a piece is Terminal-only: run sr split --go {n} in Terminal. Nothing was logged or sent.")
+        out(f"Refused: --answer is y or n; to change a piece: sr split --edit {n} --piece <k> [--team <team>] [-- <text>]. "
+            "Nothing was logged or sent.")
         return 2
     if word not in drop.YES + NO_WORDS:
         receipt.mark(out, code="usage")
         out(f"Refused: --answer is y or n (sr split --go {n} --answer y). Nothing was logged or sent.")
         return 2
     plan = log.split_plan_of(row)
-    _label_pieces(conn, task_id, plan, deps.label)  # as the screen does: a piece without a label is labeled first
-    choices, problem = _piece_skills(plan, skills, roster)
+    _label_pieces(conn, task_id, plan, deps.label, roster)  # as the screen does: a piece without a label is labeled first
+    choices, problem = _piece_skills(plan, skills, roster, _split_tagged(conn, task_id))
     if problem is None and word in NO_WORDS and choices:
         problem = "--skill goes with --answer y"
     if problem is not None:
@@ -1997,23 +3792,24 @@ def _answer_plan(conn, row, deps, secrets, out, answer, skills):
         with _hold_interrupts():
             log.set_cancelled(conn, task_id, allowed_from=("returned",))
         out(f"Cancelled: no piece was made. The plan is kept: sr show {n}.")
+        _drop_split_copy(conn, task_id, out)  # brief 29 (decision 12)
         return 0
     under = [(k, piece) for k, piece in enumerate(plan["pieces"], 1)
-             if routing.decide(piece["label"], roster, can_ask=True).action == "ask" and k not in choices]
+             if _asks_skill(piece, roster, _split_tagged(conn, task_id)) and k not in choices]  # route pieces only
     if under:
         receipt.mark(out, code="needs_label")
         named = "; ".join(f"piece {k} ({_jev_text(piece['label'], roster).rstrip('.')})" for k, piece in under)
         add = " ".join(f"--skill {k}=<key>" for k, _ in under)
         out(f"Refused: Jev was unsure: {named}. Add {add} to approve. Nothing was logged or sent.")
         return 2
-    for line in _plan_screen(row, plan, roster, secrets, _preview(deps)):
+    for line in _plan_screen(conn, row, plan, deps, secrets):
         out(line)
     for k, key in choices.items():
         plan["pieces"][k - 1]["choice"] = key
     return _approve(conn, task_id, plan, deps, secrets, out)
 
 
-def _piece_skills(plan, skills, roster):
+def _piece_skills(plan, skills, roster, tagged=False):
     """({piece number: skill}, None) from `--skill <k>=<key>`, or (None, why not): each a piece of the plan Jev left under
     the floor, a skill in the table, once."""
     found = {}
@@ -2028,7 +3824,13 @@ def _piece_skills(plan, skills, roster):
             return None, f"no skill {key}. Skills: {', '.join(roster.skill_order)}"
         if k in found:
             return None, f"piece {k} is named twice"
-        if routing.decide(plan["pieces"][k - 1]["label"], roster, can_ask=True).action != "ask":
+        team = split.team_of(plan["pieces"][k - 1])
+        if team != teams.ROUTE:  # brief 29 (decision 8): a piece of another team's label routes nothing
+            return None, f"piece {k} runs as {team}, which names its own agents; --skill is for a route piece"
+        found_route = routing.decide(plan["pieces"][k - 1]["label"], roster, can_ask=True, tagged=tagged)
+        if found_route.skill == routing.FOLLOW_UP:  # brief 29.1 (decision 24): no skill question, so no skill to give
+            return None, f"piece {k} runs as a follow-up (Claude, with memory): there is no skill to give"
+        if found_route.action != "ask":
             return None, (f"piece {k} has Jev's label ({_jev_text(plan['pieces'][k - 1]['label'], roster).rstrip('.')});"
                           " --skill is for a piece Jev left under the floor")
         found[k] = key
@@ -2036,28 +3838,60 @@ def _piece_skills(plan, skills, roster):
 
 
 def _approve(conn, task_id, plan, deps, secrets, out):
-    """The owner said yes. A piece Jev labeled below the floor gets the skill question first, naming the piece.
-    Then, and only here, the piece rows: mode piece, parent the split, the approved text byte for byte,
-    Jev's stored label (its tokens already on the split row), routed by the skill table. The split then
-    waits for its pieces (`waiting: pieces #a, #b`)."""
+    """The owner said yes. Each piece passes its own command's intake first (brief 29, decision 7); a route piece Jev
+    labeled below the floor gets the skill question, naming the piece. Then, and only here, the piece rows, the approved
+    text byte for byte, the split's project: a route piece is mode piece with Jev's stored label (its tokens already on
+    the split row), routed by the skill table; a piece of another team is a relay task with the split as its parent, its
+    slots filled as at intake (decision 9). The split then waits for its pieces (`waiting: pieces #a, #b`)."""
     roster = deps.roster
+    refused = _plan_refusal(conn, log.get_task(conn, task_id), plan, deps)  # brief 29 (decision 7): before any row
+    if refused is not None:
+        k, code, reason = refused
+        receipt.mark(out, code=code)
+        out(f"Refused: piece {k} can't run: {safety.for_terminal(reason, secrets)}. No piece was made; the plan waits: "
+            f"sr split --go {log.get_task(conn, task_id)['n']}. Nothing was logged or sent.")
+        return 2
     for k, piece in enumerate(plan["pieces"], 1):
-        if routing.decide(piece["label"], roster, can_ask=True).action == "ask" and piece.get("choice") is None:
+        if _asks_skill(piece, roster, _split_tagged(conn, task_id)):  # brief 29: only a route piece asks
             out(f"Piece {k}: {_jev_text(piece['label'], roster)}")
             piece["choice"] = _ask_for_skill(deps.ask, roster, out)
-    numbers = []
+    numbers, project = [], log.project_of(log.get_task(conn, task_id))
+    copy = log.project_files_of(log.get_task(conn, task_id))  # brief 29 (decision 13): the split's copy, if any
+    copy = copy if filecalls.active(log.get_task(conn, task_id)) else None
+    fills = {k: _team_fill(piece, deps) for k, piece in enumerate(plan["pieces"], 1)
+             if split.team_of(piece) != teams.ROUTE}  # brief 29 (decision 9): each team's slots, filled as at intake
     with _hold_interrupts():
-        for piece in plan["pieces"]:
+        for k, piece in enumerate(plan["pieces"], 1):
+            if k in fills:  # a piece of another team: a relay task with a parent, its label kept in the plan
+                filled, filling = fills[k]
+                log.add_task(conn, piece["id"], split.text_of(piece), "split", {"status": "not_asked", "tokens": 0},
+                             mode="relay", preset=split.team_of(piece), parent=task_id, slots=presets.slot_map(filled),
+                             project=project)
+                log.set_route(conn, piece["id"], agents=roster.names, agent=filled.doer,
+                              route_reason=presets.fills_reason(filling), checker=filled.check_agent,
+                              check_state="pending")
+                if copy is not None:  # its build stages are Claude's (the approval's check): it builds in the copy
+                    log.set_project_files(conn, piece["id"], filecalls.piece_record(task_id, k, copy))
+                numbers.append(log.get_task(conn, piece["id"])["n"])
+                continue
             answer = {**piece["label"], "tokens": 0}
-            log.add_task(conn, piece["id"], split.text_of(piece), "split", answer, mode="piece", parent=task_id)
+            log.add_task(conn, piece["id"], split.text_of(piece), "split", answer, mode="piece", parent=task_id,
+                         project=project)  # brief 29: the split's project
             decision = routing.decide(answer, roster, answer=piece["choice"], can_ask=False,
                                       available=_routing_table(getattr(deps, "available", None), roster,
-                                                               piece["choice"] or answer.get("label")))
+                                                               piece["choice"] or answer.get("label")),
+                                      tagged=project is not None)
             if decision.action == "return":
                 log.set_returned(conn, piece["id"], decision.reason, reason_code=decision.code, skill=decision.skill,
                                  skill_source=decision.skill_source)
             else:
                 _set_route(conn, piece["id"], decision, roster)
+                if copy is not None:  # brief 29 (decision 13): Claude builds in the split's copy; another doer can't
+                    log.set_project_files(conn, piece["id"], filecalls.piece_record(task_id, k, copy)
+                                          if decision.agent == "claude" else
+                                          {"mode": "off", "owner": task_id, "state": "none", "copy": False,
+                                           "why": f"{availability.name_of(decision.agent)} can't change project files: "
+                                                  "its result is text the join uses"})
             numbers.append(log.get_task(conn, piece["id"])["n"])
         plan["approved"] = True
         log.set_split_plan(conn, task_id, plan)
@@ -2068,15 +3902,38 @@ def _approve(conn, task_id, plan, deps, secrets, out):
     return _split_advance(conn, log.get_task(conn, task_id), deps, secrets, out)
 
 
+def _team_fill(piece, deps):
+    """Brief 29 (decision 9): (filled preset, fills) for a piece of a team other than route, its slots as intake fills
+    them now (presets.fill_unavailable with this command's availability), no slot flag."""
+    loaded = getattr(deps, "presets", None) or _presets_quietly()
+    preset = loaded.presets[split.team_of(piece)]
+    flags = intake.piece_flags(piece)  # brief 29.1 (decision 12): the owner's slots on this piece, never refilled
+    table = _relay_table(getattr(deps, "available", None), preset, flags) or routing._table(None, deps.roster)
+    filled, fills, why = presets.fill_unavailable(preset, flags, deps.roster, table, send_paths=tuple(SENDERS),
+                                                  contracts=relay.CONTRACTS, roles=relay.ROLES, verdicts=relay.VERDICTS)
+    if filled is None:  # the approval's check refused this already; never expected here
+        raise ValueError(why)
+    return filled, fills
+
+
+def _piece_words(row):
+    """A piece's line when it starts: a route piece's skill and doer, or its team."""
+    if log.runs_preset(row):
+        return f"{row['preset']} · {row['agent']} builds"
+    return f"{row['skill'] or '-'} -> {row['agent']}"
+
+
 def _run_pieces(conn, task_id, deps, secrets, out):
-    """Each open piece, one after another in plan order, through the usual routed loop (rules v2.18): its own
-    doer, check and fix round. A Grok piece that isn't waited for (D5) leaves the next piece free to start.
-    A Ctrl+C stops here (130); the pieces not yet run stay queued for `sr check`."""
+    """Each open piece, one after another in plan order (rules v2.18, 2.41 D16): a route piece through the usual routed
+    loop (its own doer, check and fix round), a piece of another team through its preset's chain, as `sr relay <team>`
+    runs it (brief 29, decision 9). A Grok piece that isn't waited for (D5), or a versus or vote piece waiting for the
+    owner's pick (decision 10), leaves the next piece free to start. A Ctrl+C stops here (130); the pieces not yet run
+    stay queued for `sr check`."""
     rows = log.pieces_of(conn, task_id)
     for k, row in enumerate(rows, 1):
         if row["status"] not in ("queued", "sent"):
             continue
-        out(f"Piece {k} of {len(rows)}: #{row['n']} {row['task_id']} · {row['skill'] or '-'} -> {row['agent']}")
+        out(f"Piece {k} of {len(rows)}: #{row['n']} {row['task_id']} · {_piece_words(row)}")
         with runs.held(conn, row["task_id"]) as ok:  # brief 22 (decision 4): the piece's own run, cleared when it ends
             if not ok:
                 out(f"#{row['n']} {row['task_id']} is running in another window; not run here.")
@@ -2098,11 +3955,11 @@ def _split_advance(conn, row, deps, secrets, out):
     states, lines, blocked = [], [], []
     for k, piece in enumerate(plan["pieces"], 1):
         r = by_id.get(piece["id"])
-        state, words = ("skipped", None) if piece["skipped"] else split.piece_state(r)
+        state, words = ("skipped", None) if piece["skipped"] else split.piece_state(r, log.calls_for(conn, r["task_id"]))
         states.append(state)
-        holder = _held_by(conn, r) if state == "waiting" else None
-        if holder is not None:
-            lines.append(f"  piece {k} #{r['n']}: {split.held_words(holder)}")
+        held = _held_text(conn, r) if state == "waiting" else None
+        if held is not None:
+            lines.append(f"  piece {k} #{r['n']}: {held}")
         else:
             lines.append(f"  piece {k} #{r['n']}: {state}" + (f" ({words})" if state == "waiting" else "")
                          + (f": {words}" if state == "blocked" else ""))
@@ -2134,7 +3991,8 @@ def _split_advance(conn, row, deps, secrets, out):
 @_releases_its_runs
 def cmd_split_skip(words, *, conn, config, roster, environ, settings_paths, label=None, ask=None, post=None,
                    worker=None, chatgpt=None, codex_login=None, fetch=None, close=None, sleep=None, clock=None,
-                   wait=False, claude_ready=None, hindsight=None, available=None, chatgpt_ready=None, out=print):
+                   wait=False, claude_ready=None, hindsight=None, available=None, chatgpt_ready=None, loaded=None,
+                   cursor=None, cursor_ready=None, out=print):
     """`sr split --skip <piece>` (rules v2.18): the owner tells a split to go on without one piece. The piece row is
     untouched; the plan marks it skipped, and the integration prompt says it is missing. Refused: not a piece,
     a split not waiting for its pieces, a piece already skipped or delivered, the last piece not skipped."""
@@ -2150,7 +4008,7 @@ def cmd_split_skip(words, *, conn, config, roster, environ, settings_paths, labe
     row = _task_target(conn, words, out, "split --skip")
     if row is None:
         return 2
-    if _mode(row) != "piece":
+    if not log.is_piece(row):  # brief 29: a piece of any team
         receipt.mark(out, code="wrong_state")
         out(f"Refused: #{row['n']} is not a piece of a split. Nothing was logged or sent.")
         return 2
@@ -2177,13 +4035,29 @@ def cmd_split_skip(words, *, conn, config, roster, environ, settings_paths, labe
         receipt.mark(out, code="wrong_state")
         out("Refused: at least one piece must be delivered for the split to join anything. Nothing was logged or sent.")
         return 2
+    if not _take_run(conn, row, out, "be skipped"):  # brief 29 (decision 14): never under a running call
+        return 2
+    found = filecalls.record(row)
+    if filecalls.is_piece(row) and (found or {}).get("mode") == "on":  # brief 29 (decision 14): its edits go first
+        owner, start = filecalls.copy_id(row), found.get("start")
+        if start and copies.has_snapshot(owner, start):  # a piece that never started has none: nothing to put back
+            copies.restore(owner, start)
+            out(f"Files: the copy is back as it was before piece {k}; its changes are gone.")
+        with _hold_interrupts():
+            log.update_project_files(conn, row["task_id"], changed=[], diff=None, latest=None)
     piece["skipped"] = True
     with _hold_interrupts():
         log.set_split_plan(conn, parent["task_id"], plan)
     out(f"Skipped piece {k} (#{row['n']}) of split #{parent['n']}: the integration will say it is missing.")
     deps = _split_deps(config, roster, label=label, ask=ask, post=post, worker=worker, chatgpt=chatgpt,
                        codex_login=codex_login, fetch=fetch, close=close, sleep=sleep, clock=clock, wait=wait,
-                       claude_ready=claude_ready, hindsight=hindsight, available=available, chatgpt_ready=chatgpt_ready)
+                       claude_ready=claude_ready, hindsight=hindsight, available=available, chatgpt_ready=chatgpt_ready,
+                       loaded=loaded, cursor=cursor, cursor_ready=cursor_ready)
+    if available is not None and not teams.split_ready(available("claude"))[0]:  # brief 29 (decision 11)
+        out(f"Split #{parent['n']} waits: {available('claude').why}. When that is fixed: sr split --go {parent['n']}")
+        return 0
+    if _run_pieces(conn, parent["task_id"], deps, _secrets(config), out) == 130:  # brief 29: the next piece starts
+        return 130
     return _split_advance(conn, log.get_task(conn, parent["task_id"]), deps, _secrets(config), out)
 
 
@@ -2212,9 +4086,14 @@ def preview_availability(roster, config):
 
 
 def _split_deps(config, roster, *, label, ask, post, worker, chatgpt, codex_login, fetch, close, sleep, clock, wait,
-                claude_ready, hindsight=None, available=None, chatgpt_ready=None):
+                claude_ready, hindsight=None, available=None, chatgpt_ready=None, loaded=None, cursor=None,
+                cursor_ready=None):
+    # brief 29.1 (D's issue D6): Cursor's worker and its readiness check, as route and relay hand them, so a piece
+    # with Cursor in a slot reaches Cursor (`_send_cursor` asks the check once per command, kept in cursor_ok)
     return SimpleNamespace(config=config, post=post, worker=worker, chatgpt=chatgpt, codex_login=codex_login,
-                           codex_ok=None, fetch=fetch, close=close, sleep=sleep, clock=clock, wait=wait, presets=None,
+                           codex_ok=None, cursor=cursor, cursor_ready=cursor_ready, cursor_ok=None, fetch=fetch,
+                           close=close, sleep=sleep, clock=clock, wait=wait,
+                           presets=loaded or _presets_quietly(),  # brief 29: the menu, and each team piece's preset
                            live=roster.live, claude_ready=claude_ready, label=label, ask=ask, roster=roster,
                            hindsight=hindsight, available=available, chatgpt_ready=chatgpt_ready)
 
@@ -2222,7 +4101,8 @@ def _split_deps(config, roster, *, label, ask, post, worker, chatgpt, codex_logi
 @_releases_its_runs
 def cmd_split(task, *, conn, config, roster, environ, settings_paths, label, ask, post, worker, chatgpt=None,
               codex_login=None, fetch=None, close=None, sleep=None, clock=None, wait=False, source="cli", files=(),
-              preset=None, claude_ready=None, hindsight=None, available=None, chatgpt_ready=None, out=print):
+              preset=None, claude_ready=None, hindsight=None, available=None, chatgpt_ready=None, loaded=None,
+              project=None, files_ready=None, cursor=None, cursor_ready=None, model_flags=(), effort_flags=(), out=print):
     """`sr split "task"` (rules v2.18): Claude plans 2 to 4 standalone pieces and a joining line; the owner
     approves the plan (y/N/e); each piece runs as its own routed task. Refused before any log row: a file, a
     preset, an override prefix, an empty task, a task starting with /. Jev is never asked about the split
@@ -2240,7 +4120,11 @@ def cmd_split(task, *, conn, config, roster, environ, settings_paths, label, ask
     if problems:
         _refuse_problems(out, problems, config, environ, settings_paths)
         return 2
-    if _claude_refusal(available, out):  # brief 24 (decision 2): Claude plans and joins every split
+    if available is not None and not teams.split_ready(available("claude"))[0]:  # brief 29 (decision 2): status's own
+        _claude_refusal(available, out)  # reading; the refusal's words and code as brief 24 gave them
+        return 2
+    kept_notes = _notes_at_intake(config, out)  # brief 30 (decision 4): read once, before any row; the pieces use it
+    if kept_notes is None:
         return 2
     tag, clean = routing.parse_override(task, roster.names)
     clean = safety.redact(clean, _secrets(config))  # brief 22 (decision 10): before the row
@@ -2261,21 +4145,39 @@ def cmd_split(task, *, conn, config, roster, environ, settings_paths, label, ask
         receipt.mark(out, code="not_live")
         out(f"Refused: a split needs {split.PLANNER} live. Nothing was logged or sent.")
         return 2
+    if project is not None:  # brief 29 (decision 12): taken as `sr route --project` is, every refusal before any row
+        refused = _project_refusal(conn, project)
+        if refused:
+            receipt.mark(out, code=refused[0])
+            out(f"Refused: {refused[1]}. Nothing was logged or sent.")
+            return 2
+    kept_spec = _spec_at_intake(project, config, out)  # brief 33.2 (decision 2): the split's copy, its pieces' too
+    if kept_spec is False:
+        return 2
+    choices = _model_choices(model_flags, effort_flags, _split_models_allowed, out)  # brief 33.3 (decision 4)
+    if choices is False:
+        return 2
     checker, state, note = _split_checker(available, roster)  # brief 24 (decision 4)
     task_id = ids.new_task_id()
     receipt.mark(out, task_id=task_id)
     secrets = _secrets(config)
     deps = _split_deps(config, roster, label=label, ask=ask, post=post, worker=worker, chatgpt=chatgpt,
                        codex_login=codex_login, fetch=fetch, close=close, sleep=sleep, clock=clock, wait=wait,
-                       claude_ready=claude_ready, hindsight=hindsight, available=available, chatgpt_ready=chatgpt_ready)
+                       claude_ready=claude_ready, hindsight=hindsight, available=available, chatgpt_ready=chatgpt_ready,
+                       loaded=loaded, cursor=cursor, cursor_ready=cursor_ready)
     with _hold_interrupts():  # the row is written whole, with its route, before anything is sent
-        log.add_task(conn, task_id, clean, source, {"status": "not_asked", "tokens": 0}, mode="split", run=runs.me())
+        log.add_task(conn, task_id, clean, source, {"status": "not_asked", "tokens": 0}, mode="split", run=runs.me(),
+                     project=project, models=choices or None)  # brief 33.3: the plan's and the join's choice
         runs.adopt(task_id)  # brief 22 (decision 4): born with its run
+        _keep_notes(conn, task_id, kept_notes, out)  # brief 30 (decision 4): the split's copy, its pieces' too
+        _keep_spec(conn, task_id, kept_spec, out)  # brief 33.2 (decision 2.1): the split's copy, its pieces' too
         log.set_route(conn, task_id, agents=roster.names, agent=split.PLANNER, route_reason="split",
                       checker=checker, check_state=state, check_note=note)
     joined = f"{split.CHECKER} checks" if checker else f"unchecked: {note}"
-    out(f"{task_id}: split: {split.PLANNER} plans 2 to 4 pieces; you approve them; each runs as its own routed "
-        f"task; {split.PLANNER} joins the results; {joined}.")
+    out(f"{task_id}: split: {split.PLANNER} plans 2 to 4 pieces, each with its team; you approve them; they run one "
+        f"at a time; {split.PLANNER} joins the results; {joined}.")  # brief 29: a team per piece
+    if project is not None:  # brief 29 (decision 12): file mode decided at intake, with Claude (the planner) as the agent;
+        _file_mode_start(conn, task_id, project, split.PLANNER, files_ready, out)  # the copy is the split's own
     code = run_relay(conn, task_id, deps, secrets, out)
     row = log.get_task(conn, task_id)
     if row["status"] == "returned" and row["check_note"] == log.AWAITING_APPROVAL:
@@ -2284,9 +4186,62 @@ def cmd_split(task, *, conn, config, roster, environ, settings_paths, label, ask
 
 
 @_releases_its_runs
+def cmd_split_edit(words, *, piece, team=None, text=None, slots=None, conn, config, roster, environ, settings_paths, label,
+                   ask=None,
+                   post=None, worker=None, chatgpt=None, codex_login=None, fetch=None, close=None, sleep=None, clock=None,
+                   wait=False, claude_ready=None, hindsight=None, available=None, chatgpt_ready=None, loaded=None,
+                   cursor=None, cursor_ready=None, out=print):
+    """`sr split --edit <n> --piece <k> [--team <team>] [-- <text>]` (brief 29, decision 8): change one piece of a plan
+    that waits, with `--json` as every action. It takes the split's run, as `--go` does, so an edit and an approval
+    never write the plan at once. Refusals write nothing: `wrong_state` (not at its plan, or another process holds it),
+    `bad_task` (the text), `bad_preset` (a team not on this split's menu), `usage`."""
+    problems = _refusals(config, environ, settings_paths)
+    if problems:
+        _refuse_problems(out, problems, config, environ, settings_paths)
+        return 2
+    row = _task_target(conn, words, out, "split --edit")
+    if row is None:
+        return 2
+    if _mode(row) != "split":
+        receipt.mark(out, code="wrong_state")
+        out(f"Refused: #{row['n']} is not a split task. Nothing was logged or sent.")
+        return 2
+    if not _take_run(conn, row, out, "be edited"):
+        return 2
+    if not (row["status"] == "returned" and row["check_note"] == log.AWAITING_APPROVAL):
+        receipt.mark(out, code="wrong_state")
+        out(f"Refused: #{row['n']} isn't waiting at its plan (it is {_status_word(row)}); a piece changes only before "
+            "the approval. Nothing was logged or sent.")
+        return 2
+    plan = log.split_plan_of(row)
+    if not re.fullmatch(r"[0-9]+", str(piece or "").strip()) or not 1 <= int(piece) <= len(plan["pieces"]):
+        receipt.mark(out, code="usage")
+        out(f"Refused: the plan has {len(plan['pieces'])} pieces; --piece is 1 to {len(plan['pieces'])}. Nothing was "
+            "logged or sent.")
+        return 2
+    if team is None and text is None and not slots:
+        receipt.mark(out, code="usage")
+        out("Refused: give --team <team>, --slot <slot>=<agent>, or the new text after --. Nothing was logged or sent.")
+        return 2
+    deps = _split_deps(config, roster, label=label, ask=ask, post=post, worker=worker, chatgpt=chatgpt,
+                       codex_login=codex_login, fetch=fetch, close=close, sleep=sleep, clock=clock, wait=wait,
+                       claude_ready=claude_ready, hindsight=hindsight, available=available, chatgpt_ready=chatgpt_ready,
+                       loaded=loaded, cursor=cursor, cursor_ready=cursor_ready)
+    found = _apply_edit(conn, row, plan, int(piece), text, team, deps, out, slots=slots)
+    if found is not None:
+        receipt.mark(out, code=found[0])
+        out(f"Refused: {found[1]}. Nothing was logged or sent.")
+        return 2
+    for line in _plan_screen(conn, log.get_task(conn, row["task_id"]), plan, deps, _secrets(config)):
+        out(line)
+    return 0
+
+
+@_releases_its_runs
 def cmd_split_go(words, *, conn, config, roster, environ, settings_paths, label, ask, post, worker, chatgpt=None,
                  codex_login=None, fetch=None, close=None, sleep=None, clock=None, wait=False, claude_ready=None,
-                 hindsight=None, answer=None, skills=(), available=None, chatgpt_ready=None, out=print):
+                 hindsight=None, answer=None, skills=(), available=None, chatgpt_ready=None, loaded=None, cursor=None,
+                 cursor_ready=None, out=print):
     """`sr split --go <n>`: a split waiting at its plan gets the approval (y/N/e, in a terminal); a split
     waiting for its pieces prints them and, once every piece is delivered or skipped, integrates."""
     problems = _refusals(config, environ, settings_paths)
@@ -2306,10 +4261,13 @@ def cmd_split_go(words, *, conn, config, roster, environ, settings_paths, label,
         receipt.mark(out, code="wrong_state")
         out(f"Refused: #{row['n']} is not a split task. Nothing was logged or sent.")
         return 2
+    if _claude_refusal(available, out):  # brief 29 (decision 11): Claude joins every split; --go gates as route does
+        return 2
     secrets = _secrets(config)
     deps = _split_deps(config, roster, label=label, ask=ask, post=post, worker=worker, chatgpt=chatgpt,
                        codex_login=codex_login, fetch=fetch, close=close, sleep=sleep, clock=clock, wait=wait,
-                       claude_ready=claude_ready, hindsight=hindsight, available=available, chatgpt_ready=chatgpt_ready)
+                       claude_ready=claude_ready, hindsight=hindsight, available=available, chatgpt_ready=chatgpt_ready,
+                       loaded=loaded, cursor=cursor, cursor_ready=cursor_ready)
     if answer is not None or skills:  # brief 22 (decision 9): the approval by flag
         if not (row["status"] == "returned" and row["check_note"] == log.AWAITING_APPROVAL):
             receipt.mark(out, code="wrong_state")
@@ -2319,17 +4277,21 @@ def cmd_split_go(words, *, conn, config, roster, environ, settings_paths, label,
     if row["status"] == "returned" and row["check_note"] == log.AWAITING_APPROVAL:
         return _approval(conn, row, deps, secrets, out)
     if row["status"] == "returned" and (row["check_note"] or "").startswith(log.WAITING_PIECES):
-        return _split_advance(conn, row, deps, secrets, out)
+        if _run_pieces(conn, row["task_id"], deps, secrets, out) == 130:  # brief 29 (decision 11): queued pieces first
+            return 130
+        return _split_advance(conn, log.get_task(conn, row["task_id"]), deps, secrets, out)
     receipt.mark(out, code="wrong_state")
     out(f"Refused: #{row['n']} is {_status_word(row)}; it isn't waiting for your approval or for its pieces. "
         "Nothing was logged or sent.")
     return 2
 
 
-def _stage_call(task, step, ready=lambda: False):
+def _stage_call(task, step, ready=lambda: False, menu=None):
     """The prompt, call kind, web-search setting and search state for a stage or re-ask step. Search is decided
     by router/search.py (rules v2.22): on for Claude (behind the probe gate, `ready()`) and ChatGPT on every
     stage, since a relay stage carries no file; the prompt then carries the search line."""
+    if _mode(task) == "plan":  # brief 33.1: the plan's own prompts on redteam's chain
+        return _plan_stage_call(task, step, ready)
     stage = step.stage
     kind = "reask" if step.action == "reask" else "stage"
     agent = step.agent or stage.agent
@@ -2337,24 +4299,54 @@ def _stage_call(task, step, ready=lambda: False):
     on = searching == search.ALLOWED
     deliverable_shape = getattr(stage, "input", None) == "task" and getattr(stage, "contract", None) == "deliverable"  # redteam's stage 1
     handoff = getattr(step, "handoff", False)  # rules v2.25: the build call on a project task
-    if step.action == "reask":
-        shape = (split.PLAN_SHAPE if stage.role == split.PLAN_ROLE
-                 else relay.TASK_DELIVERABLE_LINE if deliverable_shape else None)
-        if handoff:  # the handoff shape is asked for again, after the stage's own
-            shape = f"{shape if shape is not None else relay.INSTRUCTIONS.get(stage.role, '')}\n\n{context.HANDOFF_LINE}".strip()
+    view_build = versusfiles.builds_from_view(task, stage, agent)  # brief 29.1 (decision 9)
+    if step.action == "reask" and view_build:  # the file contract asked for again, with the file view
+        shape = f"{fileview.REASK_SHAPE}\n\n{context.HANDOFF_LINE}"
         prompt = relay.reask_prompt(stage.role, task["task"], step.result, step.missing, shape=shape, search=on)
-    elif stage.role == split.PLAN_ROLE:
-        prompt = split.plan_prompt(task["task"], search=on)
+        slot = versusfiles.slot_of(_versus_preset(task), step.n)
+        prompt += "\n\n" + fileview.view_paragraph(log.project_of(task), filecalls._tests_words(task)) + "\n\n" + \
+            fileview.render(versusfiles.view_facts(task, slot))
+        return prompt, kind, "live" if on else "disabled", searching
+    if view_build:
+        slot = versusfiles.slot_of(_versus_preset(task), step.n)
+        prompt = relay.file_view_build_prompt(task["task"], fileview.render(versusfiles.view_facts(task, slot)),
+                                              project=log.project_of(task), tests_words=filecalls._tests_words(task),
+                                              search=on)
+        return prompt, kind, "live" if on else "disabled", searching
+    if step.action == "reask":
+        shape = (split.reask_shape(teams.menu_block(menu or [])) if stage.role == split.PLAN_ROLE
+                 else relay.TASK_DELIVERABLE_LINE if deliverable_shape
+                 else checking.label_example(relay.REVISE_REPLY_LABELED, len(step.against))
+                 if stage.role == "revise" and isinstance(getattr(step, "against", None), tuple)
+                 else None)  # brief 32 (decision 9): a lettered revise stage answers by label
+        if handoff and stage.role == "execute":  # brief 29.1 (decision 8): collab's build on a project
+            shape = f"{relay.EXECUTE_SHAPE_PROJECT}\n\n{context.HANDOFF_LINE}"
+        elif handoff:  # the handoff shape is asked for again, after the stage's own
+            shape = f"{shape if shape is not None else relay.INSTRUCTIONS.get(stage.role, '')}\n\n{context.HANDOFF_LINE}".strip()
+        prompt = relay.reask_prompt(stage.role, task["task"], checking.without_next(step.result), step.missing,
+                                    shape=shape, search=on)  # brief 33 (decision 6)
+    elif stage.role == split.PLAN_ROLE:  # brief 29: the TEAMS list `menu` (router/teams.py) and, on a project, one paragraph
+        prompt = split.plan_prompt(task["task"], teams.menu_block(menu or []), search=on,
+                                   project=_plan_project_paragraph(task, agent))
     elif stage.role == split.INTEGRATE_ROLE:  # the pieces block from the stored plan, never stage 1's text
-        prompt = split.integrate_prompt(task["task"], log.split_plan_of(task), search=on)
+        prompt = split.integrate_prompt(task["task"], log.split_plan_of(task), search=on, handoff=handoff,
+                                        project=log.project_of(task) is not None)
     else:
-        prompt = relay.prompt_for(stage.role, task["task"], step.prior, search=on,
+        prior = relay.without_file_blocks(step.prior) if stage.role == "review" and step.prior else step.prior
+        prompt = relay.prompt_for(stage.role, task["task"], prior, search=on,
                                   task_alone=getattr(stage, "input", None) == "task",
                                   deliverable_shape=deliverable_shape, against=getattr(step, "against", None),
                                   handoff=handoff)
+    if nextsteps.asks_next(task, kind, role=stage.role):  # brief 33 (decision 5): a stage whose result is delivered
+        prompt = f"{prompt}\n\n{checking.NEXT_LINE}"
     # `web_search` is ChatGPT's setting only; Claude's search comes from `searching` alone. Before rules v2.22 a
     # ChatGPT research, review or check stage searched; now every ChatGPT stage does, through the same state.
     return prompt, kind, "live" if on else "disabled", searching
+
+
+def _versus_preset(task, deps=None):
+    """A versus task's filled preset (its slots), for which copy a stage works in."""
+    return presets.for_task(task, getattr(deps, "presets", None) or _presets_quietly())[0]
 
 
 def _ready_once(deps):
@@ -2382,7 +4374,7 @@ def _stop_chain(conn, task, step, secrets, out, preset=None):
     task_id, stage, agent = task["task_id"], step.stage, step.agent or step.stage.agent
     calls = log.calls_for(conn, task_id)
     reason = safety.redact(step.reason + _after_takeover(calls[-1] if calls else None, calls), secrets)
-    what = "split" if _mode(task) == "split" else "relay"
+    what = "split" if _mode(task) == "split" else "plan" if _mode(task) == "plan" else "relay"
     error = f"{what} failed at stage {step.n} ({stage.role} by {agent}): {reason}"
     at_check = preset is not None and preset.check_stage is not None and step.n == preset.check_stage.n
     revise = getattr(preset, "revise_stage", None) if preset is not None else None
@@ -2404,8 +4396,30 @@ def _stop_chain(conn, task, step, secrets, out, preset=None):
     if at_revise:
         out(f"Stage {revise.revise_of}'s result is unchecked.")
     _print_stages(conn, task_id, secrets, out)
+    if what == "split" and step.n == 1:  # brief 29 (decision 12): a plan that stopped never runs; its copy goes
+        _drop_split_copy(conn, task_id, out)
+    if versusfiles.remove_all(conn, task_id):  # brief 29.1 (decision 9): a stopped versus is never resumed; both copies go
+        out("Both candidates' copies are removed; the folder is as it was.")
+    if what == "plan":  # brief 33.2 (decision 15, 33.1's D3): a failed plan's copy goes unless Resume can use it
+        _plan_copy_after_stop(conn, task_id, preset, out)
     _project_entry(conn, task_id, out)  # rules v2.25: the stopped line
     return 1
+
+
+def _plan_copy_after_stop(conn, task_id, preset, out):
+    """Brief 33.2 (decision 15, 33.1's D3): a plan task that failed at a stage keeps its copy only when its newest call is
+    a stopped Claude call Resume can make again in that copy (filecalls.build_call, through resume.decide); after a
+    contract still missing past the re-ask, or a failed attack or check round nothing could take, the copy is removed
+    and said. Discard stays available for a kept one."""
+    row = log.get_task(conn, task_id)
+    if row is None or not filecalls.active(row):
+        return
+    decided = resume.decide(row, log.calls_for(conn, task_id), live=None, preset=preset)
+    if decided.ok and decided.substitute == "claude":
+        out(f"Files: the copy is kept for sr resume {row['n']} (sr discard {row['n']} drops it).")
+        return
+    filecalls.remove_copy(conn, task_id)
+    out("Files: the copy is removed; the folder is as it was.")
 
 
 def _revise_stage_note(conn, task_id, revise):
@@ -2501,7 +4515,7 @@ def _finish_by_tally(conn, task, preset, secrets, out, hindsight=None):
     out("")
     for line in _vote_lines(row, log.calls_for(conn, task_id), preset, secrets):
         out(line)
-    _project_entry(conn, task_id, out)  # a vote never has a project; the pair stays together (rules v2.25 and v2.27)
+    _project_entry(conn, task_id, out)  # brief 29.1 (decision 10): a vote on a project gets the router's one line
     _memory_store(conn, task_id, out, hindsight=hindsight, secrets=secrets)
     return 0
 
@@ -2638,8 +4652,9 @@ def _plan_call(task, step, calls=(), searching=None):
     the fix round also carries the result of the stage before, as data (rules v2.12). `searching` is
     the call's search state (_call_search): when allowed, a ChatGPT call runs with its search live."""
     task_id, text, skill = task["task_id"], task["task"], task["skill"]
+    result = checking.without_next(step.result)  # brief 33 (decision 6): `## Next` never goes on to another call
     base = log.fallback_base(task_id, calls)  # after `sr fallback` the redo's rounds are <task>-fb1-c1, …
-    is_relay = _mode(task) in ("relay", "split")  # a split's integration is checked like a relay result (D7)
+    is_relay = _mode(task) in ("relay", "split", "plan")  # a split's integration is checked like a relay result (D7)
     agent = task["agent"] if step.action in ("do", "fix") else task["checker"]
     on = searching == search.ALLOWED  # rules v2.22: from the call's search state alone, never the skill or the role
     web_search = "live" if on else "disabled"   # ChatGPT's setting; Grok ignores it, Claude's comes from `searching`
@@ -2650,26 +4665,47 @@ def _plan_call(task, step, calls=(), searching=None):
     imagine = skill == "make_media" and agent == "grok"  # Grok makes the image and commits it
     prior = _prior_result(calls) if is_relay and step.action == "fix" else None
     prior_label, prior_lines = relay.NOTE_LABEL, None
-    attacks = relay.attack_text(calls) if is_relay else None  # redteam (rules v2.23): the checker gets it too
-    if attacks is not None and step.action == "fix":  # decision 8: the attack list is the stage before
+    attacks = relay.attacks_for(task, calls) if is_relay else None  # redteam (rules v2.23): the checker gets it too
+    priors = None  # brief 32 (decision 10): on a lettered task each labeled list is a block of its own
+    if isinstance(attacks, tuple) and step.action == "fix":
+        priors, prior_lines = relay.list_blocks(attacks), [checking.label_example(relay.REDTEAM_FIX_LINE_LABELED, len(attacks))]
+    elif attacks is not None and step.action == "fix":  # decision 8: the attack list is the stage before
         prior, prior_label, prior_lines = attacks, relay.ATTACK_LIST_LABEL, [relay.REDTEAM_FIX_LINE]
     if _mode(task) == "split" and step.action == "fix":  # D8: the pieces block is the stage before
         plan = log.split_plan_of(task)
         prior, prior_label = split.pieces_text(plan["inputs"], plan["join"]), split.PIECES_LABEL
         prior_lines = [split.FIX_LINE]
+    plan_lines = ()
+    if _mode(task) == "plan":  # brief 33.1 (decisions 5 and 8): the plan's check line and facts; the fix keeps its shape
+        facts, skeleton, has_command = _plan_facts(task)
+        plan_record = plan_mod.record_of(task) or {}
+        covers = bool(plan_mod.example_labels(plan_record))  # brief 33.2 (decision 6)
+        revision = plan_mod.inherited_of(plan_record)  # brief 33.2 (decision 9)
+        uncovered = plan_mod.uncovered_check_line(plan_mod.uncovered_of(result, plan_record)[0])
+        plan_lines = (plan_mod.check_line(skeleton), *([uncovered] if uncovered else []), " ".join(facts))
+        if step.action == "fix":
+            keep = [plan_mod.KEEP_UNLESS_LINE] if revision is not None and _get_idea(task) is not None else []  # decision 12
+            prior_lines = list(prior_lines or []) + [
+                plan_mod.FIX_LINE, *keep, plan_mod.plan_form(covers, revision), plan_record.get("menu_text") or "",
+                plan_mod.rules(skeleton, has_command, covers), " ".join(facts)]
     handoff = context.needs_handoff(task, agent)  # rules v2.25: the build call on a project task (never Grok)
     no_feed = checking.no_feed(task, agent, calls) and step.action in ("do", "fix")  # brief 24 (decision 9)
     # brief 24, the owner after F: the check and re-check of that work get the checker's line
     feed_check = checking.no_feed(task, task["agent"], calls) and step.action in ("check", "recheck")
     if step.action == "do" and step.missing:  # the doer's one contract re-ask: the task, its own result, the items
-        prompt = relay.reask_prompt("build", text, step.result, step.missing, shape=context.HANDOFF_LINE, search=on)
+        prompt = relay.reask_prompt("build", text, result, step.missing, shape=context.HANDOFF_LINE, search=on)
         if files_text:
             prompt = f"{prompt}\n\n{files_text}"
         if no_feed:
             prompt = f"{prompt}\n\n{checking.NO_FEED_LINE}"
+        if nextsteps.asks_next(task, "do"):  # brief 33 (decision 5): the re-ask's result is delivered as the doer's
+            prompt = f"{prompt}\n\n{checking.NEXT_LINE}"
         return f"{base}{context.DO_REASK}", "do", agent, prompt, web_search
     if step.action == "do":
         prompt = f"{text}\n\n{files_text}" if files_text else text
+        if skill == routing.FOLLOW_UP:  # brief 29.1 (decision 24): the follow-up's one line, before the deliverable line
+            prompt = f"{prompt}\n\n{checking.FOLLOW_UP_LINE}"
+        prompt = f"{prompt}\n\n{checking.DELIVERABLE_LINE}"  # brief 29.1 (decision 20): right after the task
         if on:  # D7: the general search line after the task
             prompt = f"{prompt}\n\n{checking.SEARCH_LINE_GENERAL}"
         if no_feed:  # brief 24 (decision 9): after the search line, before the image and handoff lines
@@ -2678,32 +4714,85 @@ def _plan_call(task, step, calls=(), searching=None):
             prompt = grok.make_media_prompt(task_id, prompt)
         if handoff:
             prompt = f"{prompt}\n\n{context.HANDOFF_LINE}"
+        if nextsteps.asks_next(task, "do"):  # brief 33 (decision 5): last of the doer's lines, off a project
+            prompt = f"{prompt}\n\n{checking.NEXT_LINE}"
         return task_id, "do", agent, prompt, web_search
     judges_handoff = context.needs_handoff(task, task["agent"])  # rules v2.25: the build agent's result has the section
     judges_memory = _build_carried_memory(task, calls)  # rules v2.27: the build call got a memory block
+    copy = filecalls.copy_kind(task)  # brief 29.1 (decision 16): the doer had a copy of the project's files (brief 33.2
+    # fix 1: "read", a read-only one)
+    skipped = (split.skipped_check_line(log.split_plan_of(task))  # brief 29.1 (decision 7h): the join's checker is told
+               if _mode(task) == "split" and log.project_of(task) else None)
+    research_note = _preset_name(task) == RESEARCH_BUILD  # Proof 2's round 2: the note it was built from, unseen
+    made = task["created_at"] if "created_at" in task.keys() else None
+    sent_on = memory.local_date(made) if made else None  # Proof 2's round 2: the task's own date
     if step.action == "check":
-        prompt = checking.checker_prompt(text, step.result, no_tools=no_tools, can_browse=can_browse, files_text=files_text,
+        prompt = checking.checker_prompt(text, result, no_tools=no_tools, can_browse=can_browse, files_text=files_text,
                                          relay=is_relay, claude_search=claude_search, search=on, attacks=attacks,
-                                         handoff=judges_handoff, memory=judges_memory, no_feed=feed_check)
+                                         handoff=judges_handoff, memory=judges_memory, no_feed=feed_check,
+                                         could_search=_could_search(checking._result_call(task, log.fallback_view(calls))),
+                                         copy=copy, skipped=skipped, research_note=research_note, sent_on=sent_on,
+                                         plan_lines=plan_lines)
         return f"{base}-c1", "check", agent, prompt, web_search
     if step.action == "fix" and step.missing:  # a fix's one contract re-ask: the task, its own fix, the items
-        shape = relay.REVISE_REPLY if attacks is not None else ""  # redteam keeps `## Answered`
+        shape = (plan_mod.reask_shape((plan_mod.record_of(task) or {}).get("menu_text") or "", one_step=False,
+                                      labels=len(attacks) if isinstance(attacks, tuple) else None,
+                                      covers=bool(plan_mod.example_labels(plan_mod.record_of(task))),
+                                      revision=plan_mod.inherited_of(plan_mod.record_of(task)),
+                                      idea=_get_idea(task) is not None)
+                 if _mode(task) == "plan"  # brief 33.1: a plan's fix keeps the plan's shape
+                 else checking.label_example(relay.REVISE_REPLY_LABELED, len(attacks)) if isinstance(attacks, tuple)
+                 else relay.REVISE_REPLY if attacks is not None
+                 else "")  # redteam keeps `## Answered` (brief 32: by label on a lettered task)
         if handoff:  # rules v2.25: the handoff shape too (alone on a routed project task)
             shape = f"{shape}\n\n{context.HANDOFF_LINE}".strip()
-        prompt = relay.reask_prompt("revise", text, step.result, step.missing, shape=shape or None,
+        prompt = relay.reask_prompt("revise", text, result, step.missing, shape=shape or None,
                                     search=searching == search.ALLOWED)
+        if nextsteps.asks_next(task, "fix"):  # brief 33 (decision 5)
+            prompt = f"{prompt}\n\n{checking.NEXT_LINE}"
         return f"{base}{checking.FIX_REASK}", "fix", agent, prompt, web_search
     if step.action == "fix":
-        prompt = checking.fix_prompt(text, step.result, step.fix_list, files_text=files_text, prior=prior,
+        reading = step.reading or checking.read_check(f"FIX\n{step.fix_list or ''}")  # brief 29.1 (decision 15)
+        prompt = checking.fix_prompt(text, result, step.fix_list, files_text=files_text, prior=prior,
                                      prior_label=prior_label, search=searching == search.ALLOWED,
                                      prior_lines=prior_lines, count=True,
                                      after_notes=grok.imagine_instructions(task_id) if imagine else None,
-                                     handoff=handoff, no_feed=no_feed)
+                                     handoff=handoff, no_feed=no_feed, reading=reading,
+                                     could_search=on or agent == "grok", copy=copy,
+                                     unfinished=_preset_name(task) == "collab", priors=priors)
+        if nextsteps.asks_next(task, "fix"):  # brief 33 (decision 5): the fix round's result is delivered
+            prompt = f"{prompt}\n\n{checking.NEXT_LINE}"
         return f"{base}-f1", "fix", agent, prompt, web_search
-    prompt = checking.checker_prompt(text, step.result, no_tools=no_tools, can_browse=can_browse, files_text=files_text,
+    view = log.fallback_view(calls)
+    first = step.reading or checking.read_check((checking.first_check_row(calls) or {"text": ""})["text"])
+    earlier = checking._by_kind(view, "recheck") if step.missing else None  # decision 15: its one re-ask
+    prompt = checking.checker_prompt(text, result, no_tools=no_tools, can_browse=can_browse, files_text=files_text,
                                      relay=is_relay, claude_search=claude_search, search=on, attacks=attacks,
-                                     handoff=judges_handoff, memory=judges_memory, no_feed=feed_check)
+                                     handoff=judges_handoff, memory=judges_memory, no_feed=feed_check,
+                                     could_search=_could_search(checking._by_kind(view, "fix")), copy=copy, first=first,
+                                     reask=(step.missing, earlier["text"]) if earlier is not None else None,
+                                     skipped=skipped, research_note=research_note, sent_on=sent_on, plan_lines=plan_lines)
+    if earlier is not None:
+        return f"{base}{checking.RECHECK_REASK}", "recheck", agent, prompt, web_search
     return f"{base}-c2", "recheck", agent, prompt, web_search
+
+
+def _could_search(call):
+    """Brief 29.1 (decision 16): whether the doer of the result being checked could search the web, from its call row:
+    Grok always can; Claude or ChatGPT when the row's search state was allowed; Cursor never (no tools)."""
+    if call is None:
+        return False
+    if call["agent"] == "grok":
+        return True
+    return (log.search_of(call) or {}).get("state") == search.ALLOWED
+
+
+RESEARCH_BUILD = "research-build"  # Proof 2's round 2: its check and re-check get the research note line
+
+
+def _preset_name(task):
+    """The relay preset's name on a relay task, else None."""
+    return task["preset"] if _mode(task) == "relay" and "preset" in task.keys() else None
 
 
 def _build_carried_memory(task, calls):
@@ -2745,7 +4834,7 @@ def _search_record(searching, answer=None):
 
 
 def _send_local(conn, task, call_id, kind, prompt, deps, agent, call, *, secrets, out, files=(), stage=None, role=None,
-                searching=None, context=None, memory=None, resume_of=None):
+                searching=None, context=None, memory=None, resume_of=None, choice=None):
     """Brief 22 (Phase 0 choice 1): the note of the call in flight beside the log, written before the call and removed once
     its row is written (or the call ends without one), so a process that dies during the call leaves `sr check` what it
     needs to write the process-ended stop. Then the call itself (_send_local_call)."""
@@ -2755,13 +4844,13 @@ def _send_local(conn, task, call_id, kind, prompt, deps, agent, call, *, secrets
     try:
         return _send_local_call(conn, task, call_id, kind, prompt, deps, agent, call, secrets=secrets, out=out,
                                 files=files, stage=stage, role=role, searching=searching, context=context, memory=memory,
-                                resume_of=resume_of)
+                                resume_of=resume_of, sent_at=log.stamp(), choice=choice)  # brief 29.1 (issue 8): when sent
     finally:
         runs.clear_call(task["task_id"], call_id)
 
 
 def _send_local_call(conn, task, call_id, kind, prompt, deps, agent, call, *, secrets, out, files=(), stage=None, role=None,
-                     searching=None, context=None, memory=None, resume_of=None):
+                     searching=None, context=None, memory=None, resume_of=None, sent_at=None, choice=None):
     """One call to an agent that answers at once (Claude or ChatGPT), written to the log already
     finished. A Ctrl+C during a check, fix or re-check (or a relay stage after the first) leaves no
     row, so `sr check` runs that step again. `files` (media.layout pairs) go to the worker as copies
@@ -2781,8 +4870,8 @@ def _send_local_call(conn, task, call_id, kind, prompt, deps, agent, call, *, se
         code = getattr(e, "code", None) if isinstance(e, safety.SafeError) else takeover.INTERNAL
         return _call_failed(conn, task_id, call_id, kind, agent, safety.redact(_describe(e), secrets), secrets, out,
                             stage=stage, role=role, reason_code=code, searching=searching, context=context, memory=memory,
-                            served=getattr(e, "served", None), resume_of=resume_of,
-                            deps=deps)  # rules v2.28: a Cursor failure keeps what answered
+                            served=getattr(e, "served", None), resume_of=resume_of, sent_at=sent_at,
+                            deps=deps, choice=choice)  # rules v2.28: a Cursor failure keeps what answered
     _STAGE.update(task_id=None, kind=None, agent=None, stage=None, role=None)
     with _hold_interrupts() as held:  # the row is written whole
         row = log.get_task(conn, task_id)
@@ -2791,17 +4880,31 @@ def _send_local_call(conn, task, call_id, kind, prompt, deps, agent, call, *, se
             out(f"{task_id} is already {_status_text(row)}, so this answer was not saved:")
             out(safety.for_terminal(text, secrets))
             return 1
-        verdict = checking.read_verdict(text)[0] if kind in ("check", "recheck") else None
+        verdict = checking.verdict_for(kind, text, log.calls_for(conn, task_id)) if kind in ("check", "recheck") else None
+        if getattr(answer, "cwd", None) and context is not None:  # brief 29.1 (issue 2): a call in the copy says so
+            context = {**context, "cwd": answer.cwd, "tools": getattr(answer, "tools", None)}
+        if getattr(answer, "file_outcome", None) is not None and context is not None:  # brief 29.1 (decision 9)
+            context = {**context, "files": answer.file_outcome}
         log.add_call(conn, call_id, task_id, kind, agent, status="done", text=text, verdict=verdict, stage=stage, role=role,
                      search=_search_record(searching, answer), context=context, memory=memory, resume_of=resume_of,
-                     served=getattr(answer, "served", None))  # rules v2.28: a Cursor answer carries its served record
+                     served=getattr(answer, "served", None),  # rules v2.28: a Cursor answer carries its served record
+                     tests=getattr(answer, "tests", None), sent_at=sent_at,  # brief 28: a file-mode build call's tests
+                     **_choice_columns(choice))  # brief 33.3 (decision 7): the model asked, its effort and time limit
     if held.pressed:
         raise KeyboardInterrupt
     return None
 
 
+def _choice_columns(choice):
+    """Brief 33.3 (decision 7): the call row's model, effort and time limit from its choice; nothing without one."""
+    if choice is None:
+        return {}
+    return {"model": choice.model, "effort": choice.effort, "time_limit": choice.timeout}
+
+
 def _call_failed(conn, task_id, call_id, kind, agent, error, secrets, out, *, stage=None, role=None,
-                 reason_code=None, searching=None, context=None, memory=None, served=None, resume_of=None, deps=None):
+                 reason_code=None, searching=None, context=None, memory=None, served=None, resume_of=None, deps=None,
+                 sent_at=None, choice=None):
     """A call that failed or couldn't be made, logged as a failed call row with its reason code
     (plan_limit, or none). The task fails when it was the first call; otherwise the row lets the
     loop (or the relay runner) end in the right row. Since build brief 7 a failed first call leaves
@@ -2810,7 +4913,9 @@ def _call_failed(conn, task_id, call_id, kind, agent, error, secrets, out, *, st
     with _hold_interrupts():
         log.add_call(conn, call_id, task_id, kind, agent, status="failed", text=error, stage=stage, role=role,
                      reason_code=reason_code, search=_search_record(searching), context=context, memory=memory, served=served,
-                     resume_of=resume_of)
+                     resume_of=resume_of, sent_at=sent_at, **_choice_columns(choice))
+    if reason_code == models.CREDITS:  # brief 33.3 (decision 6): the stop that turns Fable off
+        _credits_stop(task_id, out)
     if kind == "do" and not _takes_over(deps):
         return _fail(conn, task_id, error, secrets, out)
     return None
@@ -2821,10 +4926,20 @@ def _send_claude(conn, task, call_id, kind, prompt, deps, *, secrets, out, web_s
     """One Claude call. Claude's search comes only from router/search.py's state (`search`), never from
     `web_search`, which is ChatGPT's setting (a relay check is `live` for ChatGPT; a Claude checker
     never searches)."""
-    call = functools.partial(deps.worker, search=True) if searching == search.ALLOWED else deps.worker
+    choice = _choice_for(task, "claude", call_id, kind, stage, role, deps)  # brief 33.3 (decision 1): the model
+    worker = functools.partial(deps.worker, choice=choice)
+    call = functools.partial(worker, search=True) if searching == search.ALLOWED else worker
+    if versusfiles.active(task) and kind in log.STAGE_KINDS:  # brief 29.1 (decision 9): its candidate's copy
+        preset = _versus_preset(task, deps)
+        build = preset.stage(stage).review_of is None
+        call = versusfiles.claude_wrap(conn, task, call_id, versusfiles.slot_of(preset, stage), worker, write=build,
+                                       search=searching == search.ALLOWED, secrets=secrets, out=out)
+    elif filecalls.in_copy(task, kind, role, "claude"):  # brief 28 (decision 3): in the copy, its file tools, no command
+        call = filecalls.wrap(conn, task, call_id, kind, role, worker, search=searching == search.ALLOWED,
+                              secrets=secrets, out=out)
     return _send_local(conn, task, call_id, kind, prompt, deps, "claude", call, secrets=secrets, out=out,
                        files=files, stage=stage, role=role, searching=searching, context=context, memory=memory,
-                       resume_of=resume_of)
+                       resume_of=resume_of, choice=choice)
 
 
 def _send_chatgpt(conn, task, call_id, kind, prompt, deps, *, secrets, out, web_search="disabled", files=(),
@@ -2855,9 +4970,16 @@ def _send_chatgpt(conn, task, call_id, kind, prompt, deps, *, secrets, out, web_
     if not ok:
         return _call_failed(conn, task_id, call_id, kind, "chatgpt", why, secrets, out, stage=stage, role=role,
                             searching=searching, context=context, memory=memory, resume_of=resume_of, deps=deps)
-    return _send_local(conn, task, call_id, kind, prompt, deps, "chatgpt",
-                       functools.partial(deps.chatgpt, web_search=web_search), secrets=secrets, out=out, files=files,
-                       stage=stage, role=role, searching=searching, context=context, memory=memory, resume_of=resume_of)
+    choice = _choice_for(task, "chatgpt", call_id, kind, stage, role, deps)  # brief 33.3 (decision 1): the model
+    call = functools.partial(deps.chatgpt, web_search=web_search, choice=choice)
+    if kind in log.STAGE_KINDS and versusfiles.active(task):  # brief 29.1 (decision 9): the router writes its files
+        preset = _versus_preset(task, deps)
+        if versusfiles.builds_from_view(task, preset.stage(stage), "chatgpt"):
+            call = versusfiles.view_wrap(conn, task, call_id, versusfiles.slot_of(preset, stage), call, secrets=secrets,
+                                         out=out)
+    return _send_local(conn, task, call_id, kind, prompt, deps, "chatgpt", call, secrets=secrets, out=out, files=files,
+                       stage=stage, role=role, searching=searching, context=context, memory=memory, resume_of=resume_of,
+                       choice=choice)
 
 
 def _keep_stream(task_id, call_id, found, secrets):
@@ -2895,10 +5017,11 @@ def _send_cursor(conn, task, call_id, kind, prompt, deps, *, secrets, out, web_s
     if not ok:
         return _call_failed(conn, task_id, call_id, kind, "cursor", reason, secrets, out, stage=stage, role=role,
                             context=context, memory=memory)
+    choice = _choice_for(task, "cursor", call_id, kind, stage, role, deps)  # brief 33.3 (decision 1): the pin, or the choice
 
     def call(text):
         try:
-            found = worker(cursor_worker.wrap(text), call_id=call_id)
+            found = worker(cursor_worker.wrap(text), call_id=call_id, **_cursor_model(choice))
         except cursor_worker.WorkerError as e:
             _keep_stream(task_id, call_id, e, secrets)
             raise
@@ -2906,7 +5029,7 @@ def _send_cursor(conn, task, call_id, kind, prompt, deps, *, secrets, out, web_s
         return found
 
     return _send_local(conn, task, call_id, kind, prompt, deps, "cursor", call, secrets=secrets, out=out, files=(),
-                       stage=stage, role=role, searching=None, context=context, memory=memory)
+                       stage=stage, role=role, searching=None, context=context, memory=memory, choice=choice)
 
 
 def _send_grok(conn, task, call_id, kind, prompt, deps, *, secrets, out, web_search="disabled", files=(),
@@ -2985,13 +5108,14 @@ def _collect(conn, match, secrets, out, close):
         text, status = _pull_images(task["task_id"], text, secrets, out)
     try:
         log.finish_call(conn, call["call_id"], status, text=text, url=match["url"],
-                        verdict=checking.read_verdict(text)[0] if call["kind"] in ("check", "recheck") else None)
+                        verdict=checking.verdict_for(call["kind"], text, log.calls_for(conn, call["task_id"]))
+                        if call["kind"] in ("check", "recheck") else None)
         log.set_open_status(conn, call["task_id"], "queued")  # no Grok call is out now
         log.set_grok_note(conn, call["task_id"], None)  # brief 21, C2: the return clears the Grok timeout note
     except log.StateError:
         return False
     out(f"{_call_text(call)} arrived (issue #{match['number']}).")
-    if task is not None and _mode(task) == "relay" and call["kind"] in log.STAGE_KINDS:
+    if task is not None and _mode(task) in log.CHAINED_MODES and call["kind"] in log.STAGE_KINDS:
         named = relay.named_files(text)
         if named:  # a relay stage takes no file (rules v2.12): said, never fetched
             shown = ", ".join(safety.one_line(n, secrets) for n in named)
@@ -3139,8 +5263,10 @@ def _finish(conn, task, step, secrets, out, hindsight=None):
     result = step.result
     if log.project_of(task):  # rules v2.25 (decision 17): the deliverable is the result; the ## Handoff section is not
         result = context.split_handoff(result or "")[0]
-    if _mode(task) == "relay" and relay.attack_text(log.fallback_view(calls)) is not None:
+    if _mode(task) in log.CHAINED_MODES and relay.has_attacks(task, log.fallback_view(calls)):
         result = relay.split_answered(result or "")[0]  # rules v2.23: the deliverable is the result; ## Answered not
+    if step.ending == 9:  # brief 29.1 (decision 17): Blocked: failed, no fix round, no fallback or resume, nothing stored
+        return _finish_blocked(conn, task_id, step, result, fallback.with_note(note, calls), secrets, out)
     with _hold_interrupts():
         try:
             log.set_done(conn, task_id, result, do["url"] if do else None, check_state=step.check_state,
@@ -3152,8 +5278,30 @@ def _finish(conn, task, step, secrets, out, hindsight=None):
     row = log.get_task(conn, task_id)
     out(f"{task_id} done by {row['agent']}:")
     _print_done(conn, row, secrets, out)
+    if _mode(row) == "plan":  # brief 33.1 (decision 9): the plan kept, and docs/PLAN.md written into its copy
+        _plan_written(conn, row, out)
+    filecalls.deliver(conn, task_id, out)  # brief 28 (decision 10): a change waits to land, before any entry
     _project_entry(conn, task_id, out)  # rules v2.25: the entry (or the failed line) after the result is shown
+    _tick_delivered(conn, task_id, out)  # brief 33.1 (decision 14): a step delivered with no change, its own commit
     _memory_store(conn, task_id, out, hindsight=hindsight, secrets=secrets)  # rules v2.27: the retain, beside it
+    return step.exit_code
+
+
+def _finish_blocked(conn, task_id, step, result, note, secrets, out):
+    """Ending 9: the task fails as blocked, the doer's result kept; a change in a file-mode copy is kept for Discard only;
+    on a project the handoff line reads `blocked: <what it needed>`. Never stored in memory."""
+    with _hold_interrupts():
+        try:
+            log.set_blocked(conn, task_id, result, check_note=note)
+        except log.StateError:
+            receipt.mark(out, code="state_changed")
+            out(f"{task_id} is already {_status_text(log.get_task(conn, task_id))}, so this result was not saved.")
+            return 1
+    row = log.get_task(conn, task_id)  # the JSON's reason_code is the row's (`blocked`), as a return's is
+    out(f"{task_id} blocked ({row['agent']} did it; {row['checker']} checked it):")
+    _print_done(conn, row, secrets, out)
+    filecalls.deliver(conn, task_id, out)
+    _project_entry(conn, task_id, out)
     return step.exit_code
 
 
@@ -3165,7 +5313,12 @@ def _print_done(conn, row, secrets, out):
         for line in _by_stage_failed_lines(conn, row, n, secrets):
             out(line)
         return
-    out(safety.for_terminal(row["result"], secrets))
+    shown, moves = checking.split_next(row["result"] or "")  # brief 33 (decision 6): the result, then its Next lines
+    out(safety.for_terminal(shown, secrets))
+    if moves:
+        out("Next:")
+        for move in moves:
+            out(f"  {safety.for_terminal(move, secrets)}")
     for line in _ending_lines(conn, row, secrets):
         out(line)
     for line in _redteam_lines(conn, row, secrets):
@@ -3175,14 +5328,26 @@ def _print_done(conn, row, secrets, out):
 def _redteam_lines(conn, row, secrets):
     """On a redteam task (rules v2.23): the attack list under the result, as stored, then the revision's
     `## Answered` (the owner's choice 6). Nothing on any other task."""
-    if _mode(row) != "relay":
+    if _mode(row) not in log.CHAINED_MODES:  # brief 33.1: a plan's attacks and answers too
         return []
     calls = log.fallback_view(log.calls_for(conn, row["task_id"]))
-    attacks = relay.attack_text(calls)
-    if attacks is None:
-        return []
-    lines = ["--- attacks ---", safety.for_terminal(attacks, secrets)]
-    revision = relay.final_revision(calls)
+    if relay.lettered(row):  # brief 32 (decision 17): each list under its own head, a list that didn't run in one line
+        lists = relay.attack_lists(row, calls)
+        if not lists:
+            return []
+        lines = []
+        for found in lists:
+            if found.state == relay.RAN:
+                lines += [f"--- attacks {found.letter} · {found.name} ---",
+                          safety.for_terminal(relay.labeled_text(found.text, found.letter), secrets)]
+            else:
+                lines.append(f"--- {relay.list_line(found)} ---")
+    else:
+        attacks = relay.attack_text(calls)
+        if attacks is None:
+            return []
+        lines = ["--- attacks ---", safety.for_terminal(attacks, secrets)]
+    revision = relay.final_revision(calls, row)
     answered = relay.split_answered(revision)[1] if revision else None
     if answered is not None:
         lines += ["--- answered ---", safety.for_terminal(answered, secrets)]
@@ -3231,6 +5396,9 @@ def _ending_lines(conn, row, secrets):
     if e == 7:
         return [f"CHECK ROUND FAILED: {step.agent} (the re-check), {reason}. "
                 "The first check asked for fixes; this is the fixed result."]
+    if e == 9:  # brief 29.1 (decision 17)
+        return [f"BLOCKED: {safety.for_terminal(step.blocked, secrets)}.",
+                "No fix round ran: the doer needed that and wasn't given it. Send the task again with it."]
     return ["NOT PASSED: after one fix round. What the checker still wants fixed:", fix_list]
 
 
@@ -3270,10 +5438,20 @@ def _jev_text(answer, roster):
     return text + "."
 
 
+def _follow_up_why(answer, roster):
+    """Why a tagged task runs as a follow-up, in words: Jev's label under the tagged floor, or none of these."""
+    if answer.get("status") == "none_of_these":
+        return f"Jev found no skill for it, confidence {_confidence(answer.get('confidence'))}; it may follow from earlier tasks"
+    return (f"Jev's label {answer.get('label')} at {_confidence(answer.get('confidence'))} is under the "
+            f"{jev.floor_of(roster, True)} floor for a tagged task; it may follow from earlier tasks")
+
+
 def _route_text(task_id, answer, decision, roster):
     """Before the result: the skill, who chose it and how sure, the doer and why."""
     if decision.skill is None:
         skill = "no skill"
+    elif decision.skill_source == routing.FOLLOW_UP_SOURCE:  # brief 29.1 (decision 24)
+        skill = f"{decision.skill} (the router: {_follow_up_why(answer, roster)})"
     elif decision.skill_source == "owner":
         skill = f"{decision.skill} (your choice)"
     else:
@@ -3285,6 +5463,8 @@ def _route_text(task_id, answer, decision, roster):
         why = f"standing in while {roster.skills[decision.skill]['best']} isn't live"
     elif decision.reason == "override":
         why = f"you chose it with @{decision.agent}"
+    elif (decision.reason or "").startswith(routing.NO_FILES_DOER):  # brief 33.2 fix 1b
+        why = decision.reason[0].lower() + decision.reason[1:]
     else:
         why = "the skill's best agent"
     return f"{task_id}: {skill} -> {decision.agent}, {why}."
@@ -3368,7 +5548,7 @@ def _after_interrupt(conn, task_id, secrets, out, hindsight=None):
         if row is None:
             out("Stopped. Nothing was logged.")
             return 130
-        if row["status"] in ("queued", "sent") and _mode(row) in ("relay", "split"):
+        if row["status"] in ("queued", "sent") and _mode(row) in ("relay", "split", "plan"):
             return _relay_interrupted(conn, row, stage, out)
         if row["status"] in ("queued", "sent"):
             step = checking.next_step(row, log.calls_for(conn, task_id))
@@ -3519,6 +5699,8 @@ def cmd_check(*, conn, config, fetch, close, environ=None, settings_paths=(), po
             _project_entry(conn, timed["task_id"], out)  # rules v2.25: the stopped line
     worst = 0
     for row in reversed(log.open_tasks(conn)):  # oldest first
+        if _mode(row) == suggest.MODE:  # brief 33.4 (decision 12): one call, its own process's; never advanced from here
+            continue
         if _runs_elsewhere(conn, row):  # brief 22 (decision 4): another process is running it; never a second writer
             continue
         if _at_the_floor(conn, row):  # a task left at the skill question (no terminal here): it comes back for its label
@@ -3541,9 +5723,9 @@ def cmd_check(*, conn, config, fetch, close, environ=None, settings_paths=(), po
         if runs.held_elsewhere(row):  # brief 22: its own process is on it
             out(f"#{row['n']} {row['task_id']} is running in another window (pid {row['pid']}).")
             continue
-        holder = _held_by(conn, row)  # brief 11.1: a piece waiting for another piece's Grok call
+        held = _held_text(conn, row)  # brief 11.1, brief 29: a piece waiting for a Grok call or an earlier piece
         note = row["check_note"] if (row["check_note"] or "").startswith(log.GROK_NOTES) else None  # brief 21, C2
-        out((f"#{row['n']} {row['task_id']} is {split.held_words(holder)}." if holder is not None
+        out((f"#{row['n']} {row['task_id']} {'is ' if held.startswith('queued') else ''}{held}." if held is not None
              else _open_task_text(row, log.calls_for(conn, row["task_id"]), deps)) + (f" ({note})" if note else ""))
     for row in log.awaiting_pick_tasks(conn):  # brief 9 (D8): sr check sends nothing for these
         out(f"#{row['n']} {row['task_id']} is awaiting your pick: sr pick {row['n']} {_pick_words(row, presets)}")
@@ -3569,7 +5751,12 @@ def _dead_runs(conn, deps, secrets, out):
         if note is not None and ((note.get("pid"), note.get("started")) != (pid, started)
                                  or log.get_call(conn, note.get("call_id")) is not None):
             note = None  # another run's note, or its call's row was written: nothing was running
-        if row["status"] in ("queued", "sent") and note is not None:
+        if row["status"] in ("queued", "sent") and _mode(row) == suggest.MODE:  # brief 33.4 (decision 12): it just ends
+            with _hold_interrupts():
+                log.set_failed(conn, task_id, f"its process ended (pid {pid})")
+        elif row["status"] in ("queued", "sent") and _mode(row) == auto.MODE:  # brief 34 (decision 5): a process-ended stop
+            _auto_process_ended(conn, row, pid, out)
+        elif row["status"] in ("queued", "sent") and note is not None:
             _process_ended(conn, row, note, pid, deps, secrets, out)
         elif row["status"] in ("queued", "sent") and _at_the_floor(conn, row):
             _back_for_label(conn, row, out, why=f"its run, pid {pid}, ended at the skill question")
@@ -3619,7 +5806,7 @@ def _runs_elsewhere(conn, row):
     another process is running (it runs its pieces in turn): `sr check` leaves both alone."""
     if runs.held_elsewhere(row):
         return True
-    if _mode(row) == "piece" and row["status"] == "queued" and row["parent"]:
+    if log.is_piece(row) and row["status"] == "queued":  # brief 29: a piece of any team
         parent = log.get_task(conn, row["parent"])
         return parent is not None and runs.held_elsewhere(parent)
     return False
@@ -3628,11 +5815,11 @@ def _runs_elsewhere(conn, row):
 def _open_task_text(row, calls, deps):
     """One line per open task after `sr check`: what it waits for, or why it is stuck."""
     head = f"#{row['n']} {row['task_id']}"
-    if _mode(row) in ("relay", "split"):
+    if _mode(row) in ("relay", "split", "plan"):
         preset, problem = _preset_for(row, deps)
         if preset is None:
             return f"{head} is {row['status']}: {problem}."
-        step = relay.next_stage(row, calls, preset)
+        step = relay.next_stage(row, calls, preset, checks=split.stored_checks(row))
         if step.action == "wait":
             return f"{head} waits for {_call_text(step.call)}."
         if step.action in ("stage", "reask"):
@@ -3668,7 +5855,10 @@ def cmd_log(*, conn, limit=20, chat=None, project=None, search=None, before=None
             return 1
     rows = log.task_rows(conn, limit, project=project, chat=chat, search=search, before=older)
     if as_json:
-        receipt.deliver(out, jsonview.log_view(conn, rows, limit=limit, live=live, loaded=loaded))
+        view = jsonview.log_view(conn, rows, limit=limit, live=live, loaded=loaded)
+        if project is not None:  # brief 33 (decision 13): the project's What now?, computed now, never stored
+            view["what_now"] = whatnow.for_project(conn, project, loaded)
+        receipt.deliver(out, view)
         return 0
     if not rows:
         out(f"No tasks in chat {safety.one_line(chat)} yet." if chat else "No tasks in the log yet.")
@@ -3677,7 +5867,7 @@ def cmd_log(*, conn, limit=20, chat=None, project=None, search=None, before=None
         f"{'check':<10}  task  |  result")
     shown = {r["task_id"] for r in rows}
     for r in rows:
-        if _mode(r) == "piece" and r["parent"] in shown:
+        if log.is_piece(r) and r["parent"] in shown:
             continue  # printed under its split (rules v2.18)
         out(_log_line(conn, r))
         if _mode(r) == "split":
@@ -3693,9 +5883,9 @@ def _log_line(conn, r):
             f"{'(resumed) ' if _was_resumed(conn, r) else ''}{'(taken over) ' if _was_taken_over(conn, r) else ''}"
             f"{'(fallback) ' if _fell_back(conn, r) else ''}"
             f"{_one_line(r['task'], 40)}  |  ")
-    holder = _held_by(conn, r)
-    line += split.held_words(holder) if holder is not None else _one_line(r["result"], 50)
-    return f"  ↳ {line}" if _mode(r) == "piece" else line
+    held = _held_text(conn, r)
+    line += held if held is not None else _one_line(r["result"], 50)
+    return f"  ↳ {line}" if log.is_piece(r) else line
 
 
 def _fell_back(conn, row):
@@ -3734,7 +5924,7 @@ def _resume_lines(conn, row, calls, roster, presets):
     if resumed:
         return lines
     preset = split.PRESET if _mode(row) == "split" else None
-    if _mode(row) == "relay":
+    if _mode(row) in log.CHAINED_MODES:
         preset = presets_mod.for_task(row, presets)[0]
         if preset is None:
             return []
@@ -3766,7 +5956,7 @@ def _skill_text(row):
 
 
 def _skill_word(row):
-    if _mode(row) == "relay":  # rules v2.21 (D4): the filled slots only when one differs from its default
+    if _mode(row) in log.CHAINED_MODES:  # rules v2.21 (D4): the filled slots only when one differs from its default
         return f"relay:{row['preset']}" + "".join(f" {k}={v}" for k, v in _changed_slots(row).items())
     if _mode(row) == "split":
         plan = log.split_plan_of(row)
@@ -3836,13 +6026,17 @@ def _project_lines(conn, row, secrets, handoff=False, memory=False):
 
 
 def _memory_lines(conn, row, secrets, tag, memory):
-    writes = log.memory_of(row)
+    writes = [w for w in log.memory_of(row) if not (log.FORGET_KEYS & set(w))]  # brief 30: a Forget mark is not a write
     if writes:
         last = writes[-1]
         lines = [f"memory: stored {last['document_id']}, {last['chars']} characters" if "document_id" in last
                  else f"memory: skipped: {safety.for_terminal(last['skipped'], secrets)}"]
     else:
         lines = ["memory: none"]
+    gone = _forgotten_on(row)
+    if gone:  # brief 30 (decision 15): the log keeps the task; memory doesn't
+        lines.append(f"memory: forgotten {gone} (no block carries it and no search finds it; "
+                     f"sr forget {row['n']} --undo remembers it again)")
     if not memory:
         return lines
     call = _build_call(row, log.calls_for(conn, row["task_id"]))
@@ -3861,8 +6055,33 @@ def _memory_lines(conn, row, secrets, tag, memory):
         lines += [f"Memory block as sent to {call['call_id']} ({record['sent']} of {record.get('found', record['sent'])} entries"
                   + (f", reused from {record['from']}" if record.get("from") else "") + "):",
                   safety.for_terminal(record.get("text", ""), secrets)]
+    searched = _searched_with(log.calls_for(conn, row["task_id"]), call)
+    if searched is not None:  # brief 30 (A3): the query the block's search sent, as sent (redacted and cut)
+        lines += [f"Searched with ({searched['call_id']}, {len(searched['query']):,} characters):",
+                  safety.for_terminal(searched["query"], secrets)]
     lines += _call_memory_lines(log.calls_for(conn, row["task_id"]))
     return lines
+
+
+def _searched_with(calls, call):
+    """Brief 30 (A3): {call_id, query} of the search behind `call`'s block: its own record's query, or, on a call that
+    reused a block, the query of the call it came from. None when no search is on record (a call from before brief 30,
+    an off or reused block with no searching call)."""
+    seen, at = set(), call
+    while at is not None and at["call_id"] not in seen:
+        seen.add(at["call_id"])
+        record = log.call_memory_of(at) or {}
+        if record.get("query"):
+            return {"call_id": at["call_id"], "query": record["query"]}
+        source = record.get("from")
+        at = next((c for c in calls if c["call_id"] == source), None) if source else None
+    return None
+
+
+def _forgotten_on(row):
+    """Brief 30 (decision 15): the date of the owner's Forget when it stands (its newest mark), else None."""
+    marks = [w for w in log.memory_of(row) if log.FORGET_KEYS & set(w)]
+    return marks[-1].get("forgotten") if marks else None
 
 
 def _call_memory_lines(calls):
@@ -3907,6 +6126,10 @@ def _handoff_lines(conn, row, secrets, name, handoff):
             lines += [f"Earlier line ({earlier['lines']} lines after the write):", safety.for_terminal(earlier["text"], secrets)]
     else:
         lines.append(f"Handoff entry: none ({_status_word(row)})")
+    found = log.project_files_of(row) or {}  # brief 29.1 (decision 1): the entry holds no id; sr show names it
+    if found.get("commit") and found.get("state") in ("landed", "undone"):
+        lines.append(f"Landed as {gitops.short(found['commit'])} on {safety.one_line(found.get('branch') or '-')}."
+                     + (f" Undone as {gitops.short(found['undo_commit'])}." if found.get("undo_commit") else ""))
     if handoff:
         call = _build_call(row, log.calls_for(conn, row["task_id"]))
         record = log.context_of(call) if call is not None else None
@@ -3917,11 +6140,18 @@ def _handoff_lines(conn, row, secrets, name, handoff):
         else:
             lines += [f"Handoff as sent to {call['call_id']} ({record['lines']} of {record['total']} lines):",
                       safety.for_terminal(record["text"], secrets)]
+        text, owner = spec_mod.copy_of(rounds.log_folder(conn), row)  # brief 33.2 (decision 2.7): after the handoff
+        sent = (record or {}).get("spec") if record is not None else None
+        if text is not None and sent is not None and sent.get("left_out"):
+            lines.append(f"SPEC.md left out of {call['call_id']} (it could not fit Grok's prompt limit; {sent.get('chars')} characters).")
+        elif text is not None:
+            lines += [f"SPEC.md as sent (tasks/{owner}/SPEC.md, {len(text):,} characters, hash {spec_mod.digest(text)}):",
+                      safety.for_terminal(text, secrets)]
     return lines
 
 
 def cmd_show(*, conn, words, secrets=(), history=False, stages=False, pieces=False, roster=None, presets=None,
-             handoff=False, memory=False, as_json=False, config=None, out=print):
+             handoff=False, memory=False, as_json=False, config=None, out=print, notes_flag=False):
     """One task in full. The result shown is the furthest one; with history=True, every call
     the task made instead, the original result and the fix list among them. On a relay task:
     the preset, one line per stage, then the check; stages=True also prints each stage's text
@@ -3934,11 +6164,16 @@ def cmd_show(*, conn, words, secrets=(), history=False, stages=False, pieces=Fal
     if as_json:  # brief 21, B3: one JSON document, read only
         preview = preview_availability(roster, config) if roster is not None and config is not None else None  # brief 24
         receipt.deliver(out, jsonview.show_view(conn, row, live=roster.live if roster else None, loaded=presets, roster=roster,
-                                                available=preview))
+                                                available=preview, send_paths=tuple(SENDERS)))  # brief 29: the menu
         return 0
     if history:
-        return _show_history(conn, row, secrets, out)
-    if _mode(row) in ("relay", "split"):
+        return _show_history(conn, row, secrets, out, pins=_pins_of(roster))
+    if notes_flag:  # brief 30 (decision 9): the router notes kept with the task and, call by call, what each was sent
+        out(f"#{row['n']}  {row['task_id']}  {row['status']}  created {_local(row['created_at'])}{_project_line(row)}")
+        for line in _show_notes_lines(conn, row, secrets):
+            out(line)
+        return 0
+    if _mode(row) in ("relay", "split", "plan"):
         return _show_relay(conn, row, secrets, stages, out, roster=roster, presets=presets, pieces=pieces,
                            handoff=handoff, memory=memory)
     of = ""
@@ -3964,6 +6199,10 @@ def cmd_show(*, conn, words, secrets=(), history=False, stages=False, pieces=Fal
             out(line)
     if log.web_of(row):  # rules v2.22
         out("web: on (sent with --web)")
+    chosen = log.models_of(row)  # brief 33.3 (decision 4): the task's own choices
+    if chosen:
+        out("models: " + ", ".join(
+            f"{a}={e.get('model') or '-'}" + (f" (effort {e['effort']})" if e.get("effort") else "") for a, e in chosen.items()))
     result, status = row["result"], row["status"]
     holder = _held_by(conn, row)
     if holder is not None:
@@ -3992,7 +6231,7 @@ def cmd_show(*, conn, words, secrets=(), history=False, stages=False, pieces=Fal
     if isinstance(url, str) and url.startswith("https://"):
         out(f"Issue: {safety.for_terminal(url, secrets)}")
     calls = log.calls_for(conn, row["task_id"])
-    for line in _round_lines(calls):  # brief 21, C1: before the project lines and the rescue offers, which stay last
+    for line in _round_lines(calls, rounds.log_folder(conn)):  # brief 21, C1: before the project lines and the rescue offers, which stay last
         out(line)
     for line in _project_lines(conn, row, secrets, handoff, memory):  # rules v2.25 and v2.27: the entry, the write record
         out(line)
@@ -4010,12 +6249,43 @@ def cmd_show(*, conn, words, secrets=(), history=False, stages=False, pieces=Fal
     return 0
 
 
+def _show_notes_lines(conn, row, secrets):
+    """Brief 30 (decision 9): `sr show <n> --notes`: the copy the task's calls send from (its own, or its split's), then
+    one line per call: the sections it was sent and their characters, the judge and planner parts, or left out."""
+    text, owner = notes.copy_of(rounds.log_folder(conn), row)
+    if text is None:
+        return ["Router notes: none kept with this task (blank at intake, or a task from before brief 30); its calls "
+                "were sent none."]
+    whose = "" if owner == row["task_id"] else f", its split's ({owner})"
+    lines = [f"Router notes kept with this task{whose} ({notes.digest(text)}, {len(text):,} characters):",
+             safety.for_terminal(text, secrets)]
+    titles = dict(notes.SECTIONS)
+    for c in log.calls_for(conn, row["task_id"]):
+        kind = c["kind"] if c["kind"] not in log.STAGE_KINDS else f"stage {c['stage']} {c['role']}" + (
+            " re-ask" if c["kind"] == "reask" else "")
+        record = (log.context_of(c) or {}).get("notes")
+        if record is None:
+            state = "none"
+        elif record.get("left_out"):
+            state = f"left out ({record.get('chars', 0):,} characters past Grok's limit)"
+        else:
+            sent = ", ".join(f"{titles.get(k, k)} {v:,}" for k, v in (record.get("sections") or {}).items())
+            extra = "".join([" + the judge line" if record.get("judge") else "",
+                             " + the planner part" if record.get("planner") else ""])
+            state = f"sent {sent}{extra}"
+        lines.append(f"{c['call_id']} {kind} {c['agent']}: {state}")
+    return lines
+
+
 def _answer_lines(conn, row):
     """Brief 22 (decision 2): the link between a Jev floor row and the task the owner sent to answer it."""
     new = log.answering_task(conn, row["task_id"])
     if new is not None:
         return [f"Answered by #{new['n']} {new['task_id']} (your label: {new['skill'] or '-'})."]
     floor = log.answered_task(conn, row["task_id"])
+    if floor is not None and floor["reason_code"] == "not_routed":  # brief 29.1 (decision 3): Send as <skill>
+        return [f"Answers #{floor['n']} {floor['task_id']} (Jev labeled it {floor['jev_label'] or '-'}, which version 2 "
+                "doesn't route)."]
     if floor is not None:
         return [f"Answers #{floor['n']} {floor['task_id']} (Jev was unsure)."]
     return []
@@ -4057,17 +6327,21 @@ def _split_plan_lines(conn, row, roster, secrets):
         text = safety.for_terminal(split.text_of(piece), secrets)
         r = rows.get(piece["id"])
         if r is None:
-            where = _piece_route(piece["label"], roster, piece.get("choice")) if piece["label"] and roster else "-"
+            where = (_piece_route(piece["label"], roster, piece.get("choice"), tagged=log.project_of(row) is not None)
+                     if piece["label"] and roster else "-")
             lines.append(f"  {k}. (no task yet) → {where}: {text}")
         else:
             state, words = ("skipped", None) if piece["skipped"] else split.piece_state(r)
-            holder = _held_by(conn, r) if state == "waiting" else None
-            if holder is not None:
-                state = split.held_words(holder)
+            held = _held_text(conn, r) if state == "waiting" else None
+            if held is not None:
+                state = held
             else:
                 state = f"{state} ({words})" if state == "waiting" else (f"{state}: {words}" if words else state)
             check = r["checker"] or ("no check" if r["check_state"] == "not_needed" else "-")
-            lines.append(f"  {k}. #{r['n']} {state} · {r['skill'] or '-'} · {r['agent'] or '-'} / {check}: {text}")
+            if log.runs_preset(r):  # brief 29: a piece of another team names its team
+                lines.append(f"  {k}. #{r['n']} {state} · {r['preset']} · {r['agent'] or '-'} / {check}: {text}")
+            else:
+                lines.append(f"  {k}. #{r['n']} {state} · {r['skill'] or '-'} · {r['agent'] or '-'} / {check}: {text}")
         if piece.get("edited_text") is not None:
             lines.append(f"     (edited; the planner wrote: {safety.for_terminal(piece['planner_text'], secrets)})")
     lines.append(f"Join: {safety.for_terminal(plan['join'], secrets)}")
@@ -4091,6 +6365,18 @@ def _split_pieces_lines(conn, row, secrets):
     return lines
 
 
+def _team_piece_jev(conn, row):
+    """A piece of another team: Jev's label from its split's plan, which routes nothing (brief 29, decision 9)."""
+    if not log.is_piece(row):
+        return None
+    parent = log.get_task(conn, row["parent"])
+    plan = log.split_plan_of(parent) if parent is not None else None
+    k = split.piece_index(plan, row["task_id"]) if plan else None
+    piece = plan["pieces"][k - 1] if k else None
+    words = splitview.jev_words(piece.get("label"), split.team_of(piece)) if piece else None
+    return f"{words} (labeled at plan time; tokens counted on its split)" if words else None
+
+
 def _split_waiting_text(conn, row):
     """What a split waiting with the owner waits on, for `sr show`."""
     n = row["n"]
@@ -4111,7 +6397,15 @@ def _show_relay(conn, row, secrets, stages, out, *, roster=None, presets=None, p
     line, in place of the preset; `pieces` prints each piece's result."""
     calls = log.calls_for(conn, row["task_id"])
     is_split = _mode(row) == "split"
-    out(f"#{row['n']}  {row['task_id']}  {_status_word(row)}  created {_local(row['created_at'])}{_project_line(row)}")
+    of = ""
+    if log.is_piece(row):  # brief 29: a piece of another team names its split, as a route piece does
+        parent = log.get_task(conn, row["parent"])
+        if parent is not None and parent["mode"] == auto.MODE:  # brief 34: a run's step names its run and its step
+            of = f"  step {(log.plan_step_of(row) or {}).get('step')} of run #{parent['n']}"
+        else:
+            k = split.piece_index(log.split_plan_of(parent) or {"pieces": []}, row["task_id"]) if parent else None
+            of = f"  piece {k} of task #{parent['n']}" if parent is not None else ""
+    out(f"#{row['n']}  {row['task_id']}  {_status_word(row)}  created {_local(row['created_at'])}{of}{_project_line(row)}")
     if is_split:
         for line in _split_plan_lines(conn, row, roster, secrets):
             out(line)
@@ -4120,7 +6414,7 @@ def _show_relay(conn, row, secrets, stages, out, *, roster=None, presets=None, p
         changed = _changed_slots(row, presets)
         if changed:  # D4: only when a slot differs from its default
             out("Slots: " + ", ".join(f"{k} {v}" for k, v in changed.items()) + " (the rest are the defaults)")
-        out("Jev: not asked (relay task)")
+        out(_team_piece_jev(conn, row) or "Jev: not asked (relay task)")
     out("Stages:")
     lines = relay.stage_lines(row, calls)
     for line in lines or ["(none yet)"]:
@@ -4156,12 +6450,12 @@ def _show_relay(conn, row, secrets, stages, out, *, roster=None, presets=None, p
     if vote_preset is not None and vote_preset.tallies and (
             relay.awaiting_pick(row) or relay.picked(row) is not None
             or relay.CHECKED_BY_VOTE.fullmatch(row["check_note"] or "")):  # rules v2.24, decision 11
-        for line in _round_lines(calls) + [""] + _vote_lines(row, calls, vote_preset, secrets):
+        for line in _round_lines(calls, rounds.log_folder(conn)) + [""] + _vote_lines(row, calls, vote_preset, secrets):
             out(line)
         return 0
     if not is_split and (relay.awaiting_pick(row) or relay.picked(row) is not None):  # rules v2.16: the pick
         preset = presets_mod.for_task(row, presets)[0]
-        for line in _round_lines(calls):  # brief 21, C1: before the block, whose pick line stays last
+        for line in _round_lines(calls, rounds.log_folder(conn)):  # brief 21, C1: before the block, whose pick line stays last
             out(line)
         if preset is None:
             out(f"(the preset {row['preset']} can't be read, so the candidates can't be paired with their reviews; "
@@ -4194,7 +6488,9 @@ def _show_relay(conn, row, secrets, stages, out, *, roster=None, presets=None, p
     else:
         out("Result:")
         _print_done(conn, row, secrets, out)
-    for line in _round_lines(calls):  # brief 21, C1: before the project lines and the rescue offers, which stay last
+    for line in _round_lines(calls, rounds.log_folder(conn)):  # brief 21, C1: before the project lines and the rescue offers, which stay last
+        out(line)
+    for line in _plan_show_lines(conn, row, secrets):  # brief 33.2 (decision 11): a plan's steps, the inherited ones done
         out(line)
     for line in _project_lines(conn, row, secrets, handoff, memory):  # rules v2.25 and v2.27: the entry, the write record
         out(line)
@@ -4230,15 +6526,19 @@ def _round_text(call):
     return "no output" if call["text"] is None else "not kept"
 
 
-def _round_lines(calls):
-    """`sr show`: each call's round file in order; one line when none was kept (a task from before log version 14)."""
+def _round_lines(calls, folder=None):
+    """`sr show`: each call's round file in order; one line when none was kept (a task from before log version 14). Brief
+    29.1 (decision 22): a check, re-check or fix round names its kept prompt after it."""
     if not calls:
         return []
     found = [_round_text(c) for c in calls]
     if all(f == "not kept" for f in found):
         return ["Round files: not kept"]
-    return ["Round files:"] + [f"  {k:02d} {_history_kind(c)} by {c['agent']}: {f}"
-                               for k, (c, f) in enumerate(zip(calls, found), 1)]
+    lines = ["Round files:"]
+    for k, (c, f) in enumerate(zip(calls, found), 1):
+        given = rounds.prompt_file(folder, c, k)
+        lines.append(f"  {k:02d} {_history_kind(c)} by {c['agent']}: {f}" + (f" (prompt: {given})" if given else ""))
+    return lines
 
 
 def _history_kind(call):
@@ -4249,7 +6549,14 @@ def _history_kind(call):
     return call["kind"]
 
 
-def _show_history(conn, row, secrets, out):
+def _pins_of(roster):
+    """Brief 33.3 (decision 7): ChatGPT's and Cursor's pins, so a row from before log 20 reads as its agent ran then."""
+    if roster is None:
+        return None
+    return {name: roster.model(name) for name in ("chatgpt", "cursor")}
+
+
+def _show_history(conn, row, secrets, out, pins=None):
     """Every call a finished task made, oldest first: kind, agent, status, time, verdict, text."""
     out(f"#{row['n']}  {row['task_id']}  {row['status']}  Check: {row['check_state'] or '-'}")
     if row["status"] in ("queued", "sent"):
@@ -4280,6 +6587,13 @@ def _show_history(conn, row, secrets, out):
         if call["url"]:
             head += f" ({safety.for_terminal(call['url'], secrets)})"
         out(head)
+        asked = models.asked_of(call, pins) if call["agent"] in models.AGENTS else None  # brief 33.3 (decision 7)
+        if asked:
+            record = log.served_of(call) or {}
+            arrow = f" -> {record['model']}" if record.get("model") else " -> served unknown"
+            limit = f", limit {call['time_limit']} s" if "time_limit" in call.keys() and call["time_limit"] else ""
+            effort = f", effort {call['effort']}" if "effort" in call.keys() and call["effort"] else ""
+            out(f"  model: {asked}{arrow}{limit}{effort}")
         record = log.search_of(call)
         if record is not None:
             out(f"  {_search_text(record)}")
@@ -4311,7 +6625,20 @@ CANCEL_WAIT_SECONDS = 10  # brief 22 (decision 5): how long `sr cancel` waits to
 CANCEL_POLL_SECONDS = 0.25
 
 
-def cmd_cancel(*, conn, words, kill=None, sleep=None, clock=None, out=print):
+def cmd_cancel(*, conn, words, kill=None, sleep=None, clock=None, go_on=None, out=print):
+    """`sr cancel` (_cancel); then, when it cancelled a piece of a split, the split goes on in the same command (brief 29,
+    decision 11: the other pieces run as their holds allow, and only the join waits on a blocked piece)."""
+    code = _cancel(conn=conn, words=words, kill=kill, sleep=sleep, clock=clock, out=out)
+    if code == 0 and go_on is not None:
+        row = log.find_task(conn, " ".join(words).strip())[0] if " ".join(words).strip() else None
+        if row is not None and log.is_piece(row) and row["status"] == "cancelled":
+            went = go_on(row)
+            if went == 130:
+                return 130
+    return code
+
+
+def _cancel(*, conn, words, kill=None, sleep=None, clock=None, out=print):
     """Cancel a queued or sent task. Stored as the status 'cancelled'. Build brief 22 (decision 5): when another
     process's run is on the task and that run is alive (its pid and its start time both match), the task is marked
     cancelled first and the run gets SIGINT, the path Ctrl+C takes; `kill`, `sleep` and `clock` are injected (main
@@ -4342,7 +6669,12 @@ def cmd_cancel(*, conn, words, kill=None, sleep=None, clock=None, out=print):
             return 1
     receipt.mark(out, task_id=row["task_id"])
     if _mode(row) == "split" and row["status"] == "returned":  # The owner, before phase F: a waiting split can end
-        return _cancel_split(conn, row, out)  # never signalled: its pieces are untouched
+        gone = _copy_project_gone(row)  # brief 29.1 (decision 6): never a copy whose project isn't registered here
+        if gone:
+            receipt.mark(out, code="project_unknown")
+            out(f"Refused: {gone}. Nothing was cancelled or removed.")
+            return 2
+        return _cancel_split(conn, row, out, kill, sleep, clock)  # brief 29: a project split's open pieces end too
     if row["status"] == "returned" and row["reason_code"] == "needs_label" and not row["answered_by"]:
         try:  # brief 22 (decision 2): a Jev floor question nobody will answer
             log.cancel_floor_row(conn, row["task_id"])
@@ -4353,8 +6685,33 @@ def cmd_cancel(*, conn, words, kill=None, sleep=None, clock=None, out=print):
         out(f"Cancelled {_summary(row)}")
         out("Its Jev floor question is closed; Jev's label stays on the row.")
         return 0
+    if plan_mod.waiting_answers(row):  # brief 33.4 (decision 5): Cancel ends the wait and removes the copy
+        gone = _copy_project_gone(row)
+        if gone:
+            receipt.mark(out, code="project_unknown")
+            out(f"Refused: {gone}. Nothing was cancelled or removed.")
+            return 2
+        with _hold_interrupts():
+            log.set_cancelled(conn, row["task_id"], allowed_from=("returned",))
+            filecalls.remove_copy(conn, row["task_id"])
+        out(f"Cancelled {_summary(row)}")
+        out("Its questions are closed and its copy is removed. Nothing was written.")
+        return 0
     run = runs.holder(row)
     live = runs.alive(*run) if run is not None and run != runs.me() else False
+    if _mode(row) == auto.MODE and row["status"] == "returned":  # brief 34 (decision 1): a stopped run's cancel is Discard run
+        with _hold_interrupts():
+            log.set_cancelled(conn, row["task_id"], allowed_from=("returned",))
+        return _discard(conn, log.get_task(conn, row["task_id"]), out, words="Cancelled")
+    if _mode(row) == auto.MODE and row["status"] in ("queued", "sent"):  # brief 34 (decision 4): a running run's cancel
+        return _cancel_run(conn, row, run, live, kill, out)  # is a stop: the copy kept, --on goes on from there
+    if filecalls.waiting(row) and live is not True:  # brief 28 (decision 13): cancel on a waiting change is a discard
+        return _discard(conn, row, out, words="Cancelled")
+    gone = _copy_project_gone(row)
+    if gone and row["status"] in ("queued", "sent"):
+        receipt.mark(out, code="project_unknown")
+        out(f"Refused: {gone}. Nothing was cancelled or removed.")
+        return 2
     if row["status"] not in ("queued", "sent"):
         if live is True:  # brief 22: a resume or fallback in flight on an ended row: its own Ctrl+C, the row left alone
             stopped = _signal_run(conn, row, run, kill, sleep, clock)
@@ -4375,6 +6732,7 @@ def cmd_cancel(*, conn, words, kill=None, sleep=None, clock=None, out=print):
         return 1
     out(f"Cancelled {_summary(row)}")
     out("Logged as cancelled.")
+    copy_kept = filecalls.active(row)  # brief 28 (decision 18): cancel removes the copy (after the run is stopped)
     grok_out = any(c["agent"] == "grok" and c["status"] == "sent" for c in log.calls_for(conn, row["task_id"]))
     if live is True:  # brief 22 (decision 5): its run gets Ctrl+C; it stops without writing the call
         stopped = _signal_run(conn, row, run, kill, sleep, clock)
@@ -4389,7 +6747,305 @@ def cmd_cancel(*, conn, words, kill=None, sleep=None, clock=None, out=print):
             out("Only the log changed: Grok may still run it, and its issue will stay open.")
         elif live is not None:
             out("If it is still running in another window, that window will say its answer was not saved.")
+    if copy_kept:  # brief 29.1 (decision 7f): only a copy that was removed is said to be
+        if filecalls.remove_copy(conn, row["task_id"]):
+            out("Its copy of the project is removed; the folder is as it was.")
+        elif log.is_piece(row):
+            out("The split's copy of the project is kept: its other pieces and its join build there.")
     return 0
+
+
+def _cancel_run(conn, row, run, live, kill, out):
+    """Brief 34 (decision 4): `sr cancel` on a running run stops it after the call in progress (Ctrl+C to its process,
+    which writes the stop: the step in progress reads stopped, the copy is kept) and never ends it; a run whose process
+    is gone is stopped here. The row's status never goes to cancelled: a cancelled run would be no run to go on with."""
+    n, pid = row["n"], run[0] if run else None
+    if run is not None and run == runs.me():  # from inside the run's own process (a test): its own interrupt
+        out(f"Auto: run #{n} stops after the call in progress and keeps its copy; sr auto {log.project_of(row)} --on goes on from there.")
+        (kill or os.kill)(run[0], signal.SIGINT)
+        return 0
+    if live is True:
+        out(f"Sent Ctrl+C to run #{n} (pid {pid}): it stops after the call in progress and keeps its copy; "
+            f"sr auto {log.project_of(row)} --on goes on from there.")
+        (kill or os.kill)(pid, signal.SIGINT)
+        return 0
+    if live is None:
+        out(f"Couldn't tell whether run #{n}'s process (pid {pid}) is still going, so it was not signalled; run sr check "
+            "later, or sr auto --off.")
+        return 1
+    record = auto.stale_running_stopped(log.auto_of(row) or {})  # no live process: the stop is written here
+    with _hold_interrupts():
+        log.set_auto(conn, row["task_id"], record)
+        if run is not None:
+            log.clear_run(conn, row["task_id"], *run)
+    _auto_stop(conn, row["task_id"], "cancelled", "sr cancel (its process was gone)", step=auto.next_open(record), out=out)
+    return 0
+
+
+LANDS_FOLDER = "lands"  # brief 28: the land journal beside the log, under run/
+
+
+def _journal_dir():
+    return DB_PATH.parent / runs.FOLDER_NAME / LANDS_FOLDER
+
+
+def _project_lock(name, *, task_id=None, conn=None, code="land_refused"):
+    """Brief 28 (`/break-ui`): the project's one-writer lock, beside the log under run/locks/."""
+    if not name:
+        return contextlib.nullcontext()
+    return landing.project_lock(name, folder=DB_PATH.parent / runs.FOLDER_NAME, task_id=task_id, conn=conn, code=code)
+
+
+def _delivered_text(row, calls):
+    """The text a done task delivered, `## Handoff` section and all: the check loop's furthest result, or (brief 29.1,
+    decision 9) a picked versus candidate's build, without its file blocks."""
+    if row["status"] != "done":
+        return None
+    if _mode(row) == "relay" and relay.picked(row) in ("a", "b"):
+        preset = presets.for_task(row, _presets_quietly())[0]
+        found = next((c for c in relay.candidates(log.fallback_view(calls), preset) if c.letter == relay.picked(row)),
+                     None) if preset is not None else None
+        build = relay.accepted(log.fallback_view(calls), found.stage) if found is not None else None
+        return relay.without_file_blocks(build["text"]) if build is not None else None
+    step = checking.ending_of(row, calls)
+    return step.result if step is not None else None
+
+
+def _land_entry(conn, row, anyway=False):
+    """The task's handoff entry, built from its delivered `## Handoff` section as at delivery (decision 10). `anyway`
+    (brief 29.1, decision 21): a failed check's change, so the entry comes from the furthest result's section, or the
+    build's when the fix round missed its handoff contract, never the failed line."""
+    calls = log.calls_for(conn, row["task_id"])
+    if _mode(row) == "plan":  # brief 33.1 (decision 9): the router's entry; a plan's calls return no `## Handoff`
+        return plan_mod.land_entry(row, f"{_now():%Y-%m-%d}")
+    if _mode(row) == auto.MODE:  # brief 34 (decision 2): one entry built from the steps' sections
+        return _auto_entry(conn, row)
+    if anyway:
+        date, kind = f"{_now():%Y-%m-%d}", row["preset"] or row["skill"] or ("split" if _mode(row) == "split" else "-")
+        section = context.split_handoff(_delivered_text(row, calls) or "")[1]
+        if section is None:
+            build = _build_call(row, calls)
+            section = context.split_handoff((build["text"] if build is not None else None) or "")[1]
+        if section is None:
+            return context.heading(row["n"], date, kind, row["agent"] or "-")
+        return context.entry_from_section(row["n"], date, kind, row["agent"] or "-", section)
+    found = context.entry_for(row, calls, date=f"{_now():%Y-%m-%d}", delivered_text=_delivered_text(row, calls))
+    if found is None:
+        return context.heading(row["n"], f"{_now():%Y-%m-%d}", row["preset"] or row["skill"] or
+                               ("split" if _mode(row) == "split" else "-"), row["agent"] or "-")
+    return found[0]
+
+
+def _discard(conn, row, out, words="Discarded"):
+    try:
+        with _project_lock(row["project"], task_id=row["task_id"], conn=conn):
+            landing.discard(conn, row["task_id"], journal_dir=_journal_dir(), date=f"{_now():%Y-%m-%d}", out=out)
+    except landing.Refused as e:
+        receipt.mark(out, code=e.code)
+        out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+        return 2
+    out(f"{words} #{row['n']}'s change: the copy is removed and the folder is as it was. HANDOFF.md: line for "
+        f"#{row['n']} written (discarded).")
+    return 0
+
+
+def cmd_land(words, *, conn, config, verb, out=print, anyway=False, hindsight=None):
+    """`sr land|undo|discard <task>` (rules 2.40, Project files; build brief 28, decisions 11 to 13). Land: the waiting
+    change as one commit on the task's branch, the change's paths and HANDOFF.md only. Undo: one more commit putting
+    them back. Discard: the copy dropped, the folder left as it is. Exit 0, 2 refused (nothing written; `land_refused`,
+    `wrong_state`), 1 when a commit landed but its files could not all be written (`project_partial`, finished next time)."""
+    row = _task_target(conn, words, out, verb)
+    if row is None:
+        return 2
+    if log.is_piece(row):  # brief 29 (decision 13): a piece never waits to land; only its split lands, once
+        parent = log.get_task(conn, row["parent"])
+        kind = "run" if _mode(parent) == auto.MODE else "split"  # brief 34 (decision 2): a run's step, the same
+        receipt.mark(out, code="wrong_state")
+        out(f"Refused: #{row['n']} is a {'step' if kind == 'run' else 'piece'} of {kind} #{parent['n']}: only the {kind} "
+            f"lands, undoes or discards its change (sr {verb} {parent['n']}). Nothing was changed.")
+        return 2
+    so_far = False
+    if _mode(row) == auto.MODE and verb == "land":  # brief 34 (decision 8): a stopped run lands as it stands ("so far")
+        so_far = auto.run_state(row, log.auto_of(row) or {}) == "stopped"
+        refused = _auto_land_so_far(conn, row, out)
+        if refused is not None:
+            return refused
+        row = log.get_task(conn, row["task_id"])
+    if verb == "discard" and plan_mod.waiting_answers(row):  # brief 33.4 (decision 5): the wait's one way out is Cancel
+        receipt.mark(out, code="wrong_state")
+        out(f"Refused: #{row['n']} is a plan waiting for your answers: answer it, or sr cancel {row['n']} ends it and removes "
+            "its copy. Nothing was changed.")
+        return 2
+    if verb == "discard":
+        going = jsonview.state_of(conn, row).waiting_on if _mode(row) == "split" else None
+        if going in ("split_plan", "piece"):  # brief 29, C4: its pieces build in that copy; Reject or cancel drops it
+            receipt.mark(out, code="wrong_state")
+            out(f"Refused: #{row['n']} is a split still {'at its plan' if going == 'split_plan' else 'on its pieces'}: "
+                f"its pieces build in that copy. "
+                f"{'Reject the plan (sr split --go ' + str(row['n']) + ' --answer n) or ' if going == 'split_plan' else ''}"
+                f"sr cancel {row['n']} drops it. Nothing was changed.")
+            return 2
+        return _discard(conn, row, out)
+    secrets = _secrets(config)
+    if _mode(row) == "plan":  # brief 33.1 (decision 9): a link at docs or docs/PLAN.md; a plan's undo after a tick
+        refused = _plan_land_refusal(conn, row, verb)
+        if refused:
+            receipt.mark(out, code="land_refused")
+            out(f"Refused: {refused}. Nothing was changed.")
+            return 2
+    note = None
+    try:
+        with _project_lock(row["project"], task_id=row["task_id"], conn=conn), _hold_interrupts():  # the commit, the
+            # branch and the files go together, one writer in the project at a time
+            extra, note = _step_plan_md(conn, row, verb)  # brief 33.1 (decision 14): a step's docs/PLAN.md, ticked or not
+            section = _plan_section(conn, row, verb)  # brief 33.4 (decisions 6 and 6b): the notes' one section
+            if verb == "land":
+                done = landing.land(conn, row["task_id"], _land_entry(conn, row, anyway=anyway), secrets=secrets,
+                                    journal_dir=_journal_dir(), date=f"{_now():%Y-%m-%d}", anyway=anyway, extra=extra,
+                                    tests_words=_auto_tests_words(conn, row),  # brief 33.2 (decision 16): a run's sum
+                                    subject=(auto.land_message(log.auto_of(row) or {}) if _mode(row) == auto.MODE
+                                             else None),  # brief 33.2 fix 3: the steps that landed, of the plan's
+                                    handoff_edit=section)
+            else:
+                done = landing.undo(conn, row["task_id"], journal_dir=_journal_dir(), date=f"{_now():%Y-%m-%d}",
+                                    managed=(plan_mod.FILE,) if plan_mod.step_of(row) else (), extra=extra,
+                                    handoff_edit=section)
+            _plan_md_written(conn, row, verb, done, note, extra)
+    except landing.Refused as e:
+        receipt.mark(out, code=e.code)
+        out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+        _so_far_back(conn, row, so_far, out)
+        return 2
+    except landing.Partial as e:
+        receipt.mark(out, code=e.code)
+        out(f"Stopped: {safety.one_line(e)}.")
+        _so_far_back(conn, row, so_far, out)
+        return 1
+    except gitops.GitError as e:
+        receipt.mark(out, code="land_refused")
+        out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+        _so_far_back(conn, row, so_far, out)
+        return 2
+    receipt.attach(out, commit=done.commit, branch=done.branch, paths=done.paths)
+    files = ", ".join(safety.one_line(p) for p in done.paths[:6]) + (f" and {len(done.paths) - 6} more" if len(done.paths) > 6 else "")
+    if verb == "land":
+        words = " (its check didn't pass)" if anyway else ""  # brief 29.1 (decision 21)
+        out(f"Landed #{row['n']} as {done.short} on {safety.one_line(done.branch)}{words}: {files} and HANDOFF.md, one "
+            f"commit. sr undo {row['n']} takes it back out.")
+    else:
+        out(f"Undid #{row['n']}'s land as {done.short} on {safety.one_line(done.branch)}: {files} put back, and "
+            "HANDOFF.md, one commit.")
+    if note is not None and note.get("why"):  # brief 33.1 (decision 14): docs/PLAN.md left out, or written over
+        out(note["why"] + ".")
+    if _mode(row) == auto.MODE and verb == "land":  # brief 34 (decision 2): each step's memory, once the run landed
+        _auto_memory_store(conn, row["task_id"], out, hindsight=hindsight, secrets=secrets)
+    return 0
+
+
+def _plan_section(conn, row, verb):
+    """Brief 33.4 (decisions 6 and 6b): what a new plan's land or undo does to the notes' "Current plan's decisions", as a
+    function of HANDOFF.md's text, or None to leave it. A land replaces it with the plan's answers, or clears it with none,
+    and first stores the section as it stands on the plan's record; an undo puts that copy back. A revision never touches
+    it. Runs under the project's lock, so the copy is what the commit replaces."""
+    if _mode(row) != "plan":
+        return None
+    record = plan_mod.record_of(row) or {}
+    if plan_mod.inherited_of(record) is not None:
+        return None
+    if verb == "undo":
+        if "section_before" not in record:  # a plan landed before this brief
+            return None
+        before = record["section_before"]
+        return lambda text: plansection.replaced(text, before)
+    folder = projects.folder_of(log.project_of(row))
+    if folder is None or verb != "land":
+        return None
+    new = plansection.render(record.get("answers"))
+    log.set_plan(conn, row["task_id"], {**record, "section_before": plansection.read(projects.read_handoff(folder)),
+                                        "section_written": plansection.digest(new)})
+    return lambda text: plansection.replaced(text, new)
+
+
+def _plan_land_refusal(conn, row, verb):
+    """Brief 33.1 (decision 9): why a plan's land or undo can't run, or None: a link at docs or docs/PLAN.md in the folder
+    refuses the land (the router never writes through a link); the plan's undo is refused once a step has ticked."""
+    folder = projects.folder_of(log.project_of(row))
+    if verb == "land" and folder is not None:
+        why = plan_mod.link_in(folder)
+        if why:
+            return f"{why}: the router never writes through a link"
+    if verb == "undo":
+        why = plan_mod.no_longer_current(conn, row)  # brief 33.2 (decision 9): a revised plan's undo is refused
+        if why and plan_mod.landed(row):
+            return f"{why}; undo the revision first"
+        held = log.open_task_for(conn, log.project_of(row))  # brief 34 (decision 1): a run on the plan holds it
+        if held is not None and _mode(held) == auto.MODE:
+            return (f"run #{held['n']} is on {log.project_of(row)} (Auto, {auto.run_state(held, log.auto_of(held) or {})}): "
+                    f"land or discard the run first")
+        d = plan_mod.inherited_of(plan_mod.record_of(row)) or 0  # brief 33.2 (decision 9): the inherited ticks are the old plan's
+        found = {k: r for k, r in plan_mod.ticks(conn, row).items() if k > d}
+        if found:
+            k = min(found)
+            return (f"step {k} of plan #{row['n']} is done (#{found[k]['n']}): a landed plan changes only by its ticks, so "
+                    f"undo that step's land first (sr undo {found[k]['n']})")
+    return None
+
+
+def _step_plan_md(conn, row, verb):
+    """Brief 33.1 (decision 14): ({docs/PLAN.md: bytes}, note) for a step task's land (its step ticked) or undo (open
+    again), or ({}, note) when the router leaves it out (uncommitted edits, a link, a plan no longer current), or ({}, None)
+    for any other task."""
+    step = plan_mod.step_of(row)
+    if _mode(row) == auto.MODE and verb in ("land", "undo"):  # brief 34 (decision 8): the run's passed steps, as one
+        return _auto_plan_md(conn, row, verb)
+    if not step or verb not in ("land", "undo"):
+        return {}, None
+    plan_row = log.get_task(conn, step["plan"])
+    folder = projects.folder_of(log.project_of(row))
+    if plan_row is None or folder is None:
+        return {}, None
+    why = plan_mod.no_longer_current(conn, plan_row)
+    if why:
+        return {}, plan_mod.note_of("dirty", f"{why}, so docs/PLAN.md was left as it is", kind=verb)
+    case, words = plan_mod.folder_case(folder, plan_mod.record_of(plan_row))
+    note = plan_mod.note_of(case, words, kind=verb)
+    if case in ("dirty", "link"):
+        return {}, note
+    if verb == "land":
+        text = plan_mod.rendered(conn, plan_row, extra={step["step"]: row})
+    else:
+        text = plan_mod.rendered(conn, plan_row, without=row["task_id"])
+    return {plan_mod.FILE: text.encode("utf-8")}, note
+
+
+def _plan_md_written(conn, row, verb, done, note, extra):
+    """Keep what the router wrote: on a plan's land, its docs/PLAN.md; on a step's land or undo, the step's note and, when
+    docs/PLAN.md went in, the write on the plan's record (what the router last wrote, decision 14)."""
+    if _mode(row) == "plan" and verb == "land":
+        found = gitops.blob_at(done.folder, done.commit, plan_mod.FILE)
+        if found is not None:
+            plan_mod.add_write(conn, log.get_task(conn, row["task_id"]), blob=found[1], commit=done.commit,
+                               task_id=row["task_id"], kind="land")
+        return
+    step = plan_mod.step_of(row)
+    if not step or note is None:
+        return
+    log.update_project_files(conn, row["task_id"], plan_md=note)
+    if extra:
+        found = gitops.blob_at(done.folder, done.commit, plan_mod.FILE)
+        if found is not None:
+            plan_mod.add_write(conn, log.get_task(conn, step["plan"]), blob=found[1], commit=done.commit,
+                               task_id=row["task_id"], kind=verb)
+
+
+def _copy_project_gone(row):
+    """Brief 29.1 (decision 6): why a cancel must not touch this task's copy, or None: it holds a copy (or waits to land)
+    and its project isn't in this registry (a worktree's scratch log holds main's rows, whose copies are real)."""
+    if not (filecalls.active(row) or filecalls.waiting(row)) or not log.project_of(row):
+        return None
+    if projects.folder_of(log.project_of(row)) is not None:
+        return None
+    return f"project {log.project_of(row)} is no longer registered, so #{row['n']}'s copy is left as it is"
 
 
 def _signal_run(conn, row, run, kill, sleep, clock):
@@ -4418,9 +7074,11 @@ def _stopped_words(stopped):
     return "it had already ended"
 
 
-def _cancel_split(conn, row, out):
+def _cancel_split(conn, row, out, kill=None, sleep=None, clock=None):
     """`sr cancel` on a split waiting with the owner (its plan, or its pieces): the split only. Its piece rows are
-    untouched (an open piece goes on, and `sr check` still finishes it); its plan is kept; it never integrates."""
+    untouched (an open piece goes on, and `sr check` still finishes it); its plan is kept; it never integrates. Brief 29
+    (decision 15): on a project split its open pieces are cancelled too (a running one gets Ctrl+C as `sr cancel` gives
+    it) and the copy is removed, since no piece can run without it."""
     try:
         log.cancel_waiting_split(conn, row["task_id"])
     except log.StateError:
@@ -4431,6 +7089,24 @@ def _cancel_split(conn, row, out):
         return 1
     pieces = log.pieces_of(conn, row["task_id"])
     out(f"Cancelled {_summary(row)}")
+    if log.project_of(row):
+        stopped = []
+        for piece in pieces:
+            if piece["status"] not in ("queued", "sent"):
+                continue
+            run = runs.holder(piece)
+            live = runs.alive(*run) if run is not None and run != runs.me() else False
+            try:
+                log.set_cancelled(conn, piece["task_id"])
+            except log.StateError:
+                continue
+            if live is True:
+                _signal_run(conn, piece, run, kill, sleep, clock)
+            stopped.append(f"#{piece['n']}")
+        out("Cancelled with it: " + (", ".join(stopped) if stopped else "no open piece") + f". The plan is kept: sr show "
+            f"{row['n']}.")
+        _drop_split_copy(conn, row["task_id"], out)
+        return 0
     tail = (" (" + ", ".join(f"#{p['n']} {p['status']}" for p in pieces) + ")") if pieces else ""
     out(f"Cancelled the split only; its pieces are untouched{tail}. The plan is kept: sr show {row['n']}.")
     return 0
@@ -4467,28 +7143,84 @@ def cmd_migrate(*, db_path, backups_dir, now=None, out=print):
     return 0
 
 
-PROJECT_USAGE = ("sr project add|list|remove|new (add <name> <path>; remove <name>; "
-                 "new <name> [--dry-run] [-- '<notes>'])")
-PROJECT_FLAGS = ("--json", "--dry-run")
+PROJECT_USAGE = ("sr project add|list|remove|new|tests|test|run-command|run|stop|secrets|files|git|notes|pin|save (add <name> "
+                 "<path>; remove <name>; new <name> [--dry-run] [-- '<notes>']; tests <name> [-- '<command>' | --clear]; "
+                 "test <name> [--status]; run-command <name> [-- '<command>' | --clear]; run <name> [--status]; stop <name>; "
+                 "secrets <name> [--set <NAME> (the value on stdin) | --remove <NAME>]; "
+                 "files <name> --file <path>...; git <name> [--dry-run]; notes <name> [--save [--expect <hash>] -- "
+                 "'<notes>']; pin <name> --task <id> -- '<text>'; save <name> --task <id> --path <path>)")
+PROJECT_FLAGS = ("--json", "--dry-run", "--clear", "--save")
+
+
+# Brief 30: what the one argument after `--` is on each command that takes one, and how to type it
+_TEXT_SHAPES = {"tests": ("the test command", "sr project tests <name> -- '<command>'"),
+                "run-command": ("the run command", "sr project run-command <name> -- '<command>'"),  # brief 31
+                "notes": ("the notes", "sr project notes <name> --save -- '<notes>'"),
+                "pin": ("the text", "sr project pin <name> --task <id> -- '<text>'")}
+
+
+def _secrets_shape(words):
+    """Brief 31 (decision 8): `sr project secrets` takes the name and `--json`, `--set <NAME>` or `--remove <NAME>`, and
+    nothing else: a value is never an argument, so anything more is refused here, before argparse could echo it."""
+    if next((w for w in words if not w.startswith("-")), None) != "secrets":
+        return None
+    usage = ("secrets takes a value on stdin, never as an argument: sr project secrets <name> [--set <NAME> | --remove "
+             "<NAME>] [--json], then type or pipe the value")
+    rest, names, i = [w for w in words if w != "--json"], [], 0
+    rest = rest[1:] if rest[:1] == ["secrets"] else rest
+    while i < len(rest):
+        if rest[i] in ("--set", "--remove"):
+            if i + 1 >= len(rest) or rest[i + 1].startswith("-"):
+                return usage
+            i += 2
+            continue
+        if rest[i].startswith("-"):
+            return usage
+        names.append(rest[i])
+        i += 1
+    return None if len(names) == 1 and sum(w in ("--set", "--remove") for w in rest) <= 1 else usage
 
 
 def _take_project_notes(argv):
     """Brief 26 (decisions 1 and 9): for `sr project`, (argv for argparse, the notes or None, a usage problem or None).
     The one argument after the first bare `--` is the notes, taken off before argparse, so `-h` or `--skill coding` in
     them is text; `--json` and `--dry-run` before it move to just after `project`, so `new --json <name>` parses (the
-    words are one positional). Any other command comes back unchanged."""
+    words are one positional). Brief 30: `sr notes save -- <the notes>` takes its text the same way (no flag moves), and
+    `sr project notes … --save` and `sr project pin` theirs. Any other command comes back unchanged."""
     argv = list(argv)
+    if argv[:1] == ["ideas"]:  # brief 33 (decision 15): an idea's text is the one argument after `--`
+        if "--" not in argv:
+            return argv, None, None
+        head, tail = argv[:argv.index("--")], argv[argv.index("--") + 1:]
+        if len(tail) != 1:
+            return head, None, ("nothing follows --: the idea goes after it, in quotes (sr ideas <project> --add -- "
+                                "'<text>')" if not tail else "the idea after -- is one argument: put it in quotes "
+                                "(sr ideas <project> --add -- '<text>')")
+        return head, tail[0], None
+    if argv[:1] == ["notes"]:  # brief 30 (decision 8): the whole file is the one argument after `--`
+        if "--" not in argv:
+            return argv, None, None
+        head, tail = argv[:argv.index("--")], argv[argv.index("--") + 1:]
+        if len(tail) != 1:
+            return head, None, ("nothing follows --: the router notes go after it, in quotes (sr notes save -- "
+                                "'<the notes>')" if not tail else "the router notes after -- are one argument: put "
+                                "them in quotes (sr notes save -- '<the notes>')")
+        return head, tail[0], None
     if not argv or argv[0] != "project":
         return argv, None, None
+    problem = _secrets_shape(argv[1:])
+    if problem:
+        return argv[:1], None, problem
     head, tail = (argv[:argv.index("--")], argv[argv.index("--") + 1:]) if "--" in argv else (argv, None)
     head = [head[0], *(t for t in head[1:] if t in PROJECT_FLAGS), *(t for t in head[1:] if t not in PROJECT_FLAGS)]
     if tail is None:
         return head, None, None
+    verb = next((w for w in head[1:] if not w.startswith("-")), None)
+    what, shape = _TEXT_SHAPES.get(verb, ("the notes", "sr project new <name> -- '<notes>'"))
     if not tail:
-        return head, None, "nothing follows --: the notes go after it, in quotes (sr project new <name> -- '<notes>')"
+        return head, None, f"nothing follows --: {what} goes after it, in quotes ({shape})"
     if len(tail) > 1:
-        return head, None, ("the notes after -- are one argument: put them in quotes "
-                            "(sr project new <name> -- '<notes>')")
+        return head, None, f"{what} after -- is one argument: put it in quotes ({shape})"
     return head, tail[0], None
 
 
@@ -4509,7 +7241,9 @@ def _dry_run_words(plan):
                 else f"HANDOFF.md ({state['lines']} lines) given the router's block at its end")
         return f"Would register {folder} as it is: {what}. Nothing was changed."
     root = "" if plan.root.exists() else f"; the projects root {safety.one_line(projects.tilde(plan.root))} is made too"
-    return f"Would create {folder} and its HANDOFF.md, and register {plan.name}{root}. Nothing was changed."
+    git = ("; git is set up (a first commit of .gitignore and HANDOFF.md)" if gitops.installed()
+           else "; git isn't installed, so it is made without git (file work needs git)")  # brief 28 (decision 16)
+    return f"Would create {folder} and its HANDOFF.md, and register {plan.name}{root}{git}. Nothing was changed."
 
 
 def _project_new(name, notes, *, dry_run, secrets, out):
@@ -4521,7 +7255,8 @@ def _project_new(name, notes, *, dry_run, secrets, out):
         words = _dry_run_words(plan)
         receipt.deliver(out, {"api_version": jsonview.API_VERSION, "would": plan.would, "name": plan.name,
                               "folder": projects.tilde(plan.folder) if plan.folder is not None else None,
-                              "handoff": plan.handoff, "reason_code": plan.code, "message": words})
+                              "handoff": plan.handoff, "reason_code": plan.code, "message": words,
+                              "git": plan.would == "create" and gitops.installed()})  # brief 28 (decision 16)
         out(words)
         return 0
     try:
@@ -4535,12 +7270,24 @@ def _project_new(name, notes, *, dry_run, secrets, out):
         out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
         return 2
     folder = projects.tilde(made.folder)
+    done = None
     if made.did == "created":
         what = "HANDOFF.md made: your notes, then the router's block" if notes else "HANDOFF.md made with an empty block"
         out(f"Created {name} at {safety.one_line(folder)}. {what} ({made.lines} lines).")
+        try:  # brief 28 (decision 16): git, so file work can start at once
+            done = projgit.set_up_new(made.folder, journal_dir=_journal_dir())
+        except (projgit.Refused, gitops.GitError, OSError) as e:
+            done = None
+            out(f"git could not be set up ({safety.one_line(e)}); the project is made, and Turn on undo can add it.")
+        else:
+            out(f"git set up: one first commit {done.short} on {safety.one_line(done.branch)} holding .gitignore and "
+                "HANDOFF.md." if done else "git isn't installed, so the project is made without it; file work needs git "
+                "(Setup, Git).")
     else:
         out(f"Added {name} at {safety.one_line(folder)}. {_handoff_words(made.created, made.marked)} ({made.lines} lines).")
     receipt.attach(out, project={"name": name, "folder": folder, "handoff_lines": made.lines, "did": made.did})
+    if made.did == "created":  # brief 28 (decision 16): the first commit, or null without git
+        receipt.attach(out, git={"commit": done.commit, "branch": done.branch} if done else None)
     text = projects.read_handoff(made.folder)
     warning = projects.size_warning(made.lines, projects.block_start(text))
     if warning:
@@ -4548,7 +7295,346 @@ def _project_new(name, notes, *, dry_run, secrets, out):
     return 0
 
 
-def cmd_project(words, *, conn, as_json=False, out=print, notes=None, dry_run=False, secrets=()):
+def _project_tests(name, text, *, clear, out):
+    """`sr project tests <name> [-- '<command>'] [--clear]` (brief 28, decision 17): the words stored, cleared or shown.
+    Exit 0, or 2 refused with the reason and nothing written."""
+    try:
+        folder = projects.folder_of(name)
+    except projects.ProjectError as e:
+        receipt.mark(out, code="project_refused")
+        out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+        return 2
+    if folder is None:
+        receipt.mark(out, code="project_unknown")
+        out(f"Refused: no project {safety.one_line(name)}. Nothing was changed.")
+        return 2
+    if clear and text is not None:
+        receipt.mark(out, code="usage")
+        out("Refused: --clear or a command after --, not both. Nothing was changed.")
+        return 2
+    try:
+        if clear:
+            had = projects.clear_tests(name)
+            receipt.attach(out, project={"name": name, "tests": None})
+            out(f"Cleared the test command of {name}." if had else f"{name} had no test command. Nothing was changed.")
+            return 0
+        if text is not None:
+            words = testrun.split_words(text)
+            problem = testrun.check_words(words, folder)
+            if problem:
+                raise testrun.TestsError(problem)
+            projects.set_tests(name, words)
+        words = projects.tests_of(name)
+    except (testrun.TestsError, projects.ProjectError) as e:
+        receipt.mark(out, code="project_refused")
+        out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+        return 2
+    receipt.attach(out, project={"name": name, "tests": words})
+    if words:
+        out(f"Tests for {name}: {safety.one_line(shlex.join(words))}")
+    else:
+        out(f"No test command for {name}. sr project tests {name} -- '<command>' sets one.")
+    return 0
+
+
+def _project_test(name, *, status, secrets, out):
+    """Brief 31 (decisions 1 and 2): `sr project test <name>` runs the project's tests once on a throwaway copy of its
+    head, in the sandbox, and keeps the result; `--status` says whether a Test is running and shows its output so far
+    (else the last one's). Exit 0 for a run that happened, whatever its outcome; 2 refused with nothing made."""
+    run_folder = runs.FOLDER or (DB_PATH.parent / runs.FOLDER_NAME)
+    if status:
+        try:
+            known = projects.folder_of(name)
+        except projects.ProjectError as e:
+            receipt.mark(out, code="project_refused")
+            out(f"Refused: {safety.one_line(e)}. Nothing was made.")
+            return 2
+        if known is None:
+            receipt.mark(out, code="project_unknown")
+            out(f"Refused: no project {safety.one_line(name)}. Nothing was made.")
+            return 2
+        found = projtest.status(name, run_folder=run_folder, secrets=[*secrets, *projtest.project_secrets(known)])
+        receipt.attach(out, project={"name": name, "test_status": found})
+        if found["running"]:
+            out(f"A Test is running on {name} since {found['started']} (head {gitops.short(found['head'])}).")
+        elif found["last"]:
+            last = found["last"]
+            out(f"{projtest.line(last)} on {name} at {last['when']} (head {gitops.short(last['head'])}).")
+        else:
+            out(f"No Test has run on {name} yet. sr project test {name} runs one.")
+        if found["output"]:
+            out(safety.for_terminal(found["output"].rstrip("\n"), secrets))
+        return 0
+    try:
+        folder = projects.folder_of(name)
+    except projects.ProjectError:
+        folder = None
+    try:
+        record = projtest.run(name, run_folder=run_folder,
+                              secrets=[*secrets, *(projtest.project_secrets(folder) if folder else [])])
+    except projtest.Unknown:
+        receipt.mark(out, code="project_unknown")
+        out(f"Refused: no project {safety.one_line(name)}. Nothing was made.")
+        return 2
+    except projtest.Refused as e:
+        receipt.mark(out, code="project_refused")
+        out(f"Refused: {safety.one_line(e)}. Nothing was made.")
+        return 2
+    receipt.attach(out, project={"name": name, "test": record})
+    output = projtest.output_of(projtest.last(name, run_folder=run_folder), run_folder=run_folder, name=name)
+    if output.strip():
+        out(safety.for_terminal(output.rstrip("\n"), secrets))
+    out(f"{projtest.line(record)} on {name} (head {gitops.short(record['head'])}, {record['seconds']} s)"
+        + (f": {safety.one_line(record['summary'])}" if record.get("summary") else "."))
+    return 0
+
+
+def _run_folder():
+    return runs.FOLDER or (DB_PATH.parent / runs.FOLDER_NAME)
+
+
+def _project_known(name, out, what="Nothing was changed."):
+    """The project's folder, or None after saying why (exit 2 for the caller)."""
+    try:
+        folder = projects.folder_of(name)
+    except projects.ProjectError as e:
+        receipt.mark(out, code="project_refused")
+        out(f"Refused: {safety.one_line(e)}. {what}")
+        return None
+    if folder is None:
+        receipt.mark(out, code="project_unknown")
+        out(f"Refused: no project {safety.one_line(name)}. {what}")
+        return None
+    return folder
+
+
+def _project_run_command(name, text, *, clear, out):
+    """Brief 31 (decision 3): `sr project run-command <name> [-- '<command>'] [--clear]`: the words kept in the router's
+    own `config/project_runs.json`, cleared or shown. Exit 0, or 2 refused with nothing written."""
+    if _project_known(name, out) is None:
+        return 2
+    if clear and text is not None:
+        receipt.mark(out, code="usage")
+        out("Refused: --clear or a command after --, not both. Nothing was changed.")
+        return 2
+    try:
+        if clear:
+            had = projrun.clear_run_command(name)
+            receipt.attach(out, project={"name": name, "run_command": None})
+            out(f"Cleared the run command of {name}." if had else f"{name} had no run command. Nothing was changed.")
+            return 0
+        if text is not None:
+            projrun.set_run_command(name, projrun.split_words(text))
+        words = projrun.run_command_of(name)
+    except projrun.Refused as e:
+        receipt.mark(out, code="project_refused")
+        out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+        return 2
+    receipt.attach(out, project={"name": name, "run_command": words})
+    out(f"Run command for {name}: {safety.one_line(shlex.join(words))}" if words
+        else f"No run command for {name}. sr project run-command {name} -- '<command>' sets one.")
+    return 0
+
+
+def _project_run(name, *, status, secrets, out):
+    """Brief 31 (decisions 4 to 7): `sr project run <name>` starts the run command in the project's folder under the
+    supervisor and answers once it runs (exit 0); `--status` says whether a run is going and shows its output's redacted
+    tail. Exit 2 refused, nothing started. Only the owner's command starts a run (decision 5)."""
+    run_folder = _run_folder()
+    if status:
+        known = _project_known(name, out, "Nothing was started.")
+        if known is None:
+            return 2
+        found = projrun.status(name, run_folder=run_folder, secrets=[*secrets, *projtest.project_secrets(known)])
+        receipt.attach(out, project={"name": name, "run_status": {k: v for k, v in found.items() if k != "log"}})
+        if found["running"]:
+            out(f"Running on {name} since {found['started']}: {safety.one_line(shlex.join(found['command'] or []))}")
+        elif found["state"]:
+            how = "stopped" if found["state"] == "stopped" else f"exited {found['exit']}" if found["exit"] is not None else "ended"
+            out(f"The last run on {name} {how} at {found['ended'] or 'an unknown time'}.")
+        else:
+            out(f"No run on {name} yet." + (" sr project run " + name + " starts one." if found["command"] else ""))
+        if found["output"]:
+            out(safety.for_terminal(found["output"].rstrip("\n"), secrets))
+        return 0
+    try:
+        record = projrun.start(name, run_folder=run_folder)
+    except projrun.Unknown:
+        receipt.mark(out, code="project_unknown")
+        out(f"Refused: no project {safety.one_line(name)}. Nothing was started.")
+        return 2
+    except projrun.Refused as e:
+        receipt.mark(out, code="project_refused")
+        out(f"Refused: {safety.one_line(e)}. Nothing was started.")
+        return 2
+    shown = {k: record.get(k) for k in ("state", "command", "started", "ended", "exit", "pid")}
+    receipt.attach(out, project={"name": name, "run": shown})
+    words = safety.one_line(shlex.join(record.get("command") or []))
+    if record.get("state") == "running":
+        out(f"Running on {name} since {record.get('started')}: {words}. It goes on if you close this window; "
+            f"sr project stop {name} ends it.")
+    else:
+        out(f"The run on {name} ended at once ({record.get('error') or 'exit ' + str(record.get('exit'))}): {words}. "
+            f"sr project run {name} --status shows its output.")
+    return 0
+
+
+def _project_stop(name, *, out):
+    """Brief 31 (decision 6): `sr project stop <name>` ends the run's group (SIGTERM, then SIGKILL after 10 s) and records
+    `stopped`. Exit 0, or 2 refused (no run going, or one `ps` can't tell apart), nothing signalled."""
+    if _project_known(name, out, "Nothing was signalled.") is None:
+        return 2
+    try:
+        record = projrun.stop(name, run_folder=_run_folder())
+    except projrun.Refused as e:
+        receipt.mark(out, code="project_refused")
+        out(f"Refused: {safety.one_line(e)}. Nothing was signalled.")
+        return 2
+    receipt.attach(out, project={"name": name, "run": {k: record.get(k) for k in ("state", "command", "started", "ended", "exit")}})
+    out(f"Stopped the run on {name} at {record.get('ended')}.")
+    return 0
+
+
+def _read_secret(stdin, json_mode):
+    """Decision 8: the value from stdin, never an argument: one line, a trailing newline dropped. On a terminal it is
+    asked for without echo (getpass); under --json nothing is asked, so a terminal there is refused. (value, problem)."""
+    if stdin.isatty():
+        if json_mode:
+            return None, "under --json the value comes on stdin (a pipe), never typed at a prompt"
+        import getpass
+        try:
+            return getpass.getpass("The value (not shown): "), None
+        except (EOFError, KeyboardInterrupt):
+            return None, "no value was typed"
+    text = stdin.read(projsecrets.VALUE_LIMIT + 3)
+    if stdin.read(1):
+        return None, f"the value is longer than {projsecrets.VALUE_LIMIT:,} characters"
+    if text.endswith("\r\n"):
+        text = text[:-2]
+    elif text.endswith("\n"):
+        text = text[:-1]
+    return text, None
+
+
+def _project_secrets(name, *, set_name, remove_name, json_mode, stdin, out):
+    """Brief 31 (decisions 8 and 9): `sr project secrets <name>` lists the names in the project's .env, each set or empty,
+    never a value; `--set <NAME>` writes the value read from stdin; `--remove <NAME>` takes a name out. Exit 0, or 2
+    refused with nothing written. No value is ever printed, kept or put in the JSON."""
+    try:
+        if set_name is not None and remove_name is not None:
+            raise projsecrets.Refused("--set or --remove, not both")
+        if set_name is not None:
+            value, problem = _read_secret(stdin, json_mode)
+            if problem:
+                raise projsecrets.Refused(problem)
+            done = projsecrets.set_value(name, set_name, value)
+            value = None  # nothing below holds it
+            receipt.attach(out, project={"name": name, "secret": done})
+            out(f"{'Added' if done['created'] else 'Changed'} {done['name']} in {name}'s .env "
+                f"({done['characters']:,} characters, not shown).")
+            return 0
+        if remove_name is not None:
+            done = projsecrets.remove(name, remove_name)
+            receipt.attach(out, project={"name": name, "secret": done})
+            out(f"Removed {done['name']} from {name}'s .env.")
+            return 0
+        folder = projsecrets.folder_of(name)
+        found = projsecrets.names(folder)
+    except projsecrets.Unknown:
+        receipt.mark(out, code="project_unknown")
+        out(f"Refused: no project {safety.one_line(name)}. Nothing was written.")
+        return 2
+    except projsecrets.Refused as e:
+        receipt.mark(out, code="project_refused")
+        out(f"Refused: {safety.one_line(e)}. Nothing was written.")
+        return 2
+    receipt.attach(out, project={"name": name, "secrets": found})
+    if found:
+        out(f"{name}'s .env: " + ", ".join(f"{f['name']} ({'set' if f['set'] else 'empty'})" for f in found))
+    else:
+        out(f"{name} has no .env names yet. sr project secrets {name} --set <NAME> adds one, its value on stdin.")
+    return 0
+
+
+def _project_files(conn, name, files, *, secrets, out, drop_folder=None):
+    """`sr project files <name> --file <path> …` (brief 28, decision 14): one commit holding the files and HANDOFF.md;
+    the originals at the drop folder's top level move to its sent/. Exit 0, or 2 refused with nothing written."""
+    try:
+        with _project_lock(name, conn=conn, code="project_refused"):
+            done = projgit.add_files(conn, name, list(files or ()), secrets=secrets, journal_dir=_journal_dir(),
+                                     date=f"{_now():%Y-%m-%d}")
+    except landing.Refused as e:
+        receipt.mark(out, code=e.code)
+        out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+        _refused_drop(name, files, drop_folder, out)
+        return 2
+    except landing.Partial as e:
+        receipt.mark(out, code=e.code)
+        out(f"Stopped: {safety.one_line(e)}.")
+        return 1
+    except gitops.GitError as e:
+        receipt.mark(out, code="project_refused")
+        out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+        _refused_drop(name, files, drop_folder, out)
+        return 2
+    names = ", ".join(safety.one_line(n) for n in done.paths)
+    out(f"Added to {name}: {names}, and HANDOFF.md, one commit {done.short} on {safety.one_line(done.branch)}.")
+    folder = drop_folder if drop_folder is not None else drop.folder()
+    moving = [Path(f) for f in files if folder and drop.at_top_level(folder, f)]
+    if moving:
+        dest = drop.move_sent(folder, f"files-{name}-{_now():%Y%m%d-%H%M%S}", moving)
+        out(f"Moved {len(moving)} file(s) from the drop folder to {safety.one_line(projects.tilde(dest))}/.")
+    receipt.attach(out, project={"name": name, "commit": done.commit, "files": done.paths})
+    return 0
+
+
+def _refused_drop(name, files, drop_folder, out):
+    """Brief 29.1 (decision 6): a refused Add's files at the drop folder's top level move into refused/ beside sent/, so a
+    later `sr route` never offers them; a file anywhere else stays where it is."""
+    folder = drop_folder if drop_folder is not None else drop.folder()
+    moving = [Path(f) for f in files or () if folder and drop.at_top_level(folder, f)]
+    if moving:
+        dest = drop.move_refused(folder, f"files-{name}-{_now():%Y%m%d-%H%M%S}", moving)
+        out(f"Moved {len(moving)} file(s) from the drop folder to {safety.one_line(projects.tilde(dest))}/; drop them "
+            "again to try once more.")
+
+
+def _project_git(name, *, dry_run, secrets, out):
+    """`sr project git <name> [--dry-run]` (brief 28, decision 15): Turn on undo, or its dry run (a document, exit 0)."""
+    if dry_run:
+        plan = projgit.plan_git(name, secrets=secrets)
+        doc = plan.as_dict()
+        if plan.would == "refused":
+            words = f"Would refuse: {safety.one_line(plan.why)}. Nothing was changed."
+        else:
+            adds = plan.gitignore["adds"]
+            ignore = (f"{'adds' if plan.gitignore['exists'] else 'makes'} .gitignore with {', '.join(adds)}" if adds
+                      else ".gitignore already has every line")
+            words = (f"Would turn on undo for {name}: {ignore}; git init; one first commit of {len(plan.files)} files "
+                     f"({plan.bytes:,} bytes). Nothing was changed.")
+        receipt.deliver(out, {"api_version": jsonview.API_VERSION, **doc, "message": words})
+        out(words)
+        return 0
+    try:
+        with _project_lock(name, code="project_refused"):
+            done = projgit.turn_on(name, secrets=secrets, journal_dir=_journal_dir())
+    except landing.Refused as e:
+        receipt.mark(out, code=e.code)
+        out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+        return 2
+    except gitops.GitError as e:
+        receipt.mark(out, code="project_refused")
+        out(f"Stopped: {safety.one_line(e)}. Turn on undo again finishes it.")
+        return 1
+    out(f"Undo is on for {name}: git set up, one first commit {done.short} on {safety.one_line(done.branch)} holding "
+        f"{len(done.paths)} files.")
+    receipt.attach(out, project={"name": name, "commit": done.commit, "branch": done.branch, "files": len(done.paths)})
+    return 0
+
+
+def cmd_project(words, *, conn, as_json=False, out=print, notes=None, dry_run=False, secrets=(), clear=False, files=(),
+                save=False, expect=None, task=None, path=None, status=False, set_name=None, remove_name=None,
+                json_mode=False, stdin=None):
     """`sr project add|list|remove|new` (rules v2.25, Project context; build brief 18, decision 1; brief 26). Only the
     owner runs these. `add` registers a folder that exists, never one in never_register, and gives its HANDOFF.md the
     router's block; `list` prints each project with its path, line count and open task; `remove` drops the entry and
@@ -4558,9 +7644,47 @@ def cmd_project(words, *, conn, as_json=False, out=print, notes=None, dry_run=Fa
     (`sr project list --json`)."""
     words = list(words)
     verb = words[0] if words else None
-    if verb == "new" and len(words) == 2 and not (dry_run and notes is not None):
+    brief30 = (save, expect, task, path)  # brief 30: these flags go only with notes, pin and save
+    if verb in ("notes", "pin", "save") and len(words) == 2 and not (dry_run or clear or files):
+        return _project_notes_verbs(verb, words[1], conn=conn, as_json=as_json, text=notes, save=save, expect=expect,
+                                    task=task, path=path, secrets=secrets, out=out)
+    if verb == "spec" and len(words) == 2 and not (dry_run or clear or files or task or path):  # brief 33.2 (decision 4)
+        return _project_spec_verb(words[1], conn=conn, as_json=as_json, text=notes, save=save, expect=expect,
+                                  secrets=secrets, out=out)
+    if verb == "test" and len(words) == 2 and not any(v not in (None, False) for v in brief30) and not (
+            dry_run or notes is not None or clear or files):  # brief 31 (decisions 1 and 2)
+        return _project_test(words[1], status=status, secrets=secrets, out=out)
+    plain = not (any(v not in (None, False) for v in brief30) or dry_run or files)
+    if verb == "secrets" and len(words) == 2 and plain and notes is None and not (clear or status):  # brief 31 (decision 8)
+        return _project_secrets(words[1], set_name=set_name, remove_name=remove_name, json_mode=json_mode,
+                                stdin=stdin or sys.stdin, out=out)
+    if set_name is not None or remove_name is not None:
+        receipt.mark(out, code="usage")
+        out(f"Refused: {PROJECT_USAGE}; --set and --remove go with secrets. Nothing was changed.")
+        return 2
+    if verb == "run-command" and len(words) == 2 and plain and not status:  # brief 31 (decision 3)
+        return _project_run_command(words[1], notes, clear=clear, out=out)
+    if verb == "run" and len(words) == 2 and plain and notes is None and not clear:  # brief 31 (decisions 4 to 7)
+        return _project_run(words[1], status=status, secrets=secrets, out=out)
+    if verb == "stop" and len(words) == 2 and plain and notes is None and not (clear or status):  # brief 31 (decision 6)
+        return _project_stop(words[1], out=out)
+    if status:
+        receipt.mark(out, code="usage")
+        out(f"Refused: {PROJECT_USAGE}; --status goes with test and run. Nothing was changed.")
+        return 2
+    if any(v not in (None, False) for v in brief30):
+        receipt.mark(out, code="usage")
+        out(f"Refused: {PROJECT_USAGE}. Nothing was changed.")
+        return 2
+    if verb == "new" and len(words) == 2 and not (dry_run and notes is not None) and not clear:
         return _project_new(words[1], notes, dry_run=dry_run, secrets=secrets, out=out)
-    if dry_run or notes is not None:
+    if verb == "tests" and len(words) == 2 and not dry_run:  # brief 28 (decision 17)
+        return _project_tests(words[1], notes, clear=clear, out=out)
+    if verb == "files" and len(words) == 2 and not (dry_run or notes is not None or clear):  # brief 28 (decision 14)
+        return _project_files(conn, words[1], files, secrets=secrets, out=out)
+    if verb == "git" and len(words) == 2 and not (notes is not None or clear):  # brief 28 (decision 15)
+        return _project_git(words[1], dry_run=dry_run, secrets=secrets, out=out)
+    if dry_run or notes is not None or clear or files:
         receipt.mark(out, code="usage")
         out(f"Refused: {PROJECT_USAGE}; --dry-run takes the name alone. Nothing was changed.")
         return 2
@@ -4573,7 +7697,7 @@ def cmd_project(words, *, conn, as_json=False, out=print, notes=None, dry_run=Fa
             out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
             return 2
         what = _handoff_words(done.created, done.marked)
-        out(f"Registered {name} at {safety.one_line(str(done.path))}. {what} ({done.lines} lines).")
+        out(f"Registered {name} at {safety.one_line(projects.tilde(done.path))}. {what} ({done.lines} lines).")  # 33.2 (D7 iii)
         warning = projects.size_warning(done.lines, done.block_start)
         if warning:
             out(warning)
@@ -4587,7 +7711,8 @@ def cmd_project(words, *, conn, as_json=False, out=print, notes=None, dry_run=Fa
             return 2
         open_rows = {name: log.open_task_for(conn, name) for name in registry}
         if as_json:
-            receipt.deliver(out, {"api_version": jsonview.API_VERSION, "projects": _projects_json(registry, open_rows)})
+            receipt.deliver(out, {"api_version": jsonview.API_VERSION,
+                                  "projects": _projects_json(registry, open_rows, conn=conn, loaded=_presets_quietly())})
             return 0
         for line in projects.listing(registry, open_rows):
             out(line)
@@ -4599,16 +7724,153 @@ def cmd_project(words, *, conn, as_json=False, out=print, notes=None, dry_run=Fa
             receipt.mark(out, code="project_unknown")
             out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
             return 2
-        out(f"Removed {words[1]} from the registry. Its HANDOFF.md is untouched.")
+        had_tests = projects.clear_tests(words[1]) if projects.tests_of(words[1]) else False  # brief 28: the router's own
+        out(f"Removed {words[1]} from the registry. Its HANDOFF.md is untouched."
+            + (" Its test command is dropped too." if had_tests else ""))
         return 0
     receipt.mark(out, code="usage")
     out(f"Refused: {PROJECT_USAGE}. Nothing was changed.")
     return 2
 
 
-def _projects_json(registry, open_rows):
+def _project_spec_verb(name, *, conn, as_json, text, save, expect, secrets, out):
+    """Brief 33.2 (decision 4): `sr project spec <name>` prints SPEC.md with its hash and the items as code labels them
+    (`--json`: the document the page's Spec section reads); `--save [--expect <hash>] -- <text>` replaces the file whole
+    under the project's lock, one commit `sr: spec edited` (`sr: spec added` for a first one) with git, else written with
+    no commit. Exit 0, or 2 refused with nothing written (1 when a commit stopped part way)."""
+    if (save and text is None) or (not save and (text is not None or expect)):
+        receipt.mark(out, code="usage")
+        out("Refused: sr project spec <name> [--save [--expect <hash>] -- '<text>']. Nothing was changed.")
+        return 2
+    lock, journal = DB_PATH.parent / runs.FOLDER_NAME, _journal_dir()
+    try:
+        if not save:
+            found = projspec.view(name, secrets=secrets)
+            if as_json:
+                receipt.deliver(out, {"api_version": jsonview.API_VERSION, "spec": found})
+                return 0
+            if not found["exists"]:
+                out(f"Spec of {name}: none (SPEC.md at the project's top level; the Spec section of its Notes, or "
+                    "sr project spec --save, makes one).")
+                return 0
+            out(f"Spec of {name} (SPEC.md; {found['lines']} lines, {found['chars']:,} of {found['max']:,} characters; "
+                f"hash {found['hash']}):")
+            out(safety.for_terminal(found["text"], secrets))
+            labels = [f"{e['label']} {e['text']}" for e in found["examples"]] + [f"{d['label']} {d['text']}" for d in found["done_when"]]
+            out("As read: " + ("; ".join(safety.for_terminal(x, secrets) for x in labels) if labels
+                              else "no `## Examples` or `## Done when` list (the spec rides as text)"))
+            out(found["commit_words"])
+            return 0
+        done = projspec.save(conn, name, text, expect=expect, secrets=secrets, journal_dir=journal, lock_folder=lock)
+    except landing.Refused as e:
+        receipt.mark(out, code=e.code)
+        out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+        return 2
+    except landing.Partial as e:
+        receipt.mark(out, code=e.code)
+        out(f"Stopped: {safety.one_line(e)}.")
+        return 1
+    except gitops.GitError as e:
+        receipt.mark(out, code="project_refused")
+        out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+        return 2
+    how = (f"one commit {done.short} ({done.message}) holding SPEC.md alone" if done.commit
+           else "SPEC.md written, nothing committed (no git here, or no commit yet)")
+    out(f"Saved SPEC.md of {name}: {how}.")
+    receipt.attach(out, project={"name": name, "commit": done.commit, "spec": projspec.view(name, secrets=secrets)})
+    return 0
+
+
+def _project_notes_verbs(verb, name, *, conn, as_json, text, save, expect, task, path, secrets, out):
+    """Brief 30 (decisions 12 to 14): `sr project notes <name>` prints the notes (`--json`: the document the page's editor
+    reads); with `--save [--expect <hash>] -- <text>` replaces them; `sr project pin <name> --task <id> -- <text>` adds a
+    piece of a result at their end; `sr project save <name> --task <id> --path <path>` writes a done task's result into
+    the project. Exit 0, or 2 refused with nothing written (1 when a commit stopped part way)."""
+    usage = {"notes": "sr project notes <name> [--save [--expect <hash>] -- '<notes>']",
+             "pin": "sr project pin <name> --task <id> -- '<text>'",
+             "save": "sr project save <name> --task <id> --path <path>"}[verb]
+    wrong = ((verb == "notes" and (task or path or (save and text is None) or (not save and (text is not None or expect))))
+             or (verb == "pin" and (save or expect or path or not task or text is None))
+             or (verb == "save" and (save or expect or text is not None or not task or not path)))
+    if wrong:
+        receipt.mark(out, code="usage")
+        out(f"Refused: {usage}. Nothing was changed.")
+        return 2
+    lock, journal, date = DB_PATH.parent / runs.FOLDER_NAME, _journal_dir(), f"{_now():%Y-%m-%d}"
+    try:
+        if verb == "notes" and not save:
+            found = projnotes.view(name, secrets=secrets)
+            if as_json:
+                receipt.deliver(out, {"api_version": jsonview.API_VERSION, "notes": found})
+                return 0
+            out(f"Notes of {name} (the part of HANDOFF.md above the router's block; {found['lines']} lines, "
+                f"{found['chars']:,} of {found['max']:,} characters; hash {found['hash']}):")
+            out(safety.for_terminal(found["notes"], secrets) if found["notes"] else "(none)")
+            out("A save commits HANDOFF.md alone." if found["tracked"] else
+                "A save writes HANDOFF.md and commits nothing (no git, or HANDOFF.md isn't tracked).")
+            return 0
+        if verb == "notes":
+            done = projnotes.save(conn, name, text, expect=expect, secrets=secrets, journal_dir=journal, lock_folder=lock)
+            what = "Saved the notes of"
+        elif verb == "pin":
+            row = _find(conn, [task])[0]
+            if row is None:
+                receipt.mark(out, code="unknown_task")
+                out(f"Refused: no task {safety.one_line(task)}. Nothing was changed.")
+                return 2
+            done = projnotes.pin(conn, name, row, text, secrets=secrets, journal_dir=journal, lock_folder=lock, date=date)
+            receipt.mark(out, task_id=row["task_id"])
+            what = f"Pinned #{row['n']} to the notes of"
+        else:
+            row = _find(conn, [task])[0]
+            if row is None:
+                receipt.mark(out, code="unknown_task")
+                out(f"Refused: no task {safety.one_line(task)}. Nothing was changed.")
+                return 2
+            receipt.mark(out, task_id=row["task_id"])
+            saved, entry, lines, start, missing = projnotes.save_result(conn, name, row, path, secrets=secrets,
+                                                                         journal_dir=journal, lock_folder=lock, date=date)
+            if log.project_of(row) == name:  # the router's write in its own project's HANDOFF.md, on the task's row
+                log.add_handoff_write(conn, row["task_id"], {"kind": "line", "text": entry, "lines": lines,
+                                                             "block_start": start, "state": "saved"})
+            out(f"Saved #{row['n']}'s result to {name} as {safety.one_line(saved.paths[0])}, with HANDOFF.md, one commit "
+                f"{saved.short} on {safety.one_line(saved.branch)}.")
+            if missing == projnotes.MISSING_LEFT_OUT:  # Cleanup 1 (2.2)
+                out("Its ## Missing section was left out of the spec.")
+            elif missing == projnotes.MISSING_KEPT:
+                out("Its ## Missing section was kept: leaving it out would have cut more than that note. Edit it out by hand "
+                    "in the spec, since the spec goes with every prompt.")
+            receipt.attach(out, project={"name": name, "commit": saved.commit, "path": saved.paths[0], "missing": missing})
+            warning = projects.size_warning(lines, start)
+            if warning:
+                out(warning)
+            return 0
+    except landing.Refused as e:
+        receipt.mark(out, code=e.code)
+        out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+        return 2
+    except landing.Partial as e:
+        receipt.mark(out, code=e.code)
+        out(f"Stopped: {safety.one_line(e)}.")
+        return 1
+    except gitops.GitError as e:
+        receipt.mark(out, code="project_refused")
+        out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+        return 2
+    how = (f"one commit {done.short} holding HANDOFF.md alone" if done.commit
+           else "HANDOFF.md written, nothing committed (no git, or HANDOFF.md isn't tracked)")
+    out(f"{what} {name}: {how}.")
+    receipt.attach(out, project={"name": name, "commit": done.commit, "notes": projnotes.view(name, secrets=secrets)})
+    warning = projects.size_warning(done.lines, done.block_start)
+    if warning:
+        out(warning)
+    return 0
+
+
+def _projects_json(registry, open_rows, conn=None, loaded=None):
     """`sr project list --json` (brief 21): each registered project, its folder, its HANDOFF.md's line count (null when
-    it can't be read) and its open task, if any. From the registry and the log; nothing written."""
+    it can't be read) and its open task, if any. From the registry and the log; nothing written. Brief 33 (decisions 13
+    and 18): its What now? and its open idea count."""
     found = []
     for name in sorted(registry):
         folder = Path(registry[name])
@@ -4618,8 +7880,204 @@ def _projects_json(registry, open_rows):
             lines = None
         row = open_rows.get(name)
         found.append({"name": name, "path": str(folder), "handoff_lines": lines,
-                      "open_task": {"task_id": row["task_id"], "n": row["n"], "status": row["status"]} if row else None})
+                      "open_task": {"task_id": row["task_id"], "n": row["n"], "status": row["status"]} if row else None,
+                      "last_test": projtest.last_view(name, runs.FOLDER),  # brief 31 (decision 11)
+                      "test_running": projtest.running(name, run_folder=runs.FOLDER),  # break-ui 3
+                      "run_command": projrun.run_command_of(name), "run": projrun.view(name, runs.FOLDER),
+                      "secrets": projsecrets.count(folder),
+                      "what_now": whatnow.for_project(conn, name, loaded) if conn is not None else None,
+                      "auto": _project_auto(conn, name) if conn is not None else None,  # brief 34 (decision 10)
+                      "ideas": ideas.open_count(conn, name) if conn is not None else 0,
+                      "plan": plan_mod.project_view(conn, name) if conn is not None else None,  # brief 33.1
+                      "spec": spec_mod.summary(folder)})  # brief 33.2 (decision 19): present, hash, the labels
     return found
+
+
+IDEAS_USAGE = "sr ideas <project> [--add [--source <task>] -- '<text>' | --dismiss <id>]"
+
+
+def cmd_ideas(words, *, conn, add=False, source=None, dismiss=None, text=None, secrets=(), out=print):
+    """`sr ideas <project>` (brief 33, decisions 14 to 16): the project's open ideas, newest first, each with its state;
+    `--add [--source <task>] -- '<text>'` adds one (Later from a card names its task); `--dismiss <id>` takes one off, the
+    log keeping it. Every action prints the list as it now stands (`ideas`, then `dismissed`, then `used` (brief 33.2 fix
+    4), after the eight keys).
+    Exit 0, 2 refused (usage, project_unknown, bad_idea, ideas_full) with nothing written."""
+    def refuse(code, why):
+        receipt.mark(out, code=code)
+        out(f"Refused: {why}. Nothing was written.")
+        return 2
+    if len(words) != 1:
+        return refuse("usage", IDEAS_USAGE)
+    project = words[0]
+    try:
+        registry = projects.read_registry()
+    except projects.ProjectError as e:
+        return refuse("project_refused", safety.one_line(e))
+    if project not in registry:
+        return refuse("project_unknown", f"no project {safety.one_line(project)}; sr project list prints the names")
+    if (add and dismiss is not None) or (source is not None and not add) or (text is not None and not add):
+        return refuse("usage", IDEAS_USAGE)
+    try:
+        if add:
+            if text is None:
+                return refuse("usage", f"nothing follows --: the idea goes after it, in quotes ({IDEAS_USAGE})")
+            card = None
+            if source is not None:
+                card, missing, _ = log.find_task(conn, source)
+                if card is None:
+                    raise ideas.Refused("bad_idea", safety.one_line(missing or f"No task {source}").rstrip("."))
+                if log.project_of(card) != project:
+                    raise ideas.Refused("bad_idea", f"#{card['n']} isn't a task of {project}")
+            idea, new = ideas.add(conn, project, text, source_task=card["task_id"] if card else None, secrets=secrets)
+            out(f"Added idea {idea.id} to {project}: {safety.one_line(idea.text)}" if new
+                else f"Already there: idea {idea.id} ({safety.one_line(idea.text)}). Nothing was added.")
+        elif dismiss is not None:
+            if not str(dismiss).strip().isdigit():
+                raise ideas.Refused("bad_idea", f"an idea is its number, not {safety.one_line(str(dismiss))[:40]!r}")
+            idea = ideas.dismiss(conn, project, int(dismiss))
+            out(f"Dismissed idea {idea.id} from {project}. The log keeps it.")
+    except ideas.Refused as e:
+        _attach_ideas(conn, project, out)
+        return refuse(e.code, e.why)
+    found = _attach_ideas(conn, project, out)
+    if not add and dismiss is None:
+        if not found["ideas"]:
+            out(f"No ideas for {project} yet. Later on a project card's chip adds one, or sr ideas {project} --add -- '<text>'.")
+        for idea in found["ideas"]:
+            out("  " + ideas.line(idea))
+        if found["dismissed"]:
+            out(f"  ({found['dismissed']} dismissed)")
+    return 0
+
+
+def _attach_ideas(conn, project, out):
+    found = ideas.listing(conn, project)
+    receipt.attach(out, always=True, ideas=found["ideas"], dismissed=found["dismissed"], used=found["used"],  # brief
+                   suggest=suggest.state_of(conn, project))  # 33.2 fix 4: the used ideas; brief 33.4: the suggest's state
+    return found
+
+
+@_releases_its_runs
+def cmd_suggest(words, *, conn, config, roster, environ, settings_paths, worker, available=None, hindsight=None, out=print):
+    """`sr ideas <project> --suggest` (brief 33.4, decisions 10 to 13): one Claude call, text only; its ideas join the list as
+    `later` ideas with this task as their source. Refused with nothing written: `suggest_refused` (a suggest already
+    running, more than `ideas_max` - 3 open ideas), Claude unavailable, an unknown project. It reads HANDOFF.md, SPEC.md
+    and docs/PLAN.md under the project's lock, held only for the read, and never holds the project. No Jev, no check, no
+    entry, no memory stored. Exit 0 with ideas; 1 failed ("no idea in the shape", or the call failed)."""
+    def refuse(code, why):
+        receipt.mark(out, code=code)
+        out(f"Refused: {why}. Nothing was logged or sent.")
+        return 2
+    if len(words) != 1:
+        return refuse("usage", IDEAS_USAGE)
+    project = words[0]
+    problems = _refusals(config, environ, settings_paths)
+    if problems:
+        _refuse_problems(out, problems, config, environ, settings_paths)
+        return 2
+    try:
+        registry = projects.read_registry()
+    except projects.ProjectError as e:
+        return refuse("project_refused", safety.one_line(e))
+    if project not in registry:
+        return refuse("project_unknown", f"no project {safety.one_line(project)}; sr project list prints the names")
+    if _claude_refusal(available, out):  # decision 12
+        return 2
+    try:  # decision 10b: the check and the row go together, so two clicks can't both pass; a second is refused at once
+        with locks.held(f"suggest-{project}", folder=DB_PATH.parent / runs.FOLDER_NAME, wait=False):
+            started = _suggest_start(project, registry, conn=conn, config=config, roster=roster, refuse=refuse, out=out)
+    except locks.Busy:
+        return refuse("suggest_refused", f"a suggest is already starting on {project}")
+    if isinstance(started, int):
+        return started
+    task_id, secrets, prompt, handoff = started
+    deps = SimpleNamespace(config=config, worker=worker, roster=roster, available=None, hindsight=hindsight, wait=True)
+    call_id = f"{task_id}-1"
+    try:
+        task = log.get_task(conn, task_id)
+        prompt, record, mem = _attach_context(conn, task, "claude", prompt, secrets, out, hindsight=hindsight, kind="do",
+                                              handoff=handoff)
+        if prompt is None:
+            return record
+        rounds.keep_prompt(conn, task_id, call_id, "do", "claude", prompt, secrets)
+        _send_claude(conn, task, call_id, "do", prompt, deps, secrets=secrets, out=out, context=record, memory=mem)
+    except KeyboardInterrupt:
+        with _hold_interrupts():
+            row = log.get_task(conn, task_id)
+            if row["status"] in ("queued", "sent"):
+                log.set_cancelled(conn, task_id)
+        out("Stopped: the suggest is cancelled. Nothing was added.")
+        return 130
+    return _suggest_end(conn, task_id, project, call_id, secrets, out)
+
+
+def _suggest_start(project, registry, *, conn, config, roster, refuse, out):
+    """The refusals, the reads and the row, under the suggest's own lock: (task id, secrets, the prompt, the handoff read
+    under the project's lock), or an exit code. The call runs after this lock is let go."""
+    why = suggest.refusal(conn, project)
+    if why:
+        return refuse("suggest_refused", why)
+    kept_notes = _notes_at_intake(config, out)
+    if kept_notes is None:
+        return 2
+    secrets = _secrets(config)
+    folder = Path(registry[project])
+    try:  # decision 10b (3): HANDOFF.md is written in place, so these reads wait for a land; the lock is held for them alone
+        with locks.held(f"project-{project}", folder=DB_PATH.parent / runs.FOLDER_NAME):
+            handoff = context.load(project, secrets)
+            kept_spec = _spec_at_intake(project, config, out)
+            plan_md = suggest.read_plan_md(folder, secrets)
+    except (context.ContextRefused, projects.ProjectError) as e:
+        return refuse("handoff_unreadable", safety.one_line(str(e)))
+    if kept_spec is False:
+        return 2
+    paths = suggest.file_paths(folder, secrets)
+    chars = settings.next_steps_setting("suggest_ideas_chars")[0]
+    listed = suggest.ideas_lines(ideas.all_of(conn, project), chars, secrets)
+    task_id = ids.new_task_id()
+    receipt.mark(out, task_id=task_id)
+    with _hold_interrupts():
+        log.add_task(conn, task_id, f"Suggest ideas for {project}", "cli", {"status": "not_asked", "tokens": 0}, mode=suggest.MODE,
+                     project=project, run=runs.me())
+        runs.adopt(task_id)
+        _keep_notes(conn, task_id, kept_notes, out)
+        _keep_spec(conn, task_id, kept_spec, out)
+        log.set_route(conn, task_id, agents=roster.names, agent="claude", route_reason=suggest.ROUTE_REASON, check_state="not_needed")
+    out(f"{task_id}: suggesting ideas for {project} (one Claude call, never checked).")
+    return task_id, secrets, suggest.prompt(project, plan_md=plan_md, paths=paths, ideas_text=listed), handoff
+
+
+def _suggest_end(conn, task_id, project, call_id, secrets, out):
+    """Decision 12: each line through `ideas.add`; a bad one dropped and counted, its text never shown; zero usable lines end
+    the task failed, with no re-ask. Written as the task's result, never as an entry."""
+    row, call = log.get_task(conn, task_id), log.get_call(conn, call_id)
+    if row["status"] not in ("queued", "sent"):  # a cancel while it ran, or the first call's failure
+        receipt.attach(out, added=0)
+        _attach_ideas(conn, project, out)
+        out(f"#{row['n']} is {row['status']}: nothing was added.")
+        return 1
+    if call is None or call["status"] != "done":
+        with _hold_interrupts():
+            log.set_failed(conn, task_id, safety.one_line((call["text"] if call is not None else None) or "the call didn't finish"))
+        receipt.attach(out, added=0)
+        _attach_ideas(conn, project, out)
+        out(f"#{row['n']} failed: nothing was added.")
+        return 1
+    found = suggest.add_all(conn, project, task_id, call["text"], secrets)
+    if not suggest.usable(found):
+        with _hold_interrupts():
+            log.set_failed(conn, task_id, suggest.NO_SHAPE)
+        receipt.attach(out, added=0, summary=suggest.NO_SHAPE)
+        _attach_ideas(conn, project, out)
+        out(f"#{row['n']} failed: {suggest.NO_SHAPE}. Nothing was added.")
+        return 1
+    words = suggest.summary(found)
+    with _hold_interrupts():
+        log.set_done(conn, task_id, words, check_state="not_needed")
+    receipt.attach(out, added=found["added"], summary=words)
+    _attach_ideas(conn, project, out)
+    out(f"#{row['n']}: {words}.")
+    return 0
 
 
 CHAT_USAGE = "sr chat list"
@@ -4780,6 +8238,93 @@ def _memory_rebuild(client, *, db_path, secrets, ask, out):
     return 0
 
 
+MODELS_USAGE = ("sr models [--json] | sr models set (--skill <key> | --team <team> --role <role> | --team <preset> --stage <n>) "
+                "--agent <agent> [--model <model>] [--effort <level>] | sr models clear <the same selector> --agent <agent> | "
+                "sr models fable on|off")
+
+
+def _models_doc(roster, loaded):
+    """The defaults in effect (decision 3), with what each role would use now (decision 11), read as status reads them."""
+    table = routing._table(None, roster)  # the live flags, as a function: no online check for a read
+    skills_now = {key: routing.now_for(key, roster, table) for key in roster.skills} if roster is not None else {}
+    return models.status_view(None, roster, loaded, table, send_paths=tuple(SENDERS), since=log._iso(status.monday(datetime.now().astimezone())),
+                              skills_now=skills_now)
+
+
+def cmd_models(words, *, roster, loaded=None, as_json=False, skill=None, team=None, role=None, stage=None, agent=None,
+               model=None, effort=None, out=print):
+    """Brief 33.3 (decision 3): `sr models` prints the defaults in effect, each with its layer and file; `set` writes one
+    of the owner's own into config/models.local.json (the model stored as its full id), `clear` takes one out, `fable on|off`
+    is the switch (decision 6). Refused with nothing written: an unknown skill, team, role, stage or agent, a model off the
+    allowlist, a level the agent doesn't take (`bad_model`), a bad shape (`usage`), a local file that isn't a JSON object
+    (`setup`). Exit 0; 2 refused. No log row, no agent."""
+    words = list(words or [])
+    verb = words[0] if words else None
+    if verb not in (None, "set", "clear", "fable"):
+        receipt.mark(out, code="usage", command=True)
+        out(f"Refused: {MODELS_USAGE}. Nothing was changed.")
+        return 2
+    if verb is None:
+        if any(v is not None for v in (skill, team, role, stage, agent, model, effort)):
+            receipt.mark(out, code="usage", command=True)
+            out(f"Refused: sr models prints the defaults; to change one: {MODELS_USAGE}. Nothing was changed.")
+            return 2
+        doc = _models_doc(roster, loaded)
+        if as_json:
+            receipt.deliver(out, {"api_version": jsonview.API_VERSION, "models": doc})
+            return 0
+        for line in models.lines(doc):
+            out(line)
+        return 0
+    if verb == "fable":
+        if len(words) != 2 or words[1] not in ("on", "off") or any(v is not None for v in (skill, team, role, stage, agent, model, effort)):
+            receipt.mark(out, code="usage", command=True)
+            out("Refused: sr models fable on|off. Nothing was changed.")
+            return 2
+        try:
+            was, now = models.set_fable(words[1] == "on", lock_folder=DB_PATH.parent / runs.FOLDER_NAME)
+        except models.ModelsError as e:
+            receipt.mark(out, code=e.code, command=True)
+            out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+            return 2
+        word = lambda on: "on" if on else "off"  # noqa: E731
+        out(f"Fable: {word(now)} (it was {word(was)}). " + (models.FABLE_WORDS if now else
+                                                          f"A Fable default runs on {models.tracked().display('claude', models.FABLE_FALLBACK)} while it is off."))
+        receipt.attach(out, models=_models_doc(roster, loaded))
+        return 0
+    if len(words) != 1 or agent is None:
+        receipt.mark(out, code="usage", command=True)
+        out(f"Refused: {MODELS_USAGE}. Nothing was changed.")
+        return 2
+    stages = {name: len(p.stages) for name, p in loaded.presets.items()} if loaded is not None else {}
+    stages["plan"] = stages.get(plan_mod.PRESET, 4)
+    try:
+        selector = models.check_selector({"skill": skill, "team": team, "role": role, "stage": stage},
+                                         skills=tuple(roster.skills) if roster is not None else (),
+                                         teams=tuple(loaded.presets) if loaded is not None else (), stages=stages)
+        if verb == "set":
+            entry = models.set_default(selector, agent, model=model, effort=effort, lock_folder=DB_PATH.parent / runs.FOLDER_NAME)
+        else:
+            if model is not None or effort is not None:
+                raise models.ModelsError("sr models clear takes the selector and the agent, no model or effort", code="usage")
+            entry = models.clear_default(selector, agent, lock_folder=DB_PATH.parent / runs.FOLDER_NAME)
+    except models.ModelsError as e:
+        receipt.mark(out, code=e.code, command=True)
+        out(f"Refused: {safety.one_line(e)}. Nothing was changed.")
+        return 2
+    where = f"skill {selector['skill']}" if "skill" in selector else (f"{selector['team']} stage {selector['stage']}" if "stage" in selector
+                                                                        else f"{selector['team']} {selector['role']}")
+    if verb == "set":
+        found = models.tracked()
+        what = (f"{found.display(agent, entry['model'])} ({entry['model']})" if entry.get("model") else "no model")
+        out(f"Set {where} for {agent}: {what}" + (f", effort {entry['effort']}" if entry.get("effort") else "")
+            + f" · {models.LOCAL_NAME}")
+    else:
+        out(f"Cleared {where} for {agent}" + ("" if entry else " (nothing was set)") + f" · {models.LOCAL_NAME}")
+    receipt.attach(out, models=_models_doc(roster, loaded))
+    return 0
+
+
 def cmd_status(*, roster, as_json=False, out=print, now=None):
     """`sr status [--json]` (rules v2.30, Status and JSON; build brief 21, B2): the router's state for a page or a
     person. The log is opened read-only (no log yet: none), the online checks are commands run side by side for the
@@ -4799,7 +8344,8 @@ def cmd_status(*, roster, as_json=False, out=print, now=None):
                            memory_starting=locks.holder(DB_PATH.parent / runs.FOLDER_NAME, "memory") is not None,
                            memory_installed=memory_server.paths(Path.home())["binary"].exists(),  # brief 27
                            rules_path=status.rules_file(ROOT), log_version=log.file_version(DB_PATH),
-                           send_paths=tuple(SENDERS), contracts=relay.CONTRACTS, roles=relay.ROLES, verdicts=relay.VERDICTS)
+                           send_paths=tuple(SENDERS), contracts=relay.CONTRACTS, roles=relay.ROLES, verdicts=relay.VERDICTS,
+                           run_folder=DB_PATH.parent / runs.FOLDER_NAME)  # brief 31 (D): Test and Run records beside the log
     finally:
         if conn is not None:
             conn.close()
@@ -4836,21 +8382,24 @@ def grok_limit_line():
 
 
 def cmd_probe(*, model, config, environ, home, login=None, run=subprocess.run, claude_check=None, web_files_check=None,
-              cursor_check=None, out=print):
+              cursor_check=None, files_check=None, out=print):
     """One real Codex run that must fail to read .env, list the home folder or write a file; then
     (`claude_check`, which main always passes; build brief 8) one real Claude run with the search
     command, which must search and do nothing else. Nothing is logged. Exit 0 when both pass, 1 when
     either fails, 2 refused. A failed Claude check turns Claude's search off; it never touches Codex."""
     problems = _dedupe(safety.billing_problems(environ) + safety.billing_problems(config))
     if problems:
+        receipt.mark(out, code="billing_switch")  # brief 30: `sr probe --json` names its refusal
         for problem in problems:
             out(f"Refused: {problem}")
         out("Nothing was run.")
         return 2
     if not model:
+        receipt.mark(out, code="not_configured")
         out("Refused: ChatGPT isn't configured (no model in config/agents.json). Nothing was run.")
         return 2
     if login is not None and not login():
+        receipt.mark(out, code="signed_out")
         out("Refused: codex is not logged in with ChatGPT. Sign in yourself with `codex login`, then run this again.")
         return 2
     out(grok_limit_line())  # brief 15: no call, the webhook is never probed
@@ -4861,6 +8410,8 @@ def cmd_probe(*, model, config, environ, home, login=None, run=subprocess.run, c
     for note in result.notes:
         out(f"  note  {note}")
     probes.record_codex(PROBE_STATE, result)  # brief 24 (decision 10): kept per Codex version, as the router's own run keeps it
+    found_json = {"chatgpt": _probe_json(result, result.codex_version)}
+    receipt.attach(out, always=True, probe=found_json)  # brief 30 (A2): filled in as each probe ends
     if result.passed:
         out(f"PASS: ChatGPT could not read .env, list the home folder or write a file. The pass is kept for codex "
             f"{result.codex_version}.")
@@ -4869,6 +8420,8 @@ def cmd_probe(*, model, config, environ, home, login=None, run=subprocess.run, c
     ok = result.passed
     if claude_check is not None:
         claude = claude_check()
+        found_json["claude_search"] = {**_probe_json(claude, claude.claude_version),  # the design chat's fix of 29 Oct
+                                       **({"tools": dict(claude.tools)} if getattr(claude, "tools", None) else {})}
         out(f"Probed claude search: claude {claude.claude_version}, model {claude_worker.WORKER_MODEL}, {claude.seconds:.0f} s")
         for check in claude.checks:
             out(f"  {'ok  ' if check.ok else 'FAIL'}  {check.name}" + (f" ({check.detail})" if check.detail else ""))
@@ -4882,6 +8435,8 @@ def cmd_probe(*, model, config, environ, home, login=None, run=subprocess.run, c
         ok = ok and claude.passed
         if web_files_check is not None:
             files = web_files_check()  # brief 15 addendum, D9: Claude's --web file mode, its own pass
+            found_json["claude_web_files"] = {**_probe_json(files, files.claude_version),
+                                              **({"tools": dict(files.tools)} if getattr(files, "tools", None) else {})}
             out(f"Probed claude --web files: claude {files.claude_version}, model {claude_worker.WORKER_MODEL}, "
                 f"{files.seconds:.0f} s")
             for check in files.checks:
@@ -4895,8 +8450,29 @@ def cmd_probe(*, model, config, environ, home, login=None, run=subprocess.run, c
                 out(f"claude --web files: FAILED \u2014 {failed.name}" + (f" ({failed.detail})" if failed.detail else "")
                     + "; Claude's --web file mode off (ChatGPT's still works)")
             ok = ok and files.passed
-    if cursor_check is not None:  # build brief 20 (rules v2.28, Cursor; the owner's change 3): the two canaries, when needed
+    if files_check is not None:  # build brief 28 (decision 6): Claude's file check, its own pass per version
+        found = files_check()
+        found_json["claude_files"] = _probe_json(found, found.claude_version)
+        if not found.passed and not probes.could_not_run(found):  # brief 30 (A2): the paths and tool calls, names only
+            found_json["claude_files"]["found"] = found.found()
+        out(f"Probed claude files: claude {found.claude_version}, model {claude_worker.WORKER_MODEL}, {found.seconds:.0f} s"
+            + (f", {found.calls} calls (the first could not run)" if found.calls > 1 else ""))
+        for check in found.checks:
+            out(f"  {'ok  ' if check.ok else 'FAIL'}  {check.name}" + (f" ({check.detail})" if check.detail else ""))
+        probes.record_files(PROBE_STATE, found)
+        if found.passed:
+            out(f"claude files: passed (version {found.claude_version})")
+        else:
+            failed = found.first_failure
+            out(f"claude files: FAILED \u2014 {failed.name}" + (f" ({failed.detail})" if failed.detail else "")
+                + "; file mode off on this version")
+        ok = ok and found.passed
+    if cursor_check is not None:  # build brief 20 (rules v2.28, Cursor; the owner's change 3): the canaries (three since brief 32, R0), when needed
         cursor = cursor_check()
+        found_json["cursor"] = ({"passed": True, "version": cursor.standing, "checks": [], "standing": True}
+                                if cursor.standing else {"passed": None, "skipped": cursor.skipped} if cursor.skipped
+                                else {**_probe_json(cursor, cursor.agent_version),  # the design chat's fix of 29 Oct
+                                      "rules_from_above": list(getattr(cursor, "rules_from_above", None) or [])})
         if cursor.standing:
             out(f"cursor safety check: passed on agent {cursor.standing} stands (sr probe checks it again when agent moves)")
         elif cursor.skipped:
@@ -4917,6 +8493,117 @@ def cmd_probe(*, model, config, environ, home, login=None, run=subprocess.run, c
     return 0 if ok else 1
 
 
+def _notes_lines(found):
+    """`sr notes`'s and a save's counts (decision 8): each section's characters, the total and the cap, Grok's share, the
+    state and the hash."""
+    chars = found.chars
+    shown = " · ".join(f"{title} {chars[key]:,}" for key, title in notes.SECTIONS)
+    limit = settings.grok_prompt_limit()[0]
+    state = found.state if found.problem is None else f"invalid: {found.problem}"
+    return [f"Sections (characters): {shown}",
+            f"Total {found.total:,} of {notes.max_chars():,} characters · Grok's share {found.grok_share:,} of its "
+            f"{limit:,} ({notes.GROK_SHARE_LINE}) · {state} · hash {found.hash}"]
+
+
+def cmd_notes(words, *, text=None, expect=None, as_json=False, secrets=(), out=print):
+    """Brief 30 (decision 8): `sr notes` prints the router notes (the default while there is no local file) with each
+    section's characters, the total, the cap, the state and the hash; `--json` gives the same with the text. `sr notes
+    save [--expect <hash>] -- <text>` checks the whole file as decision 2 does and writes it whole (temp file, rename, mode
+    600, under the `notes` lock), or refuses with nothing written: exit 2, the line, never its text."""
+    words = list(words or [])
+    if not words:
+        if text is not None or expect is not None:
+            receipt.mark(out, code="usage", command=True)
+            out("Refused: sr notes prints the notes; to save them: sr notes save [--expect <hash>] -- '<the notes>'. "
+                "Nothing was written.")
+            return 2
+        found = notes.read(secrets)
+        if as_json:
+            receipt.deliver(out, {"api_version": jsonview.API_VERSION, "notes": {**notes.view(found), "text": found.text,
+                                                                                 "path": notes.DEFAULT_NAME if found.default
+                                                                                 else notes.NAME}})
+            return 0
+        out(f"Router notes: {notes.DEFAULT_NAME + ' (the default: no ' + notes.NAME + ' yet)' if found.default else notes.NAME}")
+        out(safety.for_terminal(found.text, secrets) if found.text else "(empty)")
+        for line in _notes_lines(found):
+            out(line)
+        return 0
+    if words != ["save"] or text is None:
+        receipt.mark(out, code="usage", command=True)
+        out("Refused: sr notes save [--expect <hash>] -- '<the notes>' (the whole file, one argument in quotes). "
+            "Nothing was written.")
+        return 2
+    try:
+        found = notes.save(text, expect=expect, secrets=secrets, lock_folder=DB_PATH.parent / runs.FOLDER_NAME)
+    except notes.Refused as e:
+        receipt.mark(out, code=e.code, command=True)
+        where = f" Fix it in {notes.WHERE}." if e.code != "notes_changed" else ""
+        out(f"Refused: {safety.one_line(e)}. Nothing was written.{where}")
+        return 2
+    receipt.attach(out, notes=notes.view(found))
+    out(f"Saved the router notes ({notes.NAME}): {found.total:,} characters of {notes.max_chars():,}; they go with "
+        "every task from the next one on.")
+    for line in _notes_lines(found):
+        out(line)
+    return 0
+
+
+def cmd_forget(words, *, conn, undo=False, secrets=(), client=None, out=print):
+    """Brief 30 (decision 15): `sr forget <n>` takes an ended tagged task out of memory (a `forgotten` record; its document
+    deleted from the bank now when the store answers, else by the next backfill); `--undo` (Remember again) adds
+    `remembered` and stores it again by the usual rules. The log keeps the task and HANDOFF.md is never touched. Refused:
+    an open task (`wrong_state`); an untagged task or a piece (`nothing_stored`): memory never held it."""
+    row, missing, code = _find(conn, words)
+    if row is None:
+        receipt.mark(out, code=code)
+        out(safety.for_terminal(missing, secrets))
+        return 2
+    receipt.mark(out, task_id=row["task_id"])
+    n = row["n"]
+    if not jsonview.state_of(conn, row).ended:
+        receipt.mark(out, code="wrong_state")
+        out(f"Refused: #{n} is still open; Forget is for a task that has ended. Nothing was changed.")
+        return 2
+    if not log.tag_of(row) or log.is_piece(row):
+        receipt.mark(out, code="nothing_stored")
+        what = "a piece of a split (its split is what memory keeps)" if log.is_piece(row) else "untagged (no chat or project)"
+        out(f"Refused: #{n} is {what}, so memory never held it. Nothing was changed.")
+        return 2
+    was = memory.forgotten(row)
+    if bool(was) != bool(undo):
+        receipt.mark(out, code="wrong_state")
+        out(f"Refused: #{n} is {'already forgotten (' + was + ')' if was else 'not forgotten'}. Nothing was changed.")
+        return 2
+    date = f"{_now():%Y-%m-%d}"
+    line = memory.forget(conn, row, client, secrets, date=date, undo=undo)
+    if undo:
+        out(f"Remembered #{n} again: it can come back in a memory block and a search ({line}).")
+    else:
+        out(f"Forgot #{n}: no memory block carries it from now on and no search finds it; the log keeps it ({line}).")
+    receipt.attach(out, memory={"forgotten": None if undo else date})
+    return 0
+
+
+def _probe_json(result, version):
+    """Brief 30 (A2): one probe's result for `sr probe --json`: passed, the version it ran on, each check (name, ok,
+    detail). Never a reply, a query or a nonce. Brief 33.1 (decision 23d): on a failure, its record too."""
+    found = {"passed": bool(result.passed), "version": version,
+             "checks": [{"name": c.name, "ok": bool(c.ok), "detail": c.detail} for c in result.checks]}
+    if not result.passed:
+        found["record"] = _probe_record(result)
+    return found
+
+
+def _probe_record(result):
+    """Brief 33.1 (decision 23d): a failed probe's record as `probe_state.json` keeps one (router/probes.py): its kind
+    (`could_not_run` when the tool didn't run to the end, else `ran_failed`) and its reason (the first failed check)."""
+    first = next((c for c in result.checks if not c.ok), None)
+    kind = (probes.COULD_NOT_RUN if first is not None and first.name.endswith(probes.RAN_TO_THE_END)
+            else probes.RAN_FAILED)
+    return {"kind": kind, "reason": "no check ran" if first is None else first.name + (f": {first.detail}" if first.detail
+                                                                                         else "")}
+
+
 def _claude_gate(config, out):
     """Brief 22 (decision 7, Phase 0 choice 5): the probe gate a command hands its Claude calls. With no pass on the
     installed Claude Code version, Claude's two probes (the existing ones, called as `sr probe` calls them) run first, one
@@ -4926,6 +8613,13 @@ def _claude_gate(config, out):
             search.WEB_FILES: lambda: web_files_probe.command_check(PROBE_STATE, config=config, env_path=ENV_PATH,
                                                                      home=Path.home(), environ=os.environ)}
     return probes.claude_gate(PROBE_STATE, folder=DB_PATH.parent / runs.FOLDER_NAME, out=out, checks=made)
+
+
+def _files_gate(out):
+    """Brief 28 (decision 6): the file check a command hands its intake. With no pass on the installed Claude Code, the
+    check runs first (one Claude call), one Claude probe at a time by the lock beside the log; it records what it found."""
+    return probes.files_gate(PROBE_STATE, folder=DB_PATH.parent / runs.FOLDER_NAME, out=out,
+                             check=lambda: files_probe.probe(environ=os.environ))
 
 
 def _codex_gate(config, out, model):
@@ -4948,11 +8642,18 @@ def _can_ask():
 
 
 WEB_REFUSAL = "--web is for a routed task with files"  # rules v2.22: refused on every other command
+NO_FILES_REFUSAL = "--no-files is for sr route with --project"  # brief 33.2 (decision 5): refused elsewhere
 
 
 # Build brief 21 (rules v2.30, Router for the interface): the actions that answer with the JSON envelope, and the reads
 # that print their own JSON document (a list here; status, show and log in phase B).
-JSON_ACTIONS = ("route", "relay", "split", "resume", "fallback", "pick", "cancel", "check", "project", "chat", "memory")
+JSON_ACTIONS = ("route", "relay", "split", "resume", "fallback", "pick", "cancel", "check", "project", "chat", "memory", "models", "auto",
+                "land", "undo", "discard",  # brief 28
+                "probe",  # brief 30 (A2): what each probe found, a failed file check's paths and tool calls among it
+                "notes",  # brief 30 (decision 8): `sr notes` prints its own document, `sr notes save` the envelope
+                "forget",  # brief 30 (decision 15)
+                "ideas",  # brief 33 (decisions 15, 16 and 18): every action prints the envelope with the list after it
+                "plan")  # brief 33.1: sr plan and its edits
 JSON_READS = ("status", "show", "log")  # print their own document (brief 21, B2 and B3)
 JSON_COMMANDS = JSON_ACTIONS + JSON_READS
 JSON_HELP = ("answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, "
@@ -5009,6 +8710,21 @@ def _parser(roster, quiet=False):
                                                         "(build brief 22)")
     p_route.add_argument("--answers", metavar="N", help="with --skill: the Jev floor row this answers (its # or task_id); "
                                                         "the text must be that row's, its tag, --web and files come from it")
+    p_route.add_argument("--from", dest="from_task", action="append", metavar="TASK",
+                         help="build from an earlier task's delivered result (its # or task_id; once): it goes to every "
+                              "call as data (brief 33)")
+    p_route.add_argument("--no-files", dest="no_files", action="store_true",
+                         help="with --project: run handoff only, no copy of the project; the doer answers in text "
+                              "(brief 33.2; the page's Draft it uses it)")
+    p_route.add_argument("--idea", action="append", metavar="ID",
+                         help="with --project: the task is sent from that project's idea (sr ideas <project>; brief 33)")
+    p_route.add_argument("--step", metavar="PLAN:K", help="with --project: the task is step K of the project's plan "
+                                                          "(its plan task's # or id, a colon, the step); brief 33.1")
+    p_route.add_argument("--model", action="append", metavar="AGENT=MODEL",
+                         help="the model that agent uses on this task (again for another agent; each at most once): an "
+                              "alias or full id on its allowlist in config/models.json (brief 33.3)")
+    p_route.add_argument("--effort", action="append", metavar="AGENT=LEVEL",
+                         help="the effort level that agent uses on this task, from its own levels (brief 33.3)")
     p_route.add_argument("--json", action="store_true", help=JSON_HELP)
     p_relay = sub.add_parser("relay", help="run a preset chain (rules v2.16): sr relay research-build|collab|versus "
                                            "\"task\"; --list prints the presets; a versus task ends with `sr pick`",
@@ -5022,13 +8738,24 @@ def _parser(roster, quiet=False):
                          help="not allowed on a relay task (refused with the reason)")
     p_relay.add_argument("--source", default="cli")
     p_relay.add_argument("--web", action="store_true", help=WEB_REFUSAL)
+    p_relay.add_argument("--no-files", dest="no_files", action="store_true", help=NO_FILES_REFUSAL)
     p_relay.add_argument("--project", metavar="NAME", help="research-build and redteam only (rules v2.25)")
     p_relay.add_argument("--chat", metavar="NAME", help="tag the task chat:<name> for memory (rules v2.27), any preset; "
                                                         "never with --project")
+    p_relay.add_argument("--from", dest="from_task", action="append", metavar="TASK",
+                         help="build from an earlier task's delivered result (its # or task_id; once; brief 33)")
+    p_relay.add_argument("--idea", action="append", metavar="ID",
+                         help="with --project: the task is sent from that project's idea (brief 33)")
+    p_relay.add_argument("--step", metavar="PLAN:K", help="with --project: the task is step K of the project's plan "
+                                                          "(brief 33.1)")
+    p_relay.add_argument("--model", action="append", metavar="AGENT=MODEL",
+                         help="the model that agent uses on this task; only an agent the preset's slots hold (brief 33.3)")
+    p_relay.add_argument("--effort", action="append", metavar="AGENT=LEVEL",
+                         help="the effort level that agent uses on this task (brief 33.3)")
     p_relay.add_argument("--json", action="store_true", help=JSON_HELP)
-    split_text = ("split a task (rules v2.18): Claude plans 2 to 4 pieces, you approve them (y/N/e), each runs as its "
-                  "own routed task, Claude joins the results and ChatGPT checks: sr split \"task\"; "
-                  "sr split --go <n> approves a plan that waited")
+    split_text = ("split a task (rules 2.41): Claude plans 2 to 4 pieces, each with its team; you approve them (y/N/e), "
+                  "change a piece first (sr split --edit), they run one at a time, Claude joins the results and ChatGPT "
+                  "checks: sr split \"task\"; sr split --go <n> approves a plan that waited")
     p_split = sub.add_parser("split", help=split_text, description=split_text, allow_abbrev=False)
     p_split.add_argument("--no-wait", action="store_true",
                          help="return as soon as a Grok piece is sent (also automatic when output isn't a terminal)")
@@ -5042,13 +8769,72 @@ def _parser(roster, quiet=False):
     p_split.add_argument("--preset", help="not allowed on a split task (refused with the reason)")
     p_split.add_argument("--source", default="cli")
     p_split.add_argument("--web", action="store_true", help=WEB_REFUSAL)
-    p_split.add_argument("--project", metavar="NAME", help="not allowed on a split task (refused with the reason)")
+    p_split.add_argument("--no-files", dest="no_files", action="store_true", help=NO_FILES_REFUSAL)
+    p_split.add_argument("--project", metavar="NAME", help="run the split on a registered project (brief 29): its "
+                                                          "handoff, and in file mode one copy its pieces build in")
     p_split.add_argument("--chat", metavar="NAME", help="not allowed on a split task (refused with the reason)")
+    p_split.add_argument("--from", dest="from_task", action="append", metavar="TASK",
+                         help="not allowed on a split task (refused with the reason)")
+    p_split.add_argument("--idea", action="append", metavar="ID", help="not allowed on a split task (refused with the reason)")
     p_split.add_argument("--answer", metavar="Y|N", help="with --go: approve (y) or reject (n) a plan that waits, without "
-                                                         "a terminal; editing a piece stays Terminal-only (build brief 22)")
+                                                         "a terminal (build brief 22)")
+    p_split.add_argument("--edit", metavar="N", help="change a piece of a plan that waits (brief 29): sr split --edit N "
+                                                     "--piece K [--team TEAM] [-- 'new text']")
+    p_split.add_argument("--piece", metavar="K", help="with --edit: the piece's number in the plan")
+    p_split.add_argument("--team", metavar="TEAM", help="with --edit: the piece's new team, one on this split's menu")
+    p_split.add_argument("--slot", action="append", metavar="SLOT=AGENT",  # brief 29.1 (decision 12)
+                         help="with --edit: an agent in one of a preset piece's slots (again for each; SLOT=default puts "
+                              "the default back)")
     p_split.add_argument("--skill", action="append", default=[], metavar="K=KEY",
                          help="with --go --answer y: the skill for piece K when Jev was under the floor on it")
+    p_split.add_argument("--model", action="append", metavar="AGENT=MODEL",
+                         help="the model Claude (the plan and the join) or ChatGPT (the join's check) uses; the pieces use "
+                              "their teams' defaults (brief 33.3)")
+    p_split.add_argument("--effort", action="append", metavar="AGENT=LEVEL", help="the effort level, the same way (brief 33.3)")
     p_split.add_argument("--json", action="store_true", help=JSON_HELP)
+    plan_text = ("plan a project (rules 2.47): Claude plans from the project's files, ChatGPT and Cursor attack the plan, "
+                 "Claude revises it and ChatGPT checks it; you approve it and it lands as docs/PLAN.md: sr plan --project "
+                 "<name> -- 'Plan the first version.'; sr plan --edit <n> --step <k> changes one step before you approve")
+    p_plan = sub.add_parser("plan", help=plan_text, description=plan_text, allow_abbrev=False)
+    p_plan.add_argument("--no-wait", action="store_true",
+                        help="return as soon as a Grok stage is sent (also automatic when output isn't a terminal)")
+    p_plan.add_argument("task", nargs="*", help="what to plan: a goal, a focus, or 'Plan the first version.'")
+    p_plan.add_argument("--project", metavar="NAME", help="the registered project to plan (a plan is on a project only)")
+    p_plan.add_argument("--from", dest="from_task", action="append", metavar="TASK",
+                        help="plan from an earlier task's delivered result (its # or task_id; once)")
+    p_plan.add_argument("--source", default="cli")
+    p_plan.add_argument("--idea", action="append", metavar="ID", help="not allowed on a plan (refused with the reason)")
+    p_plan.add_argument("--chat", metavar="NAME", help="not allowed on a plan (refused with the reason)")
+    p_plan.add_argument("--file", action="append", default=[], metavar="PATH",
+                        help="not allowed on a plan (refused with the reason)")
+    p_plan.add_argument("--web", action="store_true", help="not allowed on a plan (refused with the reason)")
+    p_plan.add_argument("--no-files", dest="no_files", action="store_true", help=NO_FILES_REFUSAL)
+    p_plan.add_argument("--edit", metavar="N", help="change one step of a plan that waits for your approval: sr plan --edit "
+                                                    "N --step K with one of --team, --up, --down, --drop, --text or "
+                                                    "--done-when (the words after --)")
+    p_plan.add_argument("--answer", metavar="TASK", help="answer a plan waiting on its questions: sr plan --answer <task> "
+                        "[--pick <k>=<letter>]… [--other <k>=<your words>]…, or --best-guess; it never prompts")
+    p_plan.add_argument("--pick", action="append", metavar="K=LETTER", help="with --answer: question k's option")
+    p_plan.add_argument("--other", action="append", metavar="K=WORDS", help="with --answer: question k's typed answer")
+    p_plan.add_argument("--best-guess", dest="best_guess", action="store_true",
+                        help="with --answer: every question answered with the planner's own guess")
+    p_plan.add_argument("--step", metavar="K", help="with --edit: the step's number in the plan")
+    p_plan.add_argument("--stop-here", metavar="PLAN:K", dest="stop_here",
+                        help="brief 34: mark (on) or unmark (off) step K of plan PLAN as a stop for Auto: sr plan --stop-here 12:2 on")
+    p_plan.add_argument("--team", metavar="TEAM", help="with --edit: the step's new team, one on the plan's menu")
+    p_plan.add_argument("--text", action="store_true", help="with --edit: the step's new text, after --")
+    p_plan.add_argument("--covers", action="store_true", help="with --edit: the SPEC.md examples the step covers, after -- "
+                                                              "(like 'E1, E3', or none; brief 33.2)")
+    p_plan.add_argument("--done-when", dest="done_when", action="store_true",
+                        help="with --edit: the step's new finish line, after --")
+    p_plan.add_argument("--up", action="store_true", help="with --edit: move the step up one place")
+    p_plan.add_argument("--down", action="store_true", help="with --edit: move the step down one place")
+    p_plan.add_argument("--drop", action="store_true", help="with --edit: drop the step from the plan")
+    p_plan.add_argument("--model", action="append", metavar="AGENT=MODEL",
+                        help="the model that agent uses on this plan; an agent of redteam's chain as filled now (brief 33.3)")
+    p_plan.add_argument("--effort", action="append", metavar="AGENT=LEVEL",
+                        help="the effort level that agent uses on this plan (brief 33.3)")
+    p_plan.add_argument("--json", action="store_true", help=JSON_HELP)
     resume_text = ("continue a task Claude or ChatGPT stopped on its plan limit, once, with the other of the two "
                    "(rules v2.15): sr resume 5")
     p_resume = sub.add_parser("resume", help=resume_text, description=resume_text, allow_abbrev=False)
@@ -5087,6 +8873,8 @@ def _parser(roster, quiet=False):
                         help="list every call the task made (the original result and the fix list live here)")
     p_show.add_argument("--stages", action="store_true", help="on a relay task, also print each stage's result")
     p_show.add_argument("--pieces", action="store_true", help="on a split task, also print each piece's result")
+    p_show.add_argument("--notes", action="store_true",
+                        help="the router notes kept with the task and what each of its calls was sent (brief 30)")
     p_show.add_argument("--memory", action="store_true",
                         help="on a tagged task, also print the memory block as it was sent to the build call (rules v2.27)")
     p_show.add_argument("--handoff", action="store_true",
@@ -5096,6 +8884,15 @@ def _parser(roster, quiet=False):
     p_cancel = sub.add_parser("cancel", help="cancel a queued or sent task: sr cancel 5 (the # column in log)")
     p_cancel.add_argument("words", nargs="*")
     p_cancel.add_argument("--json", action="store_true", help=JSON_HELP)
+    for verb, words in (("land", "put a change waiting to land into the project's folder as one commit: sr land 5"),
+                        ("undo", "take a landed change back out as one more commit: sr undo 5"),
+                        ("discard", "drop a change that never landed (the copy goes; the folder is as it is): sr discard 5")):
+        p_verb = sub.add_parser(verb, help=words + " (brief 28)", allow_abbrev=False)
+        p_verb.add_argument("words", nargs="*")
+        p_verb.add_argument("--json", action="store_true", help=JSON_HELP)
+        if verb == "land":  # brief 29.1 (decision 21): a change whose check failed, landed as it is
+            p_verb.add_argument("--anyway", action="store_true",
+                                help="land a file-mode change whose check didn't pass, as it is (the entry says so)")
     p_status = sub.add_parser("status", help="the router's state: agents (online by a command, never a model), presets, "
                                               "skills, commands, open tasks, Jev's meter, memory; writes nothing")
     p_status.add_argument("--json", action="store_true", help="print one JSON object and nothing else (rules v2.30)")
@@ -5114,6 +8911,23 @@ def _parser(roster, quiet=False):
     p_project.add_argument("--json", action="store_true", help=JSON_HELP + "; `list --json` prints the projects as JSON")
     p_project.add_argument("--dry-run", action="store_true", dest="dry_run",
                            help="with new: say what it would do (create, register or refuse) and write nothing")
+    p_project.add_argument("--clear", action="store_true",
+                           help="with tests: remove the project's test command (brief 28)")
+    p_project.add_argument("--file", action="append", default=None,
+                           help="with files: a file to copy into the project's top level (repeat for more; brief 28)")
+    p_project.add_argument("--save", action="store_true", help="with notes: replace the notes with the text after -- "
+                                                                "(brief 30)")
+    p_project.add_argument("--expect", default=None, help="with notes --save: the hash `sr project notes` gave; notes "
+                                                          "changed since are refused (brief 30)")
+    p_project.add_argument("--task", default=None, help="with pin and save: the task whose result it is (brief 30)")
+    p_project.add_argument("--path", default=None, help="with save: the new file's path inside the project, .md or "
+                                                        ".txt (brief 30)")
+    p_project.add_argument("--status", action="store_true", help="with test and run: whether one is running and its "
+                                                                  "output so far, else the last one's (brief 31)")
+    p_project.add_argument("--set", default=None, dest="set_name", help="with secrets: the name to set in the project's "
+                                                                       ".env; the value comes on stdin, never here (brief 31)")
+    p_project.add_argument("--remove", default=None, dest="remove_name", help="with secrets: the name to take out of the "
+                                                                             "project's .env (brief 31)")
     p_chat = sub.add_parser("chat", help="chats from the log (rules v2.27): sr chat list prints every chat name with its "
                                          "task count and newest date; nothing is created", allow_abbrev=False)
     p_chat.add_argument("words", nargs="*", help="list")
@@ -5125,10 +8939,60 @@ def _parser(roster, quiet=False):
                               allow_abbrev=False)
     p_memory.add_argument("words", nargs="*", help="start | stop | status | rebuild | on | off")
     p_memory.add_argument("--json", action="store_true", help=JSON_HELP)
-    sub.add_parser("probe", help="one real Codex run that must fail to read .env, list your home folder or write a file; "
-                                 "run it after every Codex update, before routing tasks to ChatGPT; then one real Claude run "
-                                 "that must web-search and do nothing else (run it after every Claude Code update: "
-                                 "Claude's search stays off until it passes)")
+    p_ideas = sub.add_parser("ideas", help="a project's Ideas list (brief 33): one-line things to do later; sr ideas "
+                                           "<project> lists them, --add -- '<text>' adds one, --dismiss <id> takes one off",
+                             allow_abbrev=False)
+    p_ideas.add_argument("words", nargs="*", help="the project's name")
+    p_ideas.add_argument("--add", action="store_true", help="add the one-line text after -- (in quotes)")
+    p_ideas.add_argument("--source", metavar="TASK", help="with --add: the card it came from (Later on a chip)")
+    p_ideas.add_argument("--dismiss", metavar="ID", help="take an idea off the list; the log keeps it")
+    p_ideas.add_argument("--suggest", action="store_true", help="one Claude call adds up to 3 ideas from what the project holds; "
+                         "never checked: you judge each idea")
+    p_ideas.add_argument("--json", action="store_true", help=JSON_HELP)
+    p_forget = sub.add_parser("forget", help="take a task out of memory (brief 30): no memory block carries it and no "
+                                             "search finds it; the log keeps it; --undo remembers it again",
+                              allow_abbrev=False)
+    p_forget.add_argument("words", nargs="*", help="the task: #n, n, its id or a unique prefix")
+    p_forget.add_argument("--undo", action="store_true", help="Remember again: storable again by the usual rules")
+    p_forget.add_argument("--json", action="store_true", help=JSON_HELP)
+    p_notes = sub.add_parser("notes", help="the router notes (brief 30): sr notes prints them (the default while there "
+                                           "is no config/router-notes.md) with each section's characters, the cap and "
+                                           "the hash; sr notes save [--expect <hash>] -- '<the whole file>' checks and "
+                                           "writes them", allow_abbrev=False)
+    p_notes.add_argument("words", nargs="*", help="save")
+    p_notes.add_argument("--expect", default=None, help="the hash `sr notes` gave: a file changed since is refused")
+    p_notes.add_argument("--json", action="store_true", help=JSON_HELP + "; `sr notes --json` prints the notes as JSON")
+    models_text = ("the model defaults (brief 33.3): sr models prints the defaults in effect (each with its layer and file); "
+                   "sr models set (--skill <key> | --team <team> --role <role> | --team <preset> --stage <n>) --agent <agent> "
+                   "[--model <model>] [--effort <level>] writes one of your own, sr models clear … takes it out, and sr models "
+                   "fable on|off is the Fable switch")
+    auto_text = ("Auto (brief 34): sr auto <project> --on runs the project's approved plan's open steps one after another in one "
+                 "copy, each as its team runs it, until the plan ends, a step you marked stop-here, the budget, or anything that "
+                 "needs you; --off stops it after the step in progress; --status shows the run; --on --dry-run says what a run "
+                 "would cover and writes nothing")
+    p_auto = sub.add_parser("auto", help=auto_text, description=auto_text, allow_abbrev=False)
+    p_auto.add_argument("words", nargs="*", help="the project")
+    p_auto.add_argument("--on", action="store_true", help="start the run, or go on from where it stopped")
+    p_auto.add_argument("--off", action="store_true", help="stop the run after the step in progress")
+    p_auto.add_argument("--status", action="store_true", help="the run's state")
+    p_auto.add_argument("--dry-run", action="store_true", dest="dry_run", help="with --on: what the run would cover, nothing written")
+    p_auto.add_argument("--source", default="cli")
+    p_auto.add_argument("--json", action="store_true", help=JSON_HELP)
+    p_models = sub.add_parser("models", help=models_text, description=models_text, allow_abbrev=False)
+    p_models.add_argument("words", nargs="*", help="set | clear | fable on|off")
+    p_models.add_argument("--skill", metavar="KEY", help="a skill default (its doer's do and fix calls)")
+    p_models.add_argument("--team", metavar="TEAM", help="route, split, plan, file or a preset name")
+    p_models.add_argument("--role", metavar="ROLE", help=f"with --team: one of {', '.join(models.ROLE_WORDS)}")
+    p_models.add_argument("--stage", metavar="N", help="with --team <preset>: the stage's number")
+    p_models.add_argument("--agent", metavar="AGENT", help="claude, chatgpt or cursor")
+    p_models.add_argument("--model", metavar="MODEL", help="an alias or full id on the agent's allowlist")
+    p_models.add_argument("--effort", metavar="LEVEL", help="one of the agent's effort levels")
+    p_models.add_argument("--json", action="store_true", help=JSON_HELP + "; `sr models --json` prints the defaults as JSON")
+    p_probe = sub.add_parser("probe", help="one real Codex run that must fail to read .env, list your home folder or write a "
+                                           "file; run it after every Codex update, before routing tasks to ChatGPT; then one "
+                                           "real Claude run that must web-search and do nothing else (run it after every "
+                                           "Claude Code update: Claude's search stays off until it passes)")
+    p_probe.add_argument("--json", action="store_true", help=JSON_HELP + "; adds `probe`, what each probe found")
     return parser
 
 
@@ -5136,11 +9000,17 @@ def _workers(environ, model, cursor_model=None):
     """The Claude, ChatGPT and Cursor workers main hands on (ChatGPT and Cursor None without a pinned model). With
     SR_INJECT_PLAN_LIMIT set (test-only, build brief 7) the named agent's next call stops on an
     injected plan limit at the worker's process boundary; plan_limit.injected raises InjectRefused
-    on the real log, before anything runs."""
+    on the real log, before anything runs. SR_INJECT_FAIL=cursor (brief 32) fails Cursor's next call the same way."""
     agent = environ.get(plan_limit.ENV_NAME)
     hook = plan_limit.injected(agent, DB_PATH, root=ROOT) if agent is not None else None
     claude = functools.partial(claude_worker.run, run=hook(subprocess.run)) if agent == "claude" else claude_worker.run
     cursor = functools.partial(cursor_worker.run, model=cursor_model) if cursor_model else None  # rules v2.28, brief 20
+    if environ.get(plan_limit.QUESTIONS_ENV) is not None:  # brief 33.4 (decision 17): refused on the real log
+        plan_limit.questions_injected(environ[plan_limit.QUESTIONS_ENV], DB_PATH, root=ROOT)
+    failed = environ.get(plan_limit.FAIL_ENV)  # brief 32 (D's step 4): SR_INJECT_FAIL, refused on the real log
+    if failed is not None:
+        fail = plan_limit.failing(failed, DB_PATH, root=ROOT)
+        cursor = functools.partial(cursor_worker.run, model=cursor_model, run=fail(subprocess.run)) if cursor_model else None
     if not model:
         return claude, None, cursor
     if agent == "chatgpt":
@@ -5164,7 +9034,8 @@ def _presets_or_none(roster, warn=False, out=print):
 
 # `sr relay`'s own flags; any other `--name` on a relay command is a slot flag (the owner's D2, brief 15).
 RELAY_FLAGS = ("--list", "--no-wait", "--help", "-h", "--web", "--json")  # --web is refused on relay, not a slot
-RELAY_VALUE_FLAGS = ("--file", "--source", "--project", "--chat")  # --project and --chat are intake's, never a slot
+RELAY_VALUE_FLAGS = ("--file", "--source", "--project", "--chat", "--from", "--idea",
+                     "--step", "--model", "--effort")  # intake's, never a slot (brief 33.1: --step; 33.3: --model, --effort)
 
 
 def _take_slot_flags(argv):
@@ -5215,8 +9086,9 @@ def _serve_demo(argv, out):
 
 
 def _slot_flag_elsewhere(argv):
-    """The first slot flag (`--build`) on `sr route` or `sr split`, which take none (rules v2.21); else None."""
-    if not argv or argv[0] not in ("route", "split"):
+    """The first slot flag (`--build`) on `sr route`, `sr split` or (brief 33.1) `sr plan`, which take none (rules v2.21);
+    else None."""
+    if not argv or argv[0] not in ("route", "split", "plan"):
         return None
     names = presets.slot_names()
     for token in argv[1:]:
@@ -5234,6 +9106,11 @@ def _main(argv, platform, out):
     if argv[:1] == ["serve"] and "--demo" in argv[1:]:  # brief 23 (decision 15): before the roster, host, .env and log
         return _serve_demo(argv, out)
     elsewhere = _slot_flag_elsewhere(argv)
+    if elsewhere and argv[0] == "plan":  # brief 33.1 (decision 1): a plan runs redteam's chain as it is filled now
+        receipt.mark(out, code="plan_refused", command=True)
+        out(f"Refused: a slot flag on sr plan is refused ({elsewhere}): a plan runs redteam's chain as it is filled now. "
+            "Nothing was logged or sent.")
+        return 2
     if elsewhere:
         receipt.mark(out, code="slot_refused", command=True)
         out(f"Refused: slot flags are for sr relay only ({elsewhere} on sr {argv[0]}). Nothing was logged or sent.")
@@ -5249,21 +9126,37 @@ def _main(argv, platform, out):
     except RosterError as e:
         roster, roster_error = None, e
     args = _parser(roster, quiet=json_mode).parse_args(argv)
-    if args.command != "route" and getattr(args, "web", False):
+    if args.command != "route" and getattr(args, "no_files", False):  # brief 33.2 (decision 5): sr route --project only
+        receipt.mark(out, code="flag_refused", command=True)
+        out(f"Refused: {NO_FILES_REFUSAL}. Nothing was logged or sent.")
+        return 2
+    if args.command not in ("route", "plan") and getattr(args, "web", False):  # brief 33.1: sr plan refuses it itself
         receipt.mark(out, code="flag_refused", command=True)
         out(f"Refused: {WEB_REFUSAL} (sr route --file <path> --web). Nothing was logged or sent.")
-        return 2
-    if args.command == "split" and args.project:  # rules v2.25, Split
-        receipt.mark(out, code="tag_refused", command=True)
-        out(SPLIT_PROJECT_REFUSAL)
         return 2
     if args.command == "split" and args.chat:  # rules v2.27, Memory: as --project
         receipt.mark(out, code="tag_refused", command=True)
         out(SPLIT_CHAT_REFUSAL)
         return 2
-    if getattr(args, "chat", None) and getattr(args, "project", None):  # rules v2.27: one tag per task
+    if getattr(args, "chat", None) and getattr(args, "project", None) and args.command != "plan":  # rules v2.27: one tag
         receipt.mark(out, code="tag_refused", command=True)
         out(ONE_TAG_REFUSAL)
+        return 2
+    if args.command == "split" and getattr(args, "from_task", None):  # brief 33 (decision 8)
+        receipt.mark(out, code="flag_refused", command=True)
+        out("Refused: --from on sr split is refused: a split builds from no earlier result. Nothing was logged or sent.")
+        return 2
+    if len(getattr(args, "from_task", None) or []) > 1:  # brief 33 (decision 8): one source per task
+        receipt.mark(out, code="usage", command=True)
+        out("Refused: --from goes once: a task builds from one earlier result. Nothing was logged or sent.")
+        return 2
+    if args.command == "split" and getattr(args, "idea", None):  # brief 33 (decision 16)
+        receipt.mark(out, code="flag_refused", command=True)
+        out("Refused: --idea on sr split is refused: send an idea on Route or a team. Nothing was logged or sent.")
+        return 2
+    if len(getattr(args, "idea", None) or []) > 1 and args.command != "plan":  # brief 33.1: plan refuses --idea itself
+        receipt.mark(out, code="usage", command=True)
+        out("Refused: --idea goes once: a task is sent from one idea. Nothing was logged or sent.")
         return 2
 
     host_problems = safety.check_host(platform)
@@ -5295,14 +9188,26 @@ def _main(argv, platform, out):
     if os.environ.get(plan_limit.ENV_NAME) is not None:
         out(f"Test hook: the next {os.environ[plan_limit.ENV_NAME]} call stops on an injected plan limit "
               f"(scratch log {DB_PATH}).")
+    if os.environ.get(plan_limit.FAIL_ENV) is not None:  # brief 32 (D's step 4)
+        out(f"Test hook: the next {os.environ[plan_limit.FAIL_ENV]} call fails (an injected failure; scratch log "
+            f"{DB_PATH}).")
 
     # Only route, relay, resume, serve and probe need the config, so log, show, cancel and check still work if it breaks.
-    if args.command in ("route", "relay", "split", "resume", "fallback", "serve", "probe") and roster_error:
+    if args.command in ("route", "relay", "split", "resume", "fallback", "serve", "probe", "plan", "auto") and roster_error:
         receipt.mark(out, code="setup", command=True)
         for problem in roster_error.problems:
             out(f"Refused: {problem}")
         out("Nothing was logged or sent.")
         return 2
+
+    if args.command == "notes":  # brief 30 (decision 8): the router notes; no log, no agent
+        return cmd_notes(args.words, text=project_notes, expect=args.expect, as_json=json_mode,
+                         secrets=_secrets(dotenv_values(ENV_PATH)), out=out)
+
+    if args.command == "models":  # brief 33.3 (decision 3): the local models file; no log, no agent
+        return cmd_models(args.words, roster=roster, loaded=_presets_or_none(roster) if roster is not None else None,
+                          as_json=json_mode, skill=args.skill, team=args.team, role=args.role, stage=args.stage,
+                          agent=args.agent, model=args.model, effort=args.effort, out=out)
 
     if args.command == "status":  # brief 21: reads only; never a row, never an agent, nothing written
         return cmd_status(roster=roster, as_json=json_mode, out=out)
@@ -5328,7 +9233,9 @@ def _main(argv, platform, out):
                                                                  home=Path.home(), environ=os.environ),
                          web_files_check=web_files_probe.command_check(PROBE_STATE, config=config, env_path=ENV_PATH,
                                                                        home=Path.home(), environ=os.environ),
-                         cursor_check=cursor_probe.command_check(PROBE_STATE, model=roster.model("cursor"), environ=os.environ))
+                         cursor_check=cursor_probe.command_check(PROBE_STATE, model=roster.model("cursor"), environ=os.environ),
+                         files_check=lambda: files_probe.probe(environ=os.environ),  # brief 28: recorded by cmd_probe
+                         out=out)  # brief 33.1 (decision 23d, brief 32's D5): its receipt, so `--json` carries `probe`
 
     if args.command == "memory":  # rules v2.27: the store is the owner's to start and stop; no log is opened for it
         return cmd_memory(args.words, request=requests.request, environ=os.environ, home=Path.home(),
@@ -5337,7 +9244,9 @@ def _main(argv, platform, out):
                           out=out)  # brief 27: memory takes --json, so its lines go through the receipt
 
     loaded = None
-    if args.command in ("relay", "resume", "fallback"):  # the presets are checked before anything is logged
+    # Cleanup 1 (2.0): `auto --on` too, whose steps run teams; never --off or --status, so a bad file can't take the Stop away
+    if args.command in ("relay", "resume", "fallback", "plan") or (args.command == "auto" and args.on):  # the presets
+        # are checked before anything is logged
         try:
             loaded = presets.load_presets(roster, tuple(SENDERS), relay.CONTRACTS, roles=relay.ROLES,
                                           verdicts=relay.VERDICTS)
@@ -5349,8 +9258,13 @@ def _main(argv, platform, out):
             return 2
     if args.command == "check" and roster is not None:  # an open relay task needs its preset to go on
         loaded = _presets_or_none(roster, warn=True, out=out)
+    if args.command == "split" and roster is not None:  # brief 29: the piece menu and each team piece's preset
+        loaded = _presets_or_none(roster)
 
-    runs_agents = args.command in ("route", "split", "check", "resume", "fallback") or (args.command == "relay" and not args.list)
+    runs_agents = (args.command in ("route", "split", "check", "resume", "fallback", "pick", "cancel", "plan", "auto")  # brief
+                   or (args.command == "ideas" and args.suggest)  # brief 33.4 (decisions 10 and 11): one Claude call
+                   or (args.command == "relay" and not args.list))  # 29: a pick or a cancel of a piece goes on with its
+    # split; brief 33.2 (decision 17, 34's E1): auto's steps keep their answer files too
     if runs_agents:  # all may run Claude in workspace/
         try:
             safety.prepare_workspace()
@@ -5392,7 +9306,9 @@ def _main(argv, platform, out):
                 drop_folder=drop.folder(), ask_attach=input if _can_ask() and not json_mode else None, convert=drop.convert_heic,
                 pages=media.extract_pages, claude_ready=_claude_gate(config, out), hindsight=store, web=args.web,
                 project=args.project, chat=args.chat, skill=args.skill, answers=args.answers, available=gate,
-                chatgpt_ready=codex, out=out,
+                chatgpt_ready=codex, files_ready=_files_gate(out), from_ref=(args.from_task or [None])[0],
+                idea_ref=(args.idea or [None])[0], step_ref=args.step, model_flags=args.model or (),
+                effort_flags=args.effort or (), no_files=args.no_files, out=out,  # brief 33.2 (decision 5)
             )
         if args.command == "relay":
             if args.list:
@@ -5404,7 +9320,9 @@ def _main(argv, platform, out):
                 fetch=inbox.fetch_issues, close=inbox.close_issue, sleep=time.sleep, clock=time.monotonic,
                 wait=not args.no_wait and _stdout_is_terminal() and not json_mode, source=args.source, files=args.file, slots=slot_flags,
                 claude_ready=_claude_gate(config, out), hindsight=store, project=args.project, chat=args.chat,
-                available=gate, chatgpt_ready=codex, out=out,
+                available=gate, chatgpt_ready=codex, files_ready=_files_gate(out), from_ref=(args.from_task or [None])[0],
+                idea_ref=(args.idea or [None])[0], step_ref=args.step, model_flags=args.model or (),
+                effort_flags=args.effort or (), out=out,
             )
         if args.command == "split":
             common = dict(conn=conn, config=config, roster=roster, environ=os.environ, settings_paths=CLAUDE_SETTINGS,
@@ -5413,7 +9331,17 @@ def _main(argv, platform, out):
                           codex_login=chatgpt_worker.login_status, fetch=inbox.fetch_issues, close=inbox.close_issue,
                           sleep=time.sleep, clock=time.monotonic, wait=not args.no_wait and _stdout_is_terminal() and not json_mode,
                           claude_ready=_claude_gate(config, out), hindsight=store, available=gate,
-                          chatgpt_ready=codex, out=out)
+                          chatgpt_ready=codex, loaded=loaded, cursor=cursor, cursor_ready=cursor_ready,
+                          out=out)  # brief 29: the teams' presets; brief 29.1 (D6): Cursor's worker for a piece's slot
+            if args.edit is not None or args.piece is not None or args.team is not None or args.slot:  # brief 29 (8)
+                if (args.edit is None or args.piece is None or args.go is not None or args.skip is not None
+                        or args.answer is not None or args.skill or args.file or args.preset or args.project):
+                    receipt.mark(out, code="usage", command=True)
+                    out("Refused: sr split --edit <n> --piece <k> [--team <team>] [-- <text>] changes one piece of a "
+                        "plan that waits, and takes nothing else. Nothing was logged or sent.")
+                    return 2
+                return cmd_split_edit([args.edit], piece=args.piece, team=args.team, slots=args.slot,
+                                      text=" ".join(args.task) if args.task else None, **common)
             if (args.answer is not None or args.skill) and args.go is None:  # brief 22 (decision 9)
                 receipt.mark(out, code="usage", command=True)
                 out("Refused: --answer and --skill go with sr split --go <n>. Nothing was logged or sent.")
@@ -5427,7 +9355,53 @@ def _main(argv, platform, out):
                 if args.skip is not None:
                     return cmd_split_skip([args.skip], **common)
                 return cmd_split_go([args.go], answer=args.answer, skills=args.skill, **common)
-            return cmd_split(" ".join(args.task), source=args.source, files=args.file, preset=args.preset, **common)
+            return cmd_split(" ".join(args.task), source=args.source, files=args.file, preset=args.preset,
+                             project=args.project, files_ready=_files_gate(out), model_flags=args.model or (),
+                             effort_flags=args.effort or (), **common)  # brief 29 (decision 12); brief 33.3: the flags
+        if args.command == "plan" and args.stop_here is not None:  # brief 34 (decision 6): a step's stop-here mark
+            return cmd_plan_stop_here(args.stop_here, args.task, conn=conn, out=out)
+        if args.command == "auto":  # brief 34: the run
+            return cmd_auto(
+                args.words, conn=conn, config=config, roster=roster, loaded=loaded, environ=os.environ,
+                settings_paths=CLAUDE_SETTINGS,
+                label=functools.partial(jev.label, roster=roster, api_key=config.get("JEV_API_KEY")), post=requests.post,
+                worker=worker, chatgpt=chatgpt, codex_login=chatgpt_worker.login_status, cursor=cursor,
+                cursor_ready=cursor_ready, fetch=inbox.fetch_issues, close=inbox.close_issue, sleep=time.sleep,
+                clock=time.monotonic, claude_ready=_claude_gate(config, out), hindsight=store, available=gate,
+                chatgpt_ready=codex, files_ready=_files_gate(out), on=args.on, off=args.off, status=args.status,
+                dry_run=args.dry_run, source=args.source, out=out,
+            )
+        if args.command == "plan" and (args.answer is not None or args.pick or args.other or args.best_guess):  # brief 33.4
+            if args.answer is None or args.task or args.project is not None:
+                receipt.mark(out, code="usage")
+                out("Refused: sr plan --answer <task> [--pick <k>=<letter>]… [--other <k>=<your words>]…, or sr plan --answer "
+                    "<task> --best-guess. Nothing was changed.")
+                return 2
+            return cmd_plan_answer(
+                args.answer, conn=conn, config=config, roster=roster, loaded=loaded, environ=os.environ,
+                settings_paths=CLAUDE_SETTINGS, post=requests.post, worker=worker, chatgpt=chatgpt,
+                codex_login=chatgpt_worker.login_status, cursor=cursor, cursor_ready=cursor_ready,
+                fetch=inbox.fetch_issues, close=inbox.close_issue, sleep=time.sleep, clock=time.monotonic,
+                wait=not args.no_wait and _stdout_is_terminal() and not json_mode, hindsight=store, available=gate,
+                chatgpt_ready=codex, claude_ready=_claude_gate(config, out), picks=args.pick or (), others=args.other or (),
+                best_guess=args.best_guess, out=out)
+        if args.command == "plan":  # brief 33.1: Plan, a team on a project only, and its edits before the approval
+            if args.edit is not None or args.step is not None or args.team is not None or args.text or args.done_when \
+                    or args.up or args.down or args.drop:
+                return cmd_plan_edit(args, conn=conn, config=config, roster=roster, loaded=loaded, available=gate,
+                                     out=out)
+            return cmd_plan(
+                " ".join(args.task), conn=conn, config=config, roster=roster, loaded=loaded, environ=os.environ,
+                settings_paths=CLAUDE_SETTINGS, post=requests.post, worker=worker, chatgpt=chatgpt,
+                codex_login=chatgpt_worker.login_status, cursor=cursor, cursor_ready=cursor_ready,
+                fetch=inbox.fetch_issues, close=inbox.close_issue, sleep=time.sleep, clock=time.monotonic,
+                wait=not args.no_wait and _stdout_is_terminal() and not json_mode, source=args.source,
+                project=args.project, from_ref=(args.from_task or [None])[0], hindsight=store, available=gate,
+                chatgpt_ready=codex, files_ready=_files_gate(out), claude_ready=_claude_gate(config, out),
+                idea_ref=(args.idea or [None])[0], chat=args.chat, files=args.file, web=args.web,
+                model_flags=args.model or (), effort_flags=args.effort or (),
+                inject_questions=os.environ.get(plan_limit.QUESTIONS_ENV) is not None, out=out,  # brief 33.4 (decision 17)
+            )
         if args.command == "resume":
             return cmd_resume(
                 args.words, conn=conn, config=config, roster=roster, loaded=loaded, environ=os.environ,
@@ -5460,24 +9434,60 @@ def _main(argv, platform, out):
                            loaded=_presets_or_none(roster), out=out)
         if args.command == "show":
             return cmd_show(conn=conn, words=args.words, secrets=_secrets(config), history=args.history, stages=args.stages,
-                            pieces=args.pieces, handoff=args.handoff, memory=args.memory,
+                            pieces=args.pieces, handoff=args.handoff, memory=args.memory, notes_flag=args.notes,
                             roster=roster, presets=_presets_or_none(roster), as_json=json_mode, config=config, out=out)
+        going_on = functools.partial(_going_on, conn=conn, config=config, roster=roster, worker=worker, chatgpt=chatgpt,
+                                     store=store, gate=gate, codex=codex, cursor=cursor, cursor_ready=cursor_ready,
+                                     out=out)  # brief 29 (decision 11); brief 29.1 (D6)
         if args.command == "cancel":
-            return cmd_cancel(conn=conn, words=args.words, kill=os.kill, sleep=time.sleep, clock=time.monotonic, out=out)
+            return cmd_cancel(conn=conn, words=args.words, kill=os.kill, sleep=time.sleep, clock=time.monotonic,
+                              go_on=going_on, out=out)
+        if args.command in ("land", "undo", "discard"):  # brief 28: the router's own commits in a project; nothing is sent
+            return cmd_land(args.words, conn=conn, config=config, verb=args.command, out=out,
+                            anyway=bool(getattr(args, "anyway", False)), hindsight=store)
         if args.command == "project":  # rules v2.25: the registry and the handoff file; nothing is sent
             return cmd_project(args.words, conn=conn, as_json=json_mode, out=out, notes=project_notes,
-                               dry_run=args.dry_run, secrets=_secrets(config))
+                               dry_run=args.dry_run, secrets=_secrets(config), clear=args.clear, files=args.file or (),
+                               save=args.save, expect=args.expect, task=args.task, path=args.path,  # brief 30
+                               status=args.status, set_name=args.set_name, remove_name=args.remove_name,
+                               json_mode=json_mode)  # brief 31
         if args.command == "chat":  # rules v2.27: from the log, no Hindsight call
             return cmd_chat(args.words, conn=conn, as_json=json_mode, out=out)
-        if args.command == "pick":  # sends nothing; needs the presets to read the candidates
+        if args.command == "ideas" and args.suggest:  # brief 33.4 (decision 13)
+            if args.add or args.dismiss is not None or args.source is not None:
+                receipt.mark(out, code="usage")
+                out("Refused: --suggest goes alone: sr ideas <project> --suggest. Nothing was logged or sent.")
+                return 2
+            return cmd_suggest(args.words, conn=conn, config=config, roster=roster, environ=os.environ,
+                               settings_paths=CLAUDE_SETTINGS, worker=worker, available=gate, hindsight=store, out=out)
+        if args.command == "ideas":  # brief 33 (decisions 14 to 16): a project's Ideas list, in the log
+            return cmd_ideas(args.words, conn=conn, add=args.add, source=args.source, dismiss=args.dismiss,
+                             text=project_notes, secrets=_secrets(config), out=out)
+        if args.command == "forget":  # brief 30 (decision 15): Forget and Remember again; the log keeps the task
+            return cmd_forget(args.words, conn=conn, undo=args.undo, secrets=_secrets(config), client=store, out=out)
+        if args.command == "pick":  # sends nothing itself; on a piece the split goes on (brief 29, decision 11)
             return cmd_pick(args.words, conn=conn, loaded=_presets_or_none(roster), secrets=_secrets(config), hindsight=store,
-                            out=out)
+                            go_on=going_on, out=out)
     finally:
         log.ROUND_WRITER = None
         runs.FOLDER = None
         conn.close()
     return 1
 
+
+
+def _going_on(row, *, conn, config, roster, worker, chatgpt, store, gate, codex, out, cursor=None, cursor_ready=None):
+    """Brief 29 (decision 11): the split goes on after `sr pick` or `sr cancel` ended a piece, with this command's own
+    agents, gate and checks, as `sr split --go` would run it."""
+    if roster is None:
+        return None
+    deps = _split_deps(config, roster, label=functools.partial(jev.label, roster=roster, api_key=config.get("JEV_API_KEY")),
+                       ask=None, post=requests.post, worker=worker, chatgpt=chatgpt,
+                       codex_login=chatgpt_worker.login_status, fetch=inbox.fetch_issues, close=inbox.close_issue,
+                       sleep=time.sleep, clock=time.monotonic, wait=False, claude_ready=_claude_gate(config, out),
+                       hindsight=store, available=gate, chatgpt_ready=codex, loaded=_presets_or_none(roster),
+                       cursor=cursor, cursor_ready=cursor_ready)
+    return _go_on(conn, row, deps, _secrets(config), out, environ=os.environ, settings_paths=CLAUDE_SETTINGS)
 
 
 # ---------- --json (build brief 21, rules v2.30: Router for the interface) ----------
@@ -5544,6 +9554,7 @@ def _envelope(out, code):
         found["tasks"] = []
     if code == 0:
         found.update(out.extra)  # brief 26: a new project's `project`, after the envelope's own keys
+    found.update(getattr(out, "extra_any", {}))  # brief 30 (A2): `sr probe --json`'s `probe`, whatever the exit
     return found
 
 

@@ -138,7 +138,7 @@ def test_skip_and_cancel_work_on_the_held_piece(conn):
     conn2.close()
 
 
-def test_a_grok_check_is_held_too(conn):
+def test_a_grok_check_is_held_too(conn, grok_room):
     """E2: piece 2 is bulk_text: Claude does it, Grok checks it. Its do runs at once; its check waits for piece 1."""
     env = Env(claude=(PLAN3, "BULK DONE", R3, JOINED), chatgpt=("PASS", "PASS", "PASS"),
               jev=Jev({P1: PULSE, P2: BULK}), hook=Inbox())

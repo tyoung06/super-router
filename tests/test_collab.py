@@ -254,11 +254,14 @@ def test_the_reask_carries_the_task_its_own_result_each_missing_item_and_the_sha
 
 from router import __main__ as cli  # noqa: E402
 from router import log, presets  # noqa: E402
-from tests.helpers import shipped_roster  # noqa: E402
+from tests.helpers import PRESETS_V16, shipped_roster  # noqa: E402
 from tests.test_loop import Clock, Scripted  # noqa: E402
 from tests.test_relay import CONFIG, ROSTER, SECRET, Chat, RelayHook  # noqa: E402
 
-LOADED = presets.load_presets(shipped_roster(), tuple(cli.SENDERS), relay.CONTRACTS, roles=relay.ROLES,
+# Brief 32: presets 1.6, whose collab is 1.7's byte for byte (tests/helpers.py checks it); the files that borrow this LOADED
+# run redteam in its three-stage shape for their own subject (the handoff, memory, file mode): the second attacker's chain
+# is tests/test_redteam2_*.py's
+LOADED = presets.load_presets(shipped_roster(), tuple(cli.SENDERS), relay.CONTRACTS, roles=relay.ROLES, path=PRESETS_V16,
                               verdicts=relay.VERDICTS)
 FAILED_EDIT = EDITED.replace("## Unresolved\nnone", "## Unresolved\n- the error cases are missing")
 EMPTY_EDIT = EDITED.replace("## Unresolved\nnone\n", "## Unresolved\n\n")

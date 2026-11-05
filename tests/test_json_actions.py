@@ -11,7 +11,7 @@ import pytest
 
 from router import __main__ as cli
 from router import ids, log, projects
-from tests.helpers import fake_label
+from tests.helpers import fake_label, teamed
 from tests.test_loop import Scripted
 from tests.test_relay import Chat, RelayHook
 
@@ -217,7 +217,7 @@ def test_relay_versus_waits_for_the_pick_and_pick_picks(world):
 
 
 def test_split_stops_at_the_plan_without_asking(world):
-    world.worker = Scripted("## Pieces\n1. List three tray brands.\n2. Write a haiku about trays.\n\n## Join\nList, then haiku.")
+    world.worker = Scripted(teamed("## Pieces\n1. List three tray brands.\n2. Write a haiku about trays.\n\n## Join\nList, then haiku."))
     found = world.json("split", "list trays and write a haiku")
     assert (found["status"], found["waiting_on"], found["exit"]) == ("returned", "split_plan", 0)
 

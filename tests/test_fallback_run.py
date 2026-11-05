@@ -13,11 +13,13 @@ from tests.test_collab import TASK as COLLAB_TASK
 from tests.test_loop import Clock, Scripted, Webhook
 from tests.test_relay import CONFIG, GOOD_NOTE, ROSTER, TASK as RB_TASK, Chat, RelayHook
 from tests.test_resume_run import LOADED, WRITING, _relay, _route, claude_limit, codex_limit
+from tests.helpers import less_next
 
 ROUTE_TASK = "write two lines about seed trays"
 FIRST, FIXED = "FIRST-x71 two lines that rhyme badly", "FIXED-x72 two lines that still rhyme badly"
-CHECK1, FINAL = "FIX\n- the rhyme is forced", "FIX\n- line 1 is too long\n- no garden word\n- the rhyme is forced"
-FINAL_LIST = "- line 1 is too long\n- no garden word\n- the rhyme is forced"
+# Brief 29.1 (decision 15): the re-check gives a line per first-list must; the final fix list is the open musts, by number
+CHECK1, FINAL = "FIX\n- the rhyme is forced", "FIX\n1. not fixed: line 1 is too long and has no garden word"
+FINAL_LIST = "1. the rhyme is forced (not fixed: line 1 is too long and has no garden word)"
 REDO = "REDO-x73 Trays stand tall at dawn; / the first drive flies on."
 FAILED_EDIT = EDITED.replace("## Unresolved\nnone", "## Unresolved\n- the error cases are missing")
 
@@ -68,7 +70,8 @@ def test_the_redo_gets_the_original_prompt_and_the_fix_list_never_the_failed_res
     row = _double_fail_route(conn)
     code, out, after, worker, chat, hook = _fallback(conn, row, chatgpt=Chat(REDO), worker=Scripted("PASS"))
     # rules v2.22: chatgpt's redo searches, so what the original doer was sent gains the search line
-    assert chat.prompts[0] == fallback.prompt(f"{ROUTE_TASK}\n\n{checking.SEARCH_LINE_GENERAL}", FINAL_LIST)
+    assert less_next(chat.prompts[0]) == fallback.prompt(f"{ROUTE_TASK}\n\n{checking.DELIVERABLE_LINE}\n\n{checking.SEARCH_LINE_GENERAL}",
+                                              FINAL_LIST)  # brief 29.1: the doer's deliverable line rides along
     for failed in (FIRST, FIXED, "FIRST-x71", "FIXED-x72"):
         assert failed not in chat.prompts[0]
     # The checker gets the redo, never the original.
@@ -81,7 +84,7 @@ def test_the_plan_is_printed_before_the_redo(conn):
     assert out.splitlines()[:2] == [
         f"Falling back on #{row['n']} {row['task_id']} (routed): chatgpt redoes it; claude checks "
         "(one check round, one fix round).",
-        "chatgpt gets the task, plus the final fix list (3 lines); never the failed result."]
+        "chatgpt gets the task, plus the final fix list (1 lines); never the failed result."]
 
 
 def test_a_redo_that_fails_twice_prints_four_blocks_original_first(conn):
@@ -94,7 +97,8 @@ def test_a_redo_that_fails_twice_prints_four_blocks_original_first(conn):
     assert [r[0] for r in _rows(conn, row)[4:]] == ["-fb1", "-fb1-c1", "-fb1-f1", "-fb1-c2"]
     tail = out[out.index("Both attempts failed their checks twice."):]
     order = [tail.index(s) for s in ("Original result (claude):", FIXED, "Its final fix list (chatgpt):", FINAL_LIST,
-                                     "Redo (chatgpt):", "REDO-FIXED-x74", "Its final fix list (claude):", "- now too short")]
+                                     "Redo (chatgpt):", "REDO-FIXED-x74", "Its final fix list (claude):",
+                                     "1. still no garden word (not fixed: now too short)")]
     assert order == sorted(order)
 
 
@@ -114,7 +118,7 @@ class _GrokHook(Webhook):
         return "do" if call_id.count("-") == 3 else call_id.split("-")[-1]
 
 
-def test_r1_grok_did_the_work_so_grok_checks_the_redo_and_never_redoes_it(conn):
+def test_r1_grok_did_the_work_so_grok_checks_the_redo_and_never_redoes_it(conn, grok_room):
     xpulse = {"status": "ok", "label": "x_social_pulse", "confidence": 0.95, "needs_split": 0.1, "tokens": 0}
     hook = _GrokHook(do="three posts", f1="three posts, fixed", c1="PASS")
     code, out, row = _route(conn, xpulse, worker=Scripted(), chatgpt=Chat(CHECK1, FINAL), hook=hook)
@@ -144,7 +148,7 @@ def test_research_build_redoes_stage_2_from_the_stored_note_with_search_and_neve
     assert code == 0, out
     assert len(hook.sent) == sent_before            # Grok's research stage is never run again
     note = relay.stage_results(log.calls_for(conn, row["task_id"]))[1]
-    assert chat.prompts[0] == fallback.prompt(relay.build_prompt(RB_TASK, note, search=True), FINAL_LIST)
+    assert less_next(chat.prompts[0]) == fallback.prompt(relay.build_prompt(RB_TASK, note, search=True), FINAL_LIST)
     assert chat.kwargs[0]["web_search"] == "live" and checking.SEARCH_LINE in chat.prompts[0]
     assert FIRST not in chat.prompts[0] and FIXED not in chat.prompts[0]
     fb = log.get_call(conn, f"{row['task_id']}-fb1")

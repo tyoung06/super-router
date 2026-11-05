@@ -20,11 +20,21 @@ probe_state.json
 # sr project: the registry of project folders, with this machine's paths (build brief 18)
 config/projects.json
 
+# sr project tests: each project's test command, the router's own (build brief 28, decision 17)
+config/project_tests.json
+
+# sr project run-command: each project's run command, the router's own (build brief 31, decision 3)
+config/project_runs.json
+
 # sr project add super-router: the router's project memory, written by the router (rules v2.25); never Claude Code's handoff
 HANDOFF.md
 
 # Build brief 21 (the owner's B1 amendment): this Mac's own settings over config/settings.json, key by key (report_path)
 config/settings.local.json
+
+# Build brief 30 (decision 1): the router notes, this Mac's own, sent with every agent call; config/router-notes.default.md
+# (the six empty headings) is the tracked default the router reads while this file is missing
+config/router-notes.md
 
 # Build brief 21, C1 (rules v2.30, Round outputs): every call's output as its own file, beside the log; never committed
 tasks/
@@ -37,3 +47,7 @@ run/
 !/demo/tasks/
 !/demo/files/tasks/
 !/demo/files/media/
+
+# Build brief 33.3 (rules 2.48, Models): the owner's own model defaults (per skill, per stage) and the Fable switch, written by
+# `sr models` alone; config/models.json (tracked) holds the public defaults and the allowlists
+config/models.local.json

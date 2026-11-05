@@ -3,7 +3,7 @@
  "task_id": "sr-20261019-090600-0002",
  "n": 2,
  "created_at": "2026-10-19T09:06:06+00:00",
- "updated_at": "2026-10-19T09:06:24+00:00",
+ "updated_at": "2026-10-19T09:06:36+00:00",
  "sent_at": null,
  "source": "cli",
  "text": "Draft a 40-word notice that the garden's tool shed now opens at 7 am.",
@@ -39,6 +39,10 @@
  },
  "slots": null,
  "working": null,
+ "steps": {
+  "chain": null,
+  "now": null
+ },
  "fallback": {
   "ok": false,
   "agent": null,
@@ -59,6 +63,66 @@
  "card_line": null,
  "takeover": null,
  "late": null,
+ "project_files": null,
+ "notes": [],
+ "open_musts": [],
+ "land_anyway": false,
+ "no_split": null,
+ "piece_of": null,
+ "router_notes": {
+  "hash": "8b61a57199701a87",
+  "chars": 330,
+  "file": "tasks/sr-20261019-090600-0002/router-notes.md"
+ },
+ "spec": null,
+ "forgotten": null,
+ "save_path": "docs/draft-a-40-word-notice-that-the.md",
+ "text_only": false,
+ "save_spec": null,
+ "card_actions": {
+  "pin": true,
+  "save": true,
+  "forget": true,
+  "remember": false
+ },
+ "next": [
+  {
+   "kind": "build_from",
+   "words": "Build from #2",
+   "later": false,
+   "fill": {
+    "team": "route",
+    "project": null,
+    "chat": "garden",
+    "text": "",
+    "from": "sr-20261019-090600-0002",
+    "idea": null,
+    "step": null
+   }
+  },
+  {
+   "kind": "agent",
+   "words": "Write the same notice for the noticeboard by the gate.",
+   "later": false,
+   "fill": {
+    "team": "route",
+    "project": null,
+    "chat": "garden",
+    "text": "Write the same notice for the noticeboard by the gate.",
+    "from": "sr-20261019-090600-0002",
+    "idea": null,
+    "step": null
+   }
+  }
+ ],
+ "from": null,
+ "idea": null,
+ "plan": null,
+ "plan_step": null,
+ "one_step": null,
+ "questions": null,
+ "models": null,
+ "auto": null,
  "calls": [
   {
    "call_id": "sr-20261019-090600-0002",
@@ -70,9 +134,23 @@
    "status": "done",
    "verdict": null,
    "sent_at": "2026-10-19T09:06:12+00:00",
-   "finished_at": "2026-10-19T09:06:12+00:00",
+   "finished_at": "2026-10-19T09:06:15+00:00",
    "round_file": "tasks/sr-20261019-090600-0002/01-do-claude.md",
-   "served": null,
+   "served": {
+    "asked": "claude-sonnet-5-5",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/models.json",
+    "key": null,
+    "layer": "agent",
+    "model": "claude-sonnet-5-5",
+    "note": null,
+    "source": "stream: init and modelUsage",
+    "time_limit": 600
+   },
    "reason_code": null,
    "resume_of": null,
    "fallback_of": null,
@@ -87,8 +165,30 @@
     "found": 1,
     "from": null,
     "with": null,
-    "limit": null
-   }
+    "limit": null,
+    "query": "Draft a 40-word notice that the garden's tool shed now opens at 7 am.\nWrite a two-sentence welcome for the Maple Street community garden newsletter."
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 348,
+    "from": "sr-20261019-090600-0002",
+    "judge": false,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "claude": 25
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-090600-0002/01-do-claude-prompt.md",
+   "model": "claude-sonnet-5-5",
+   "effort": null,
+   "time_limit": 600
   },
   {
    "call_id": "sr-20261019-090600-0002-c1",
@@ -99,10 +199,24 @@
    "agent": "chatgpt",
    "status": "done",
    "verdict": "FIX",
-   "sent_at": "2026-10-19T09:06:15+00:00",
-   "finished_at": "2026-10-19T09:06:15+00:00",
+   "sent_at": "2026-10-19T09:06:18+00:00",
+   "finished_at": "2026-10-19T09:06:21+00:00",
    "round_file": "tasks/sr-20261019-090600-0002/02-check-chatgpt.md",
-   "served": null,
+   "served": {
+    "asked": "gpt-6.1-sol",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/agents.json",
+    "key": null,
+    "layer": "agent",
+    "model": "gpt-6.1-sol",
+    "note": null,
+    "source": "codex header",
+    "time_limit": 600
+   },
    "reason_code": null,
    "resume_of": null,
    "fallback_of": null,
@@ -117,8 +231,37 @@
     "found": 1,
     "from": "sr-20261019-090600-0002",
     "with": null,
-    "limit": null
-   }
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": "FIX",
+   "router_notes": {
+    "chars": 603,
+    "from": "sr-20261019-090600-0002",
+    "judge": true,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "chatgpt": 49
+    }
+   },
+   "spec": null,
+   "items": [
+    {
+     "n": 1,
+     "tag": "must",
+     "text": "Say the 7 am opening is on weekdays only.",
+     "state": null
+    }
+   ],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-090600-0002/02-check-chatgpt-prompt.md",
+   "model": "gpt-6.1-sol",
+   "effort": null,
+   "time_limit": 600
   },
   {
    "call_id": "sr-20261019-090600-0002-f1",
@@ -129,10 +272,24 @@
    "agent": "claude",
    "status": "done",
    "verdict": null,
-   "sent_at": "2026-10-19T09:06:18+00:00",
-   "finished_at": "2026-10-19T09:06:18+00:00",
+   "sent_at": "2026-10-19T09:06:24+00:00",
+   "finished_at": "2026-10-19T09:06:27+00:00",
    "round_file": "tasks/sr-20261019-090600-0002/03-fix-claude.md",
-   "served": null,
+   "served": {
+    "asked": "claude-sonnet-5-5",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/models.json",
+    "key": null,
+    "layer": "agent",
+    "model": "claude-sonnet-5-5",
+    "note": null,
+    "source": "stream: init and modelUsage",
+    "time_limit": 600
+   },
    "reason_code": null,
    "resume_of": null,
    "fallback_of": null,
@@ -147,8 +304,30 @@
     "found": 1,
     "from": "sr-20261019-090600-0002",
     "with": null,
-    "limit": null
-   }
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 348,
+    "from": "sr-20261019-090600-0002",
+    "judge": false,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "claude": 25
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-090600-0002/03-fix-claude-prompt.md",
+   "model": "claude-sonnet-5-5",
+   "effort": null,
+   "time_limit": 600
   },
   {
    "call_id": "sr-20261019-090600-0002-c2",
@@ -159,10 +338,24 @@
    "agent": "chatgpt",
    "status": "done",
    "verdict": "PASS",
-   "sent_at": "2026-10-19T09:06:21+00:00",
-   "finished_at": "2026-10-19T09:06:21+00:00",
+   "sent_at": "2026-10-19T09:06:30+00:00",
+   "finished_at": "2026-10-19T09:06:33+00:00",
    "round_file": "tasks/sr-20261019-090600-0002/04-recheck-chatgpt.md",
-   "served": null,
+   "served": {
+    "asked": "gpt-6.1-sol",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/agents.json",
+    "key": null,
+    "layer": "agent",
+    "model": "gpt-6.1-sol",
+    "note": null,
+    "source": "codex header",
+    "time_limit": 600
+   },
    "reason_code": null,
    "resume_of": null,
    "fallback_of": null,
@@ -177,8 +370,37 @@
     "found": 1,
     "from": "sr-20261019-090600-0002",
     "with": null,
-    "limit": null
-   }
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": "PASS",
+   "router_notes": {
+    "chars": 603,
+    "from": "sr-20261019-090600-0002",
+    "judge": true,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "chatgpt": 49
+    }
+   },
+   "spec": null,
+   "items": [
+    {
+     "n": 1,
+     "tag": "must",
+     "text": "",
+     "state": "fixed"
+    }
+   ],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-090600-0002/04-recheck-chatgpt-prompt.md",
+   "model": "gpt-6.1-sol",
+   "effort": null,
+   "time_limit": 600
   }
  ],
  "handoff": null,
@@ -187,7 +409,7 @@
    "document_id": "task-sr-20261019-090600-0002",
    "chars": 124,
    "state": "done/fixed/4",
-   "at": "2026-10-19T09:06:27+00:00"
+   "at": "2026-10-19T09:06:39+00:00"
   }
  ],
  "memory_given": [
@@ -207,6 +429,9 @@
  "attacks": null,
  "pieces": null,
  "join": null,
+ "estimate": null,
+ "menu": null,
  "original_file": "tasks/sr-20261019-090600-0002/01-do-claude.md",
- "result_file": "tasks/sr-20261019-090600-0002/03-fix-claude.md"
+ "result_file": "tasks/sr-20261019-090600-0002/03-fix-claude.md",
+ "from_given": null
 }

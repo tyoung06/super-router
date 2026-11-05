@@ -28,7 +28,7 @@
     --line: rgba(15, 18, 28, 0.08); --line-2: rgba(15, 18, 28, 0.12); --line-3: rgba(15, 18, 28, 0.2);
     --fill: rgba(15, 18, 28, 0.035); --fill-2: rgba(15, 18, 28, 0.06);
     --text: #17181d; --text-2: #33363f; --text-3: #4a4e5a; --muted: #5d6170; --faint: #6b6f7d; --strong: #0b0c0f;
-    --accent: #6ee7c7; --accent-ink: #0b0c0f; --accent-text: #0a7d63; --accent-soft: rgba(16, 160, 125, 0.1);
+    --accent: #0a7d63; --accent-ink: #ffffff; --accent-text: #0a7d63; --accent-soft: rgba(16, 160, 125, 0.1);  /* UI-1 row 1 (D15a): 5.09:1 */
     --accent-line: rgba(10, 125, 99, 0.4);
     --ok-text: #1d7a4c; --warn-text: #8a5a12; --bad-text: #b3261e; --info-text: #2754b8;
     --shadow: 0 8px 24px rgba(15, 18, 28, 0.1);
@@ -41,7 +41,7 @@
   --line: rgba(15, 18, 28, 0.08); --line-2: rgba(15, 18, 28, 0.12); --line-3: rgba(15, 18, 28, 0.2);
   --fill: rgba(15, 18, 28, 0.035); --fill-2: rgba(15, 18, 28, 0.06);
   --text: #17181d; --text-2: #33363f; --text-3: #4a4e5a; --muted: #5d6170; --faint: #6b6f7d; --strong: #0b0c0f;
-  --accent: #6ee7c7; --accent-ink: #0b0c0f; --accent-text: #0a7d63; --accent-soft: rgba(16, 160, 125, 0.1);
+  --accent: #0a7d63; --accent-ink: #ffffff; --accent-text: #0a7d63; --accent-soft: rgba(16, 160, 125, 0.1);  /* UI-1 row 1 (D15a): 5.09:1 */
   --accent-line: rgba(10, 125, 99, 0.4);
   --ok-text: #1d7a4c; --warn-text: #8a5a12; --bad-text: #b3261e; --info-text: #2754b8;
   --shadow: 0 8px 24px rgba(15, 18, 28, 0.1);
@@ -173,8 +173,11 @@ svg.icon { width: 15px; height: 15px; flex-shrink: 0; fill: none; stroke: curren
 /* ---------- the stream ---------- */
 .stream { flex: 1 1 auto; padding: 18px 24px 12px; display: flex; flex-direction: column; gap: 18px; max-width: 980px;
   width: 100%; margin: 0 auto; }
-.stream-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding-bottom: 6px;
-  box-shadow: 0 1px 0 var(--line); }
+/* brief 32.1 (decision 1): the head stays at the top while the stream scrolls, under the strip, over the cards, below
+   menus (20), the strip (25), the side panel (30) and sheets (40); the page's own background behind it */
+.stream-head { position: sticky; top: var(--strip-h, 0px); z-index: 15; display: flex; align-items: baseline; gap: 10px;
+  flex-wrap: wrap; margin: -18px -24px 0; padding: 18px 24px 8px; background: var(--bg); box-shadow: 0 1px 0 var(--line); }
+.stream > :not(.stream-head) { scroll-margin-top: var(--card-margin, 16px); }  /* decision 2: a card lands below it */
 .stream-title { font-weight: 600; font-size: 16px; overflow-wrap: anywhere; }
 .stream-sub { font: 11px var(--mono); color: var(--faint); }
 .stream-sub.right { margin-left: auto; }
@@ -182,7 +185,7 @@ svg.icon { width: 15px; height: 15px; flex-shrink: 0; fill: none; stroke: curren
   color: var(--muted); text-align: center; font-size: 13px; }
 .load-earlier { align-self: center; }
 
-.task { display: flex; flex-direction: column; gap: 8px; scroll-margin-top: 16px; }
+.task { display: flex; flex-direction: column; gap: 8px; }
 .bubble-row { display: flex; justify-content: flex-end; }
 .bubble-col { max-width: 74%; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; min-width: 0; }
 .bubble { padding: 12px 16px; border-radius: 16px 16px 4px 16px; background: var(--accent); color: var(--accent-ink);
@@ -196,6 +199,62 @@ svg.icon { width: 15px; height: 15px; flex-shrink: 0; fill: none; stroke: curren
   background: var(--info-soft); color: var(--info-text); font-size: 12.5px; box-shadow: inset 0 0 0 1px var(--info-line);
   max-width: 100%; }
 .chip-tag .x { border: 0; background: transparent; color: inherit; cursor: pointer; padding: 0 2px; }
+/* brief 33 (decision 12): the From and Idea pills, beside the tag */
+.pill-from { background: var(--fill-2); color: var(--strong); box-shadow: inset 0 0 0 1px var(--line-2); }
+.pill-idea { background: var(--accent-soft); color: var(--strong); box-shadow: inset 0 0 0 1px var(--accent-line); }
+/* break-ui: the pills' × is a 32 px target that fills the pill's end, not a 12 px glyph */
+.pill-from .x, .pill-idea .x { display: inline-flex; align-items: center; justify-content: center; min-width: 32px;
+  min-height: 32px; margin: 0 -10px 0 -6px; border-radius: 999px; font-size: 15px; }
+
+/* brief 33 (decisions 2 and 19): the chips under the newest card's result, and in an older card's Details */
+/* brief 33 (decision 13): What now?, one line under the project's title; it stays when the bar folds */
+.what-now { flex-basis: 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; min-width: 0;
+  font-size: 14px; color: var(--text-2); }
+.what-now-label { font-weight: 600; color: var(--strong); }
+.what-now-words { min-width: 0; overflow-wrap: anywhere; }
+.what-now .next-chip { max-width: 100%; }
+/* brief 33 (decisions 7 and 19): Later beside an agent chip on a project card; the Ideas sheet */
+.next-item { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; min-width: 0; }
+.next-later { min-width: 44px; min-height: 44px; border: 0; border-radius: 999px; background: none; color: var(--muted);
+  font: inherit; font-size: 16px; cursor: pointer; }
+.next-later:hover { color: var(--strong); background: var(--fill-2); }
+.ideas-list { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 12px; }
+.idea-row { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line-2); min-width: 0; }
+.idea-text { overflow-wrap: anywhere; color: var(--strong); }
+.idea-meta { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.idea-actions, .idea-ask { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.idea-meta .linklike { padding: 12px 0; margin: -12px 0; }  /* break-ui: a 44 px target on a text-sized link */
+/* brief 33.2 fix 4: the folded Used list under the open one */
+.ideas-used > summary { min-height: 44px; display: flex; align-items: center; color: var(--muted); cursor: pointer; }
+.ideas-used > .idea-row { margin-top: 8px; opacity: 0.85; }
+.ideas-add-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }  /* 33.4: Suggest ideas wraps on a phone */
+.ideas-add-row .np-input { flex: 1 1 180px; min-width: 0; }
+.ideas-add-row .btn { flex-shrink: 0; }
+/* break-ui: Close stays at the sheet's foot however long the list is */
+.ideas-foot { position: sticky; bottom: -18px; margin: 0 -20px -18px; padding: 10px 20px 18px; background: var(--card);
+  box-shadow: 0 -1px 0 var(--line-2); }
+.what-now .next-words { -webkit-line-clamp: 2; line-clamp: 2; }  /* break-ui: the pinned head stays short on a phone */
+.idea-ask-text { font-size: 13px; color: var(--text-2); }
+/* brief 33 (decision 12): "Built from #<n>" under the task, linked to that card */
+.built-from { margin: 2px 0 6px; font-size: 13px; color: var(--muted); }
+.built-from .linklike { min-height: 32px; }
+
+.next-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.next-label { font: 11px var(--mono); color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
+/* break-ui: a 22 px radius is a pill at one line and a rounded box at three, so long words never bend round the ends */
+.next-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; max-width: 100%; min-width: 0;
+  padding: 6px 14px; border: 0; border-radius: 22px; background: var(--card); color: var(--strong);
+  box-shadow: inset 0 0 0 1px var(--line-2); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
+.next-chip:hover { box-shadow: inset 0 0 0 1px var(--line); }
+.next-chip.own { background: var(--info-soft); color: var(--info-text); box-shadow: inset 0 0 0 1px var(--info-line); }
+/* break-ui: a chip shows three lines at most (its title and the box it fills hold every word), so a card's height
+   stays near the same with three 400-character lines */
+.next-words { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+  overflow-wrap: anywhere; min-width: 0; }
+.details-next { display: flex; flex-direction: column; gap: 6px; }
+.toast-undo { margin-left: 12px; border: 0; background: transparent; color: var(--info-text); font: inherit; font-weight: 600;
+  cursor: pointer; min-height: 32px; }
 
 .checkbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 8px 8px 14px; border-radius: 10px;
   background: var(--fill); box-shadow: inset 0 0 0 1px var(--line-2); font-size: 13px; }
@@ -222,8 +281,10 @@ button.st { cursor: pointer; }
 .st.bad .dot { background: var(--bad); }
 .st.warn .dot { background: var(--warn); }
 .st.live .dot { background: var(--info); animation: pulse 1.4s ease-in-out infinite; }
+.st.skip .dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--faint); }  /* brief 32: a skipped second attack */
 .stageline .sep, .stageline .time { color: var(--faint); }
-.verdict { display: flex; align-items: center; gap: 8px; min-height: 28px; font-size: 13px; color: var(--muted); }
+.verdict { display: flex; align-items: baseline; gap: 8px; min-height: 28px; font-size: 13px; color: var(--muted); }
+/* break-ui: on the first line's baseline, the light and Details stay beside a verdict that wraps */
 .verdict .light { width: 7px; height: 7px; }
 .verdict.ok .light { background: var(--ok); }
 .verdict.ok .verdict-text { color: var(--ok-text); }
@@ -245,9 +306,6 @@ button.st { cursor: pointer; }
 .answer-meta { font: 11px var(--mono); color: var(--faint); }
 .result { padding: 16px 18px; border-radius: 4px 16px 16px 16px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line-2);
   color: var(--strong); font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; min-width: 0; }
-.result.clamped { max-height: 420px; overflow: hidden; position: relative; }
-.result.clamped::after { content: ""; position: absolute; inset: auto 0 0 0; height: 56px;
-  background: linear-gradient(to bottom, transparent, var(--card)); }
 .result > :first-child { margin-top: 0; }
 .result > :last-child { margin-bottom: 0; }
 .result p { margin: 0 0 8px; white-space: pre-wrap; }
@@ -271,19 +329,18 @@ button.st { cursor: pointer; }
   display: flex; flex-direction: column; gap: 2px; transform-origin: bottom left;
   transition: transform 150ms var(--ease-out), opacity 150ms var(--ease-out); }
 @starting-style { .menu-list { transform: scale(0.97); opacity: 0; } }
+.menu-list.settled { transition: none; }  /* the small UI cleanup, row 7: drawn again while open, it doesn't fade in again */
 .menu-list .side-item { min-height: 36px; font-size: 13px; }
 
-.stages { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.stage { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 9px; border: 0; border-radius: 6px;
-  background: var(--fill); box-shadow: inset 0 0 0 1px var(--line-2); font: 11.5px var(--mono); color: var(--text-3);
-  cursor: default; }
-button.stage { cursor: pointer; }
-.stage .light { width: 7px; height: 7px; }
-.stage.ok .light { background: var(--ok); }
-.stage.bad .light { background: var(--bad); }
-.stage.warn .light { background: var(--warn); }
-.stage.live .light { background: var(--info); animation: pulse 1.4s ease-in-out infinite; }
-.stage-sep { color: var(--faint); font: 11px var(--mono); }
+/* the small UI cleanup, row 3: the card's step pills, as Redteam's board draws them; each colour says its state, and its words say it too */
+.stages { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+.stage { display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line-2);
+  font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.stage.ok { color: var(--ok-text); }
+.stage.info { color: var(--info-text); }
+.stage.warn { color: var(--warn-text); }
+.stage.bad { color: var(--bad-text); }
+.stage.muted { color: var(--muted); }
 @keyframes pulse { 50% { opacity: 0.35; } }
 
 .files-row { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -305,8 +362,9 @@ button.stage { cursor: pointer; }
 .offer.warn { box-shadow: inset 0 0 0 1px var(--warn-line); }
 .offer.bad { box-shadow: inset 0 0 0 1px var(--bad-line); }
 .offer.info { box-shadow: inset 0 0 0 1px var(--info-line); }
-.offer-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.offer-title { font-weight: 600; }
+.offer-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.offer-head > svg.icon { align-self: flex-start; margin-top: 3px; }  /* break-ui: the icon by the title's first line */
+.offer-title { font-weight: 600; flex: 1 1 12em; min-width: 0; overflow-wrap: anywhere; }
 .offer.warn .offer-title { color: var(--warn-text); }
 .offer.bad .offer-title { color: var(--bad-text); }
 .offer.info .offer-title { color: var(--info-text); }
@@ -367,6 +425,26 @@ button.stage { cursor: pointer; }
 .sev.high { color: var(--bad-text); background: var(--bad-soft); }
 .sev.medium { color: var(--warn-text); background: var(--warn-soft); }
 .sev.low { color: var(--muted); background: var(--fill); }
+/* brief 32 (decision 17): the board's lists, a label column, the check's verdict per attack, the line for a list not run */
+.redteam-table + .redteam-table { box-shadow: inset 0 1px 0 var(--line-2); }
+.redteam-table .attack-label { font: 12px var(--mono); color: var(--text-3); white-space: nowrap; }
+.redteam-table .attack-check { white-space: nowrap; color: var(--muted); }
+.redteam-table .attack-check.open { color: var(--bad-text); }
+.redteam-line { padding: 10px 14px 12px; font-size: 13px; color: var(--text-3); box-shadow: inset 0 1px 0 var(--line);
+  overflow-wrap: anywhere; }
+@media (max-width: 520px) {  /* break-ui at 390 px: five columns left the weak spot four letters wide ("fix/ed"), so each
+  attack is a block: its label, severity and the check's verdict on one line, then the weak spot, then the fix */
+  .redteam-table thead { display: none; }
+  .redteam-table, .redteam-table tbody, .redteam-table caption { display: block; }  /* a caption left as one shrank */
+  .redteam-table tr { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: baseline; gap: 4px 8px;
+    padding: 10px 14px; box-shadow: inset 0 1px 0 var(--line); }
+  .redteam-table td { display: block; padding: 0; box-shadow: none; }
+  .redteam-table .attack-text, .redteam-table .attack-fix { grid-column: 1 / -1; }
+  .redteam-table .attack-fix { color: var(--text-3); }
+  .redteam-table .attack-check { grid-row: 1; grid-column: 3; justify-self: end; text-align: right; white-space: normal; }
+  .redteam-table .attack-check::before { content: "check: "; color: var(--faint); }
+  .team-slots .dot { display: none; }  /* four slots wrap: no separator left at a line's end */
+}
 .pieces { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .piece { display: flex; gap: 10px; align-items: baseline; padding: 8px 10px; border-radius: 8px; background: var(--side);
   flex-wrap: wrap; }
@@ -380,6 +458,23 @@ button.stage { cursor: pointer; }
 .offer-item { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .btn.skill { font: 12px var(--mono); min-height: 36px; }
 .btn.skill.guess { box-shadow: inset 0 0 0 1px var(--accent-line); color: var(--accent-text); }
+/* brief 33.4 (decision 15): the New project sheet's Blank | From an idea, and the idea's counter */
+.np-mode { display: flex; gap: 6px; margin-bottom: 10px; }
+.np-mode-btn { flex: 1 1 0; min-height: 44px; }
+.np-mode-btn.is-on { box-shadow: inset 0 0 0 2px var(--accent); color: var(--accent-text); }
+.np-count { margin-left: auto; padding-left: 8px; font: 11px var(--mono); color: var(--muted); }
+.np-count.is-over { color: var(--bad-text); }
+/* brief 33.4 (decision 14): the questions card */
+.question { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; min-width: 0; }
+.question-text { font-size: 13px; overflow-wrap: anywhere; }
+.btn.skill.question-option { display: block; height: auto; min-height: 44px; text-align: left; white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
+.btn.skill.question-option.picked { box-shadow: inset 0 0 0 2px var(--accent); color: var(--accent-text); }
+.question-guess { color: var(--muted); white-space: nowrap; }
+.questions-card .question-text { color: var(--text); }
+.btn.skill.question-other-chip { color: var(--muted); }
+.btn.skill.question-other-chip[aria-expanded="true"] { box-shadow: inset 0 0 0 1px var(--accent-line); }
+.questions-card > .offer-row { margin-top: 12px; }
+.question-other { box-sizing: border-box; width: 100%; min-height: 44px; padding: 6px 10px; font: 13px var(--sans, inherit); color: inherit; background: transparent; border: 1px solid var(--line, currentColor); border-radius: 6px; }
 .board-wrap { display: flex; flex-direction: column; gap: 12px; }
 .fold > summary { cursor: pointer; font: 11px var(--mono); color: var(--muted); padding: 4px 0; }
 .fold[open] > summary { margin-bottom: 10px; }
@@ -426,6 +521,8 @@ button.stage { cursor: pointer; }
 .team-item .key { margin-left: auto; font: 10.5px var(--mono); color: var(--faint); }
 .team-slots { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-2); }
 .team-slots .dot { color: var(--faint); }
+.team-slots.many { column-gap: 14px; }
+.team-slots.many .dot { display: none; }
 .slot-inline { display: inline-flex; align-items: center; gap: 5px; }
 .slot-name { font: 11px var(--mono); color: var(--muted); }
 .slot-select { min-height: 32px; padding: 0 6px; border: 0; border-radius: 7px; background: var(--fill); color: var(--text);
@@ -438,7 +535,7 @@ button.stage { cursor: pointer; }
   transition: box-shadow 150ms ease; }
 .composer.lit { box-shadow: inset 0 0 0 1.5px var(--accent-line), var(--shadow); }
 .composer.dragging { box-shadow: inset 0 0 0 2px var(--accent), var(--shadow); }
-.composer textarea { width: 100%; min-height: 48px; max-height: 40vh; padding: 6px 4px; border: 0; background: transparent;
+.composer textarea { width: 100%; min-height: 48px; max-height: calc(6 * 1.5em + 12px); padding: 6px 4px; border: 0; background: transparent;
   color: var(--text); resize: none; outline: none; line-height: 1.5; }
 .composer textarea::placeholder { color: var(--faint); }
 .composer-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -554,37 +651,24 @@ kbd { font: 11.5px var(--mono); padding: 2px 6px; border-radius: 5px; background
 
 /* the chat tag on one line; the narrow bar and its drawer (break-ui) */
 #context-tag { display: inline-block; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 30px; }
-.narrow-only { display: none; }
 .nav-backdrop { position: fixed; inset: 0; z-index: 44; background: rgba(0, 0, 0, 0.45); }
 .nav-backdrop[hidden] { display: none; }
 
 /* ---------- narrow windows ---------- */
 @media (max-width: 900px) {
   .app, .app.panel-open { grid-template-columns: minmax(0, 1fr); }
-  .sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px 16px;
-    box-shadow: 0 1px 0 var(--line); }
-  .sidebar .side-list, .sidebar .side-label, .sidebar .side-spacer, .sidebar .side-search { display: none; }
-  .narrow-only { display: flex; gap: 4px; align-items: center; }
-  .narrow-bar { margin-left: auto; }
-  .narrow-bar .side-item { width: auto; min-height: 40px; }
-  .needs-btn { color: var(--warn-text); }
-  .needs-btn .icon { color: var(--warn-text); }
+  /* UI B N3: Menu and Needs you are in the pinned strip now; the sidebar is a drawer, hidden until Menu opens it */
   .sidebar.open { position: fixed; inset: 0 auto 0 0; z-index: 45; width: min(330px, 88vw); height: 100vh; flex-direction: column;
     flex-wrap: nowrap; align-items: stretch; overflow-y: auto; padding: 14px 12px; box-shadow: var(--shadow); }
   .sidebar.open .side-list { display: flex; flex-direction: column; gap: 2px; }
-  .sidebar.open .side-label { display: block; }
-  .sidebar.open .side-spacer { display: block; }
-  .sidebar.open .narrow-bar { margin-left: 0; order: -1; justify-content: flex-end; }
-  .sidebar.open .side-bottom { margin-left: 0; flex-direction: column; }
+  .sidebar.open .side-bottom { flex-direction: column; }
   .sidebar.open .side-item { width: 100%; }
-  .sidebar .side-bottom { flex-direction: row; padding: 0; margin-left: auto; }
-  .sidebar .side-item { width: auto; }
-  .sidebar .side-item.primary { min-height: 40px; }
-  .brand { padding: 0 8px 0 0; }
+  .brand { padding: 0 8px 8px 0; }
   .brand-version { display: none; }
   .panel { position: fixed; inset: 0; z-index: 30; height: 100vh; }
   .strip { padding: 8px 16px; }
   .stream, .composer-area { padding-left: 16px; padding-right: 16px; }
+  .stream-head { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; }
   .banners { padding-left: 16px; padding-right: 16px; }
   .board, .board.three { grid-template-columns: minmax(0, 1fr); }
   .bubble-col { max-width: 92%; }
@@ -592,7 +676,6 @@ kbd { font: 11.5px var(--mono); padding: 2px 6px; border-radius: 5px; background
 
 @media (max-width: 600px) {
   .composer-bar { gap: 6px; }
-  #context-tag { max-width: 150px; }
   .composer-bar .select { max-width: 130px; }
   .jev.idle { display: none; }
   .team-menu { min-width: min(260px, calc(100vw - 48px)); }
@@ -650,6 +733,7 @@ kbd { font: 11.5px var(--mono); padding: 2px 6px; border-radius: 5px; background
 .np-cmd .prompt { color: var(--accent-text); flex-shrink: 0; }
 .np-cmd .cmd { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .np-cmd .added { color: var(--faint); }
+.np-cmd.err .cmd { color: var(--warn-text); white-space: normal; overflow-wrap: anywhere; }  /* a refusal reads whole */
 .np-other { font-size: 12px; color: var(--muted); margin-top: -4px; }
 .np-other code { white-space: nowrap; }  /* break-ui: the command moves to its own line whole, never split */
 .np-failure { padding: 10px 12px; border-radius: 10px; background: var(--bad-soft); box-shadow: inset 0 0 0 1px var(--bad-line);
@@ -662,6 +746,35 @@ kbd { font: 11.5px var(--mono); padding: 2px 6px; border-radius: 5px; background
 .np-foot-note { margin-right: auto; font-size: 12px; color: var(--muted); }
 .np-foot-note:empty { display: none; }
 @media (prefers-reduced-motion: reduce) { .side-label .label-btn:active { transform: none; } }
+
+/* ---------- Auto (brief 34): the switch at the right end of What now?, its confirm, the recap, the plan panel's marks ---------- */
+.auto-switch-wrap { margin-left: auto; display: flex; align-items: center; flex-shrink: 0; }
+.what-now .auto-switch { min-height: 36px; }
+#stream > .auto-confirm { margin: 10px 0 4px; }  /* the stream's first item under the stuck head, never inside it */
+.auto-wrap { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; min-width: 0; }
+.auto-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+.auto-table caption { text-align: left; font-weight: 600; color: var(--strong); padding: 0 0 6px; }
+.auto-table th, .auto-table td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--line-2); vertical-align: top; overflow-wrap: anywhere; }
+.auto-table th { color: var(--text-2); font-weight: 500; }
+.auto-table th:nth-child(1) { width: 7.5em; } .auto-table th:nth-child(5) { width: 4em; }
+.auto-table tr.muted td { color: var(--text-3); }
+.auto-mark { display: inline-block; margin-left: 6px; font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--warn-soft); color: var(--warn-text); white-space: nowrap; }
+.auto-state.failed-twice, .auto-state.failed-twice-retried, .auto-state.stopped { color: var(--bad-text); }
+.auto-state.passed, .auto-state.fixed { color: var(--ok-text); }
+.auto-sum { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--text-2); min-width: 0; }
+.auto-why { flex-basis: 100%; color: var(--warn-text); overflow-wrap: anywhere; }
+.stop-here-list { margin: 0 14px 10px; padding: 8px 0 0; border-top: 1px solid var(--line-2); }
+.stop-here-head { font-size: 12.5px; color: var(--text-2); padding: 0 0 6px; }
+.stop-here-row { display: flex; align-items: center; gap: 8px; min-height: 44px; min-width: 0; }
+.stop-here-row.done .stop-here-text { color: var(--text-3); text-decoration: line-through; }
+.stop-here-step { flex-shrink: 0; font-weight: 600; color: var(--strong); min-width: 5ch; }
+.stop-here-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stop-here-team { flex-shrink: 0; font-size: 12px; color: var(--text-2); }
+.stop-here-switch { flex-shrink: 0; }
+@media (max-width: 640px) {
+  .auto-table th:nth-child(2), .auto-table td:nth-child(2), .auto-table th:nth-child(6), .auto-table td:nth-child(6) { display: none; }
+  .stop-here-team { display: none; }
+}
 
 /* ---------- the Memory switch (brief 27): on the Setup sheet's Memory row, outside <summary> ---------- */
 .setup-row-wrap { position: relative; }
@@ -696,4 +809,711 @@ kbd { font: 11.5px var(--mono); padding: 2px 6px; border-radius: 5px; background
   .setup-row-wrap > .setup-row > summary::after { content: ""; order: 1; flex: 1 0 132px; height: 20px; }
   .setup-row-wrap > .setup-row > summary > .setup-state, .setup-row-wrap > .setup-row > summary > .setup-detail,
   .setup-row-wrap > .setup-row > summary > .setup-checked { order: 2; }
+}
+
+/* Brief 28 (decision 20): project files. A card's change and its tests, the side panel's diff, a project's bar, and the
+   three sheets (tests, Turn on undo, files dropped on a project), all on the page's own tokens and its .sheet styles. */
+.files-block { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line-2); min-width: 0; }
+.files-block.tone-info { box-shadow: inset 0 0 0 1px var(--info-line); }
+.files-block.tone-ok { box-shadow: inset 0 0 0 1px var(--ok-line); }
+.files-block.tone-warn { box-shadow: inset 0 0 0 1px var(--warn-line); }
+.files-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.files-head .icon { align-self: center; color: var(--muted); flex: none; }
+.files-line { font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+.files-block.tone-muted .files-line { font-weight: 500; color: var(--text-3); }
+.tests-line { margin-left: auto; font: 11.5px var(--mono); color: var(--ok-text); }
+.tests-line.bad { color: var(--bad-text); }
+.files-list { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.file-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; max-width: 100%; padding: 0 10px; border: 0;
+  border-radius: 8px; background: var(--fill); box-shadow: inset 0 0 0 1px var(--line-2); cursor: pointer;
+  transition: transform 160ms var(--ease-out), background-color 160ms ease; }
+.file-chip:active:not(:disabled) { transform: scale(0.98); }
+.file-chip:disabled { cursor: default; }
+.file-chip:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; }
+.file-chip[aria-current="true"] { box-shadow: inset 0 0 0 1.5px var(--accent); }
+@media (hover: hover) and (pointer: fine) { .file-chip:hover:not(:disabled) { background: var(--fill-2); } }
+.file-path { font: 12px var(--mono); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.file-words { font: 11px var(--mono); color: var(--faint); white-space: nowrap; flex: none; }
+.file-words.added { color: var(--ok-text); }
+.file-words.deleted { color: var(--bad-text); }
+.files-note { font-size: 12.5px; color: var(--muted); }
+.project-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-basis: 100%; min-width: 0; padding: 6px 8px;
+  margin: 2px -8px 0; border-radius: 10px; transition: background-color 160ms ease, box-shadow 160ms ease; }
+.project-bar.dragging, .project-tools.dragging { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent-line); }
+.project-tools[aria-expanded="true"] { background: var(--fill-2); color: var(--strong); }  /* brief 32.1: the bar is open */
+.project-bar .pill { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-tests { font: 12px var(--mono); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0; max-width: 100%; }
+/* brief 31: a project's Test (and Run) on its bar, and their output in the side panel */
+.project-test, .project-run { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.project-test-line.tone-info { color: var(--info-text); }
+.pc-line { margin: 0 0 8px; overflow-wrap: anywhere; }
+.pc-fact { margin: 0 0 10px; min-width: 0; }
+.pc-label { font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+.pc-code { font: 12.5px/1.5 var(--mono); color: var(--text); background: var(--sunk); border-radius: 8px; padding: 7px 10px;
+  overflow-wrap: anywhere; white-space: pre-wrap; }
+.pc-box { max-height: 8.5em; overflow-y: auto; }  /* break-ui 4: forty names scroll in their own box */
+.sc-list { max-height: min(40vh, 340px); overflow-y: auto; }  /* break-ui 5: the Add form stays near a long list */
+#sc-cmd .cmd { white-space: normal; overflow-wrap: anywhere; }  /* break-ui 6: the name being set reads whole */
+.project-test-line.tone-ok, .project-test-line.tone-bad, .project-test-line.tone-info,
+.project-test-line.tone-muted { box-shadow: none; }  /* break-ui 7: a link, not the agent cards' boxed tone */
+.sc-list { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 10px; }
+.sc-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 8px; border-radius: 8px; background: var(--sunk); }
+.sc-name { font: 12.5px var(--mono); color: var(--text); overflow-wrap: anywhere; min-width: 0; }
+.sc-state { font-size: 12px; }
+.sc-state.tone-ok { color: var(--ok-text); }
+.sc-state.tone-muted { color: var(--muted); }
+.sc-actions, .sc-ask { display: inline-flex; gap: 6px; align-items: center; margin-left: auto; flex-wrap: wrap; }
+.sc-ask-text { font-size: 12.5px; color: var(--text-2); }
+.project-test-line { border: 0; background: none; padding: 0; font: inherit; font-size: 12.5px; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--line); }
+.project-test-line.tone-ok { color: var(--ok-text); }
+.project-test-line.tone-bad { color: var(--bad-text); }
+.project-test-line.tone-muted { color: var(--muted); }
+.project-off { font-size: 12px; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+.project-output { margin: 0; padding: 10px 12px; font: 12px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere;
+  background: var(--sunk); border-radius: 10px; box-shadow: inset 0 0 0 1px var(--line); max-height: calc(100vh - 180px);
+  overflow-y: auto; color: var(--text-2); }
+.project-output:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; }
+.panel-sub.running { color: var(--info-text); }
+.diff-view { margin: 0; padding: 10px 0; font: 12px/1.55 var(--mono); overflow-x: auto; background: var(--sunk); border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--line); }
+.diff-view:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; }
+.diff-line { display: block; padding: 0 12px; white-space: pre; min-width: max-content; }
+.diff-line.add { background: var(--ok-soft); color: var(--ok-text); }
+.diff-line.del { background: var(--bad-soft); color: var(--bad-text); }
+.diff-line.hunk { color: var(--info-text); }
+.diff-line.meta { color: var(--faint); }
+.git-names { margin: 0; padding: 8px 12px; list-style: none; max-height: 220px; overflow-y: auto; border-radius: 10px;
+  background: var(--fill); box-shadow: inset 0 0 0 1px var(--line); font: 12px var(--mono); }
+.git-names li { padding: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drop-list li { display: flex; gap: 10px; justify-content: space-between; align-items: baseline; }
+.drop-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.np-hint.tone-bad { color: var(--bad-text); box-shadow: none; }  /* not the agent cards' inset line (break-ui, brief 30) */
+@media (max-width: 520px) {
+  .tests-line { margin-left: 0; flex-basis: 100%; }
+  .project-bar .btn { min-height: 36px; }
+}
+.git-sheet .np-state { justify-self: start; }
+/* A sheet's button that is off for now but keeps the keyboard's focus through a run (aria-disabled, not disabled) */
+.btn.is-off { opacity: 0.45; cursor: not-allowed; }
+.btn.is-off:active { transform: none; }
+/* brief 28, C4 (break-ui): the chip that stands for the files past the first 12; the side panel's file list for many
+   files; the test command's three rows; every file a drop refused */
+.file-chip.more .file-path { color: var(--muted); }
+.diff-pick { display: grid; gap: 6px; padding: 4px 0 2px; font-size: 13px; }
+.diff-pick select { min-height: 40px; font-family: var(--mono); font-size: 13px; }
+.np-input.ts-words { padding: 10px 12px; line-height: 1.45; resize: vertical; font-family: var(--mono); font-size: 14px;
+  overflow-wrap: anywhere; }
+.drop-refused { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; }
+.drop-refused li { overflow-wrap: anywhere; }
+@media (max-width: 520px) {  /* break-ui at 390 px: a deep path wraps inside its chip, so its file name stays in sight */
+  .file-chip { flex-wrap: wrap; row-gap: 2px; padding: 6px 10px; text-align: left; }
+  .file-chip .file-path { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+}
+/* break-ui, keyboard only: a card takes focus after Confirm and after Needs you's jump; the ring shows for the keyboard */
+article.task:focus { outline: none; }
+article.task:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 4px; border-radius: 12px; }
+/* ---------- brief 29: split on the page (decisions 3 and 18) ----------
+   The plan card: each piece's text with Edit, its team select, the planner's why (muted), where it goes and Jev's label,
+   a refusal; the edit field in place; the count line. The split's card: each piece's team, state and part of the change.
+   The No split card is grey: an answer, not a failure. No motion here but the buttons' press: these are used often. */
+.plan-piece { align-items: flex-start; }
+.plan-piece.refused { box-shadow: inset 2px 0 0 var(--bad-line); }
+.piece-main { flex: 1 1 260px; min-width: 0; display: grid; gap: 6px; }
+.piece-text-row { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.piece-text-row .t { flex: 1 1 auto; }
+.btn-small { min-height: 32px; padding: 0 8px; font-size: 12px; }
+.piece-team { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.team-pick { display: inline-flex; gap: 6px; align-items: center; }
+.team-pick .k { font: 11px var(--mono); color: var(--faint); }
+.team-pick .select { min-height: 32px; font-size: 13px; width: 16em; max-width: 100%; }  /* C4: one width, whatever the options */
+.piece-team .mark { font: 11px var(--mono); color: var(--warn-text); background: var(--warn-soft); padding: 2px 6px;
+  border-radius: 4px; }
+.piece-team .changed { font: 11px var(--mono); color: var(--info-text); }
+.piece-why { display: flex; gap: 6px; color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; min-width: 0; }
+.piece-why .k { font: 11px var(--mono); color: var(--faint); flex: none; }
+.piece-where { display: flex; flex-wrap: wrap; gap: 4px 10px; font: 11.5px var(--mono); color: var(--muted);
+  overflow-wrap: anywhere; min-width: 0; }
+.piece-where .piece-jev { color: var(--faint); }
+.piece-refused { color: var(--bad-text); font-size: 12.5px; overflow-wrap: anywhere; }
+.edit-field { display: grid; gap: 6px; min-width: 0; }
+.edit-text { width: 100%; min-height: 64px; padding: 8px 10px; border: 0; border-radius: 8px; background: var(--card);
+  color: var(--text); box-shadow: inset 0 0 0 1px var(--accent-line); font: inherit; line-height: 1.45; resize: vertical; }
+.edit-foot { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.edit-count { font: 11px var(--mono); color: var(--muted); }
+.edit-count.bad { color: var(--bad-text); }
+.edit-foot .edit-count { margin-right: auto; }
+.edit-cmd { font-size: 11px; color: var(--faint); overflow-wrap: anywhere; min-width: 0; display: -webkit-box;
+  -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.count-line { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; }
+.count-line .jev-line { font: 11.5px var(--mono); color: var(--muted); }
+.project-line { font: 12px var(--mono); color: var(--text-3); }
+.split-pieces .piece { align-items: flex-start; }
+.split-pieces .team-tag { color: var(--text-3); }
+.piece-part { display: flex; flex-wrap: wrap; gap: 4px; }
+.part-chip.more { color: var(--muted); background: transparent; box-shadow: inset 0 0 0 1px var(--line-2); }
+.part-chip { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--fill); color: var(--text-3);
+  overflow-wrap: anywhere; }
+.piece-actions { display: flex; gap: 6px; align-items: center; flex: none; }
+.split-pieces .state-blocked .r { color: var(--bad-text); }
+.split-pieces .state-waiting .r { color: var(--info-text); }
+.offer.muted { box-shadow: inset 0 0 0 1px var(--line-2); }
+.offer.muted .offer-title { color: var(--text-3); }
+.no-split .offer-body { color: var(--text-2); }
+@media (max-width: 520px) {  /* the plan card at 390 px: the actions wrap under the text, a select never overflows */
+  .piece-actions { flex-basis: 100%; }
+  .team-pick { flex-wrap: wrap; }
+}
+.select.is-off { opacity: 0.45; cursor: not-allowed; }  /* C4: off for a run, but it keeps the keyboard's focus */
+
+/* brief 29.1 (decisions 14, 17 and 21): a check's notes and open musts under its verdict; Land anyway's confirm */
+.check-items-block { font-size: 12.5px; color: var(--muted); margin: -2px 0 2px 15px; }
+.check-items-block summary { cursor: pointer; width: fit-content; }
+.check-items-block.musts .k { color: var(--warn-text); }
+.check-items { margin: 4px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.confirm-extra { font-size: 12.5px; color: var(--warn-text); }
+.confirm-extra .check-items { color: var(--text-2); }
+.piece-slots { display: flex; flex-wrap: wrap; gap: 8px; }
+/* brief 29.1 (decision 28): a versus candidate's own files and tests on a project */
+.cand-files { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; min-width: 0; }
+.file-chip.static { cursor: default; }
+.file-chip.static.more .file-path { color: var(--muted); }
+/* break-ui (the owner's decision): a versus candidate's handoff section, folded under its text */
+.cand-handoff .result { padding: 10px 12px; border-radius: 10px; background: var(--sunk); box-shadow: inset 0 0 0 1px var(--line);
+  font-size: 13px; }
+/* brief 30 (decisions 10 and 13 to 17): the Router notes and a project's Notes editors, Pin and Save sheets, the card's
+   three quiet actions, the forgotten line, and Details' per-call notes */
+.np-input.notes-box { padding: 10px 12px; line-height: 1.5; resize: vertical; font-family: var(--mono); font-size: 13.5px;
+  min-height: 160px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.notes-counts { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.notes-sections { display: flex; flex-wrap: wrap; gap: 6px; font: 11.5px var(--mono); color: var(--muted); }
+.pn-block { font-size: 13px; color: var(--muted); }
+.pn-block summary { cursor: pointer; width: fit-content; padding: 7px 0; }  /* the marker shows: it opens (break-ui) */
+.pn-block-text { margin: 6px 0 0; padding: 10px 12px; border-radius: 9px; background: var(--sunk); box-shadow: inset 0 0 0 1px var(--line);
+  max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; color: var(--text-2); }
+select.np-input { padding: 0 10px; }
+.notes-actions { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.notes-actions .btn { color: var(--muted); }  /* quieter than Land and Discard (decision 17) */
+.forgotten-line { margin: 6px 0 0; }
+.details-given { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+
+/* brief 33.1 (decision 12): the Step pill, beside the From and Idea pills */
+.pill-step { background: var(--info-soft); color: var(--strong); box-shadow: inset 0 0 0 1px var(--info-line); }
+.pill-step .x { display: inline-flex; align-items: center; justify-content: center; min-width: 32px;
+  min-height: 32px; margin: 0 -10px 0 -6px; border-radius: 999px; font-size: 15px; }
+/* brief 33.1 (decisions 10 and 11): the plan card, a board of steps with their edits, the needs and the total */
+.plan-board .plan-steps { margin: 0; }
+.plan-step .piece-team { gap: 6px 10px; }
+.plan-step .plan-calls { color: var(--muted); background: var(--fill-2); }
+.plan-moves { display: inline-flex; gap: 4px; margin-left: auto; }
+.plan-moves .btn-small { min-width: 32px; min-height: 32px; }
+/* break-ui (brief 33.1): at 390 px a 299-character finish line squeezed into a 190 px column between its label and Edit;
+   it takes a full row under them once it can't have 18em beside them */
+.plan-done { align-items: baseline; flex-wrap: wrap; }
+.plan-done .t { flex: 1 1 18em; min-width: 0; color: var(--text-2); }
+/* break-ui (brief 33.1): a Secrets button never runs past its card; its label is the key's start and end */
+.secrets-btn { max-width: 100%; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.plan-needs { display: flex; flex-direction: column; gap: 4px; padding: 6px 0; font-size: 13px; color: var(--text-2); min-width: 0; }
+.plan-needs > .k { font: 11px var(--mono); color: var(--faint); }
+.plan-needs ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.plan-need { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; min-width: 0; }
+.plan-need .t { min-width: 0; overflow-wrap: anywhere; }
+.need-state { font: 11px var(--mono); padding: 1px 6px; border-radius: 999px; }
+.need-state.ok { color: var(--ok-text); background: var(--ok-soft); }
+.need-state.bad { color: var(--bad-text); background: var(--bad-soft); }
+/* brief 33.1 (decision 6): the One step card, grey, with Build it */
+.one-step-card .offer-body { color: var(--text-2); overflow-wrap: anywhere; }
+.one-step-task .k { font: 11px var(--mono); color: var(--faint); }
+/* brief 33.1 (decisions 14 and 20): What now?'s word when docs/PLAN.md was left out; the bar's plan line */
+.what-now-said { flex-basis: 100%; font-size: 12.5px; color: var(--warn-text); overflow-wrap: anywhere; }
+.plan-bar { font: 12px var(--mono); }
+
+/* ---------- brief 33.3 (decision 12): the Models pills, the Models sheet and Setup's Models row ---------- */
+.model-pills { display: inline-flex; flex-wrap: wrap; gap: 6px; max-width: 100%; }
+.pill-model { background: var(--fill-2); color: var(--strong); box-shadow: inset 0 0 0 1px var(--line-2); }
+.pill-model .x { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; min-height: 32px;
+  margin: 0 -10px 0 -6px; border-radius: 999px; font-size: 15px; }
+.team-item.models-item { margin-top: 4px; border-top: 1px solid var(--line); border-radius: 0 0 8px 8px; }
+.models-sheet .models-agent { padding: 10px 0; border-top: 1px solid var(--line); }
+.models-agent-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; cursor: pointer; }
+.models-agent-name { min-width: 7ch; font-weight: 600; }
+.models-agent-row .select { flex: 1 1 200px; max-width: 100%; min-height: 40px; }
+.models-defaults { margin-top: 6px; font-size: 12.5px; color: var(--text-2); overflow-wrap: anywhere; }
+.setup-models { display: flex; flex-direction: column; gap: 8px; padding: 0 14px 12px; font-size: 13px; color: var(--text-2); }
+.setup-models-title { color: var(--text); }
+.setup-models-agents { margin: 0; padding-left: 18px; }
+.setup-models-agents li { overflow-wrap: anywhere; }
+.setup-models-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 10px; align-items: center; }
+.setup-models-label { overflow-wrap: anywhere; }
+.setup-model-select { min-height: 36px; max-width: 100%; }
+@media (max-width: 600px) { .setup-models-grid { grid-template-columns: minmax(0, 1fr); } }
+.models-said { margin: 4px 0; }
+.nowrap { white-space: nowrap; }
+.fable-row { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; padding-top: 8px; border-top: 1px solid var(--line); }
+.fable-row .mem-switch { padding-left: 0; }
+.fable-words { flex: 1 1 260px; min-width: 0; }
+.fable-words p { margin: 0 0 6px; }
+
+/* brief 33.2 (decision 5): the Text only pill (Draft it's --no-files), drawn as the Idea pill is */
+.pill-textonly { background: var(--accent-soft); color: var(--strong); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.pill-textonly .x { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; min-height: 32px; }
+/* brief 33.2 (decision 4): the Spec section below the notes, in the same sheet */
+.spec-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.spec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.spec-title { font-weight: 600; }
+.spec-labels { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; max-height: 240px; overflow: auto; }
+.spec-label { font-size: 13px; overflow-wrap: anywhere; }
+.spec-label code { margin-right: 4px; }
+/* brief 33.2 (decision 11): a revision's inherited steps, done and not editable */
+.plan-step.inherited { opacity: 0.72; }
+.plan-step.inherited .piece-text-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.plan-done-by { font-size: 12px; color: var(--muted); }
+.plan-changed { margin: 6px 0; font-size: 13px; }
+.plan-changed ul { margin: 4px 0 0 18px; padding: 0; }
+.stop-here-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+
+/* ---------- UI-1 row 15 (D1): the canvas's layout and density, on today's tokens ----------
+   Late in the file, so each rule here restyles the one above it; no new colour, no new state, today's words. The layout
+   rules that the narrow widths set again sit in a desktop-only block, so the 900 px and 600 px rules still win there. */
+.sidebar { gap: 2px; }
+.brand-mark { width: 24px; height: 24px; border-radius: 7px; }
+.side-label { padding: 12px 10px 4px; }
+.side-item { border-radius: 8px; }
+.side-item.primary { border-radius: 10px; margin-bottom: 4px; }
+.stream-title { font-size: 18px; letter-spacing: -0.01em; }
+.stream-sub { font-size: 12px; color: var(--muted); }
+/* the canvas's user bubble: a raised quiet box; the result as plain text under its line */
+.bubble { background: var(--raised); color: var(--strong); font-weight: 400; border-radius: 14px;
+  box-shadow: inset 0 0 0 1px var(--line); }
+.result { padding: 2px 0 0; border-radius: 0; background: transparent; box-shadow: none; font-size: 14.5px; color: var(--text); }
+.answer-meta { font-size: 11.5px; }
+.btn { border-radius: 10px; }
+.btn-small { border-radius: 8px; }
+.offer, .files-block, .log-row { border-radius: 14px; }
+.empty { border-radius: 14px; padding: 32px 20px; background: transparent; box-shadow: inset 0 0 0 1px var(--line-2); }
+.banner { border-radius: 12px; padding: 10px 16px; }
+.composer { border-radius: 16px; padding: 12px 14px; gap: 10px; }
+.sheet { border-radius: 14px; }
+.menu-list, .team-menu { border-radius: 12px; }
+@media (min-width: 901px) {
+  .sidebar { padding: 14px 12px 12px; }
+  .brand { padding: 4px 8px 10px; }
+  .bubble-col { max-width: 72%; }
+}
+
+/* ---------- UI-1 row 14 (D3, D18): the project head on a title line and two lines ---------- */
+.head-where { min-width: 0; overflow-wrap: anywhere; }
+.project-bar { gap: 6px 8px; padding: 2px 8px; }
+.project-bar > .project-test, .project-bar > .project-run { flex-wrap: nowrap; }
+.project-bar .pill { min-width: 0; flex: 0 1 auto; }
+.project-menu { margin-left: auto; }
+.project-menu > .btn .caret { display: inline-flex; color: var(--faint); }
+.project-menu > .btn .caret .icon { width: 13px; height: 13px; }
+.menu-list.down { top: calc(100% + 6px); bottom: auto; left: auto; right: 0; transform-origin: top right; min-width: 240px; }
+.menu-list .side-item .count { margin-left: auto; padding-left: 12px; font: 11px var(--mono); color: var(--faint); }
+@media (min-width: 601px) { .project-bar { flex-wrap: nowrap; } .project-bar .pill { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+
+/* ---------- UI-1 row 13 (D4, D5): the Auto run as one line per step, words for state and check ---------- */
+.auto-title { font-weight: 600; color: var(--strong); font-size: 13.5px; }
+.auto-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.auto-line { display: grid; grid-template-columns: 2em minmax(0, 1fr); gap: 2px 6px; padding: 8px 10px; border-radius: 10px;
+  background: var(--fill); box-shadow: inset 0 0 0 1px var(--line); font-size: 13px; min-width: 0; }
+.auto-line.muted { opacity: 0.72; }
+.auto-k { font: 12px var(--mono); color: var(--faint); padding-top: 1px; }
+.auto-text { color: var(--text); overflow-wrap: anywhere; min-width: 0; }
+.auto-meta { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; font: 11.5px var(--mono);
+  color: var(--muted); min-width: 0; }
+.auto-meta .auto-mark { margin-left: 0; }
+.auto-meta .linklike { font: inherit; min-height: 28px; }
+.auto-state.running { color: var(--info-text); }
+.auto-state.open, .auto-state.before { color: var(--muted); }
+.auto-state.failed, .auto-state.retried { color: var(--bad-text); }
+.auto-state.unchecked { color: var(--warn-text); }
+
+/* ---------- UI-1 row 12 (D16): the plan card, read first ---------- */
+.plan-read { align-items: baseline; }
+.plan-read .k { min-width: 1.6em; }
+.plan-line { color: var(--text); overflow-wrap: anywhere; min-width: 0; }
+.plan-quiet { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; min-width: 0; }
+.plan-line .plan-quiet { font-size: 12.5px; }
+.plan-read > .btn { flex: none; margin-left: auto; }
+.plan-step.plan-open { box-shadow: inset 0 0 0 1px var(--accent-line); }
+
+/* ---------- UI-1 row 11 (D7): the card's one top line, Details at its right ---------- */
+.card-top { font-size: 12.5px; min-height: 28px; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.card-end { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; }
+.card-time { color: var(--faint); font: 11.5px var(--mono); flex: none; }
+@media (max-width: 600px) {
+  .card-end { flex: 1 1 100%; }
+}
+.details-rounds .btn-small { font: 11.5px var(--mono); }
+
+/* ---------- UI-1 row 10 (D14a): the confirm's words, then the command as one muted mono line ---------- */
+.confirm-words { font-size: 13.5px; color: var(--strong); overflow-wrap: anywhere; }
+.confirm-cmd { font: 11.5px var(--mono); color: var(--faint); overflow-wrap: anywhere; }
+
+/* ---------- UI-1 row 9 (D8): the sidebar in the canvas's look ---------- */
+.side-item svg.icon { color: var(--faint); }
+.side-item.needs { color: var(--warn-text); }
+.side-item.needs svg.icon { color: var(--warn-text); }
+.side-item.needs .count { color: var(--faint); }
+.side-item.waiting { color: var(--muted); }
+.side-item[aria-current="page"] svg.icon { color: var(--text-2); }
+.side-label { font-size: 10.5px; }
+
+/* ---------- UI-1 row 8 (D12): one status chip in the header, its popover with every row ---------- */
+.strip-row { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; }
+.status-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 26; width: min(460px, calc(100vw - 32px)); padding: 8px;
+  border-radius: 14px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line-2), var(--shadow); display: flex;
+  flex-direction: column; gap: 2px; font-size: 14px; }
+.status-row { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 10px; border-radius: 8px; box-shadow: none; }
+.status-row.tone-warn, .status-row.tone-bad, .status-row.tone-info { box-shadow: none; }
+.status-name { font-weight: 500; color: var(--text); flex: none; }
+.status-words { margin-left: auto; font-size: 12px; color: var(--muted); text-align: right; overflow-wrap: anywhere; min-width: 0; }
+.status-row.tone-bad .status-words { color: var(--bad-text); }
+.status-row .linklike { min-height: 32px; }
+.status-foot { padding: 8px 10px 4px; font-size: 12px; color: var(--muted); box-shadow: inset 0 1px 0 var(--line); }
+
+/* ---------- UI-1 row 7 (D6a): the Auto confirm as a sheet (the canvas's Run confirm) ---------- */
+.auto-sheet { width: min(520px, 100%); box-shadow: inset 0 0 0 1px var(--warn-line), 0 24px 64px var(--bg); }
+.auto-sheet .auto-overrun { color: var(--warn-text); }
+
+/* ---------- UI-1 row 6 (D15b): the 390 px pass. Today's Menu button is the brand row's ☰ (hidden on desktop, as before) ---------- */
+@media (max-width: 900px) {
+  .narrow-bar .side-item[aria-label="Menu"] { width: 44px; min-width: 44px; min-height: 44px; flex-shrink: 0; padding: 0; justify-content: center; }
+  .narrow-bar .side-item[aria-label="Menu"] .name { display: none; }
+}
+
+/* ---------- UI-1 row 5 (D2): the composer's look; ids, order and handlers as before ---------- */
+#cmdline { display: none; }  /* renderCommand still runs; Copy and the command are UI-2's to place */
+#jev[data-mode="idle"] { display: none; }  /* renderJev still runs: the line shows when Jev has something to say */
+.composer-bar { gap: 8px; }
+.plus { position: relative; flex-shrink: 0; }
+.plus-btn { width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--fill); color: var(--text-2); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 0 1px var(--line-2); }
+.plus-btn[aria-expanded="true"] { background: var(--fill-2); color: var(--strong); }
+.plus-menu { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 30; display: flex; flex-direction: column;
+  align-items: stretch; gap: 6px; min-width: 240px; padding: 8px; border-radius: 12px; background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--line-2), var(--shadow); }
+.plus-menu .toggle { min-height: 40px; padding: 0 8px; }
+.plus-menu .select { max-width: none; width: 100%; min-height: 40px; }
+.attach { width: 44px; height: 44px; border-radius: 50%; }
+.team-btn { min-height: 44px; border-radius: 999px; padding: 0 14px; }
+.send { border-radius: 999px; min-height: 44px; padding: 0 18px; }
+@media (hover: hover) and (pointer: fine) { .plus-btn:hover { background: var(--fill-2); color: var(--strong); } }
+
+/* ---------- UI-1 row 4 (D13): the card's ⋯ menu beside Details (it reuses .menu-list, z 20) ---------- */
+.card-top .card-menu { flex-shrink: 0; }
+.card-top .details-btn { margin-left: auto; }
+.card-top .card-menu .details-btn { margin-left: 0; min-width: 32px; font-size: 15px; }
+@media (max-width: 600px) {
+  /* row 12 (note 10): each with a 44 px tap area; Land stays where it is, above the result */
+  .card-top .details-btn, .card-top .card-menu .details-btn { min-width: 44px; min-height: 44px; }
+}
+.card-menu .menu-list { left: auto; right: 0; transform-origin: bottom right; }
+.menu-sub { display: flex; flex-direction: column; gap: 2px; padding-left: 12px; box-shadow: inset 1px 0 0 var(--line-2); }
+
+/* ---------- UI-1 row 3 (D9): Needs you capped; one scroll region between the pinned top and bottom ---------- */
+.side-scroll { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.side-item.more-row { color: var(--muted); }
+@media (min-width: 901px) {
+  .sidebar { overflow: hidden; }
+  .side-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0 -6px; padding: 0 6px; }
+}
+@media (max-width: 900px) {
+  .sidebar:not(.open) .side-scroll { display: contents; }
+  .sidebar.open .side-scroll { flex: 1 1 auto; }
+}
+
+/* ---------- UI-1 row 2 (D10): sidebar and ⋯ rows 36 px with a fine pointer, 44 px on touch; everything else keeps 44 ---------- */
+.sidebar .side-item, .menu-list .side-item { min-height: 36px; }
+@media (pointer: coarse) {
+  .sidebar .side-item, .sidebar .narrow-bar .side-item, .menu-list .side-item { min-height: 44px; }
+}
+
+/* ---------- UI A N2 (A3): a card's frame in its state's colour, on the page's tokens; the words stay in its top line ---------- */
+.task.framed { padding: 14px 16px; border-radius: 14px; }
+.task.frame-bad { box-shadow: inset 0 0 0 1px var(--bad-line); }
+.task.frame-warn { box-shadow: inset 0 0 0 1px var(--warn-line); }
+.task.frame-info { box-shadow: inset 0 0 0 1px var(--info-line); }
+.task.frame-grey { box-shadow: inset 0 0 0 1px var(--line-3); }
+.task.framed > .offer { box-shadow: none; padding: 0; background: transparent; border-radius: 0; }  /* no box in a box */
+@media (max-width: 520px) { .task.framed { padding: 12px; } }
+
+/* ---------- UI A N10 (A20): at phone width the ⋯ menu opens in one fixed spot, above the composer and the status bar ---------- */
+@media (max-width: 600px) {
+  .card-menu .menu-list { position: fixed; left: 8px; right: 8px; bottom: var(--composer-h, 0px); max-height: 60vh; overflow-y: auto; z-index: 26; min-width: 0; }
+}
+
+/* ---------- UI A row 16 (A18): a split's piece read first, as the plan card's step is ---------- */
+.plan-piece.plan-open { box-shadow: inset 0 0 0 1px var(--accent-line); }
+.plan-card .plan-read .select { margin-top: 4px; }
+
+/* ---------- UI A row 15 (A12): the + menu: rows with their state on the right, real selects restyled, 44 px on touch ---------- */
+.plus-menu { gap: 2px; padding: 6px; width: min(340px, calc(100vw - 48px)); min-width: 0; }
+.plus-item, .plus-menu .toggle { display: flex; align-items: center; gap: 10px; width: 100%; height: auto; min-height: 36px; padding: 4px 10px; border: 0; border-radius: 8px;
+  background: none; box-shadow: none; color: var(--text-2); font-size: 13.5px; text-align: left; cursor: pointer; }
+.plus-item:disabled, .plus-menu .toggle.off { color: var(--faint); cursor: not-allowed; }
+.plus-item.attach { justify-content: flex-start; }  /* the live check: .attach centers its one child when it has no state */
+.plus-name { flex: none; }
+.plus-state { margin-left: auto; min-width: 0; font-size: 12px; color: var(--muted); text-align: right; overflow-wrap: anywhere; }
+.plus-state:empty { display: none; }
+.plus-item:disabled .plus-state, .plus-menu .toggle.off .plus-state { color: var(--faint); }
+.plus-item .select { flex: 1 1 auto; min-width: 0; width: auto; min-height: 32px; margin-left: auto; }
+.plus-item input[type="checkbox"] { flex: none; }
+.plus-divider { height: 1px; margin: 4px; background: var(--line-2); }
+@media (hover: hover) and (pointer: fine) { .plus-item:hover:not(:disabled) { background: var(--fill); color: var(--strong); } }
+@media (pointer: coarse) { .plus-item, .plus-menu .toggle { min-height: 44px; } }
+
+/* ---------- UI A row 14 (A14): the Team menu's rows, 36 px with a mouse, 44 px on touch, and its footer line ---------- */
+.team-item { min-height: 36px; }
+@media (pointer: coarse) { .team-item { min-height: 44px; } }
+.team-foot { margin-top: 4px; padding: 6px 10px 4px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+
+/* ---------- UI A row 12 (A17): redteam's summary line, and its fold once passed or fixed ---------- */
+.redteam-summary { font-size: 13px; color: var(--text-2); }
+.fold.redteam-fold > summary { font: 13px var(--sans); color: var(--text-2); min-height: 32px; }
+
+/* ---------- UI A row 11 (A19): the quiet states, restyled: muted words, no frame; a landed, discarded or undone change reads as a line ---------- */
+.verdict.muted .verdict-text { color: var(--muted); }
+.verdict.muted .light { background: var(--faint); }
+.files-block.tone-muted, .files-block.tone-ok { padding: 0; background: transparent; box-shadow: none; border-radius: 0; }
+.files-block.tone-muted .files-line, .files-block.tone-ok .files-line { font-weight: 500; font-size: 13px; }
+.files-block.tone-ok .files-line { color: var(--ok-text); }
+.forgotten-line { font-style: normal; color: var(--muted); }
+
+/* ---------- UI A row 10 (A9): the sending line and the refused card ---------- */
+.task.sending { font-size: 13px; color: var(--text-2); padding: 10px 16px; }
+.refusal-title { color: var(--bad-text); }
+
+/* ---------- UI A row 9 (A14): a preset's slots on their own line, under the box ---------- */
+.slots { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.slots .team-slots { row-gap: 6px; }
+.slot-why { flex-basis: 100%; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+
+/* ---------- UI A row 8 (A16): each Pick under its candidate, full width ---------- */
+.cand > .btn { width: 100%; min-height: 44px; }
+.cand-who { font-size: 13px; }
+
+/* ---------- UI A row 7 (A18): a piece's mark and its linked task ---------- */
+.split-pieces .k { white-space: nowrap; }
+.split-pieces .k .linklike { font: inherit; min-height: 28px; }
+.piece-mark.done { color: var(--ok-text); }
+.piece-mark.waiting { color: var(--info-text); }
+.piece-mark.blocked { color: var(--warn-text); }
+
+/* ---------- UI A row 5 (A15): the pills in a row above the box ---------- */
+.composer-pills { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.composer-pills:not(:has(> :not([hidden]))) { display: none; }
+.composer-pills .chip-tag { background: var(--fill); color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line-2); }
+
+/* ---------- UI A row 2 (A15): attached files, restyled in place ---------- */
+.composer-files .chip-tag { background: var(--fill); color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line-2); }
+.composer-files .chip-tag .x { min-width: 32px; min-height: 32px; margin: 0 -10px 0 -6px; font-size: 15px; }
+
+/* ---------- UI A row 1 (A13): the Skill pill, drawn as the other pills are, with a 32 px × ---------- */
+.pill-skill .x { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; min-height: 32px; margin: 0 -10px 0 -6px; border-radius: 999px; font-size: 15px; }
+
+/* ---------- the small UI cleanup, row 6 (note 26): six boxes, each a light and a name; the list's head ---------- */
+.agent-box { display: flex; align-items: center; gap: 8px; flex: 1 1 0; min-width: max-content; padding: 9px 12px; border: 0; border-radius: 10px; background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line); color: var(--text); font-size: 13px; line-height: 1.5; text-align: left; cursor: pointer; }
+.agent-box.tone-ok { box-shadow: inset 0 0 0 1px var(--line); }
+.agent-box.tone-bad { box-shadow: inset 0 0 0 1px var(--bad-line); }
+.agent-box.tone-info { box-shadow: inset 0 0 0 1px var(--info-line); }
+.agent-box.tone-warn { box-shadow: inset 0 0 0 1px var(--warn-line); }
+.agent-box .agent-name { font-weight: 600; white-space: nowrap; }
+.agent-box .agent-state { margin-left: auto; font: 11px var(--mono); white-space: nowrap; }
+.agent-box[aria-expanded="true"] { background: var(--fill-2); }
+@media (hover: hover) and (pointer: fine) { button.agent-box:hover { background: var(--fill-2); } }
+span.agent-box { cursor: default; flex: none; }
+.status-head { padding: 6px 10px 8px; font-weight: 600; font-size: 13px; color: var(--strong); box-shadow: inset 0 -1px 0 var(--line); }
+/* ---------- UI B N2 (Q6, board 4): the rail, an icon column; the sidebar can hide ---------- */
+.rail { display: flex; flex-direction: column; gap: 4px; padding: 12px 6px; height: 100vh; position: sticky; top: 0; background: var(--side); box-shadow: 1px 0 0 var(--line); }
+.rail-item { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; min-height: 52px; padding: 8px 2px; border: 0; border-radius: 10px; background: transparent; color: var(--text-3); font-size: 11px; cursor: pointer; }
+.rail-item svg.icon { width: 17px; height: 17px; }
+.rail-item.lit { background: var(--fill-2); color: var(--strong); }
+@media (hover: hover) and (pointer: fine) { .rail-item:hover { background: var(--fill); color: var(--strong); } }
+@media (min-width: 901px) {
+  .app { grid-template-columns: 64px var(--side-w) minmax(0, 1fr); }
+  .app.panel-open { grid-template-columns: 64px 64px minmax(0, 1fr) minmax(360px, 46%); }
+  .app.side-hidden { grid-template-columns: 64px minmax(0, 1fr); }
+  .app.side-hidden.panel-open { grid-template-columns: 64px minmax(0, 1fr) minmax(360px, 46%); }
+  .app.side-hidden .sidebar { display: none; }
+}
+@media (max-width: 900px) {
+  .rail { display: none; }
+}
+
+/* ---------- UI B N3 (Q6, Q11): Menu and Needs you in the pinned strip; the drawer ---------- */
+.side-only-narrow { display: none; }
+.narrow-bar { display: flex; align-items: center; gap: 6px; margin-right: auto; flex-shrink: 0; }
+.needs-head { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent; color: var(--warn-text);
+  box-shadow: inset 0 0 0 1px var(--warn-line); font-size: 12.5px; white-space: nowrap; cursor: pointer; }
+.needs-head svg.icon { width: 13px; height: 13px; }
+.strip-row { position: relative; flex-wrap: wrap; gap: 6px 10px; }
+@media (max-width: 900px) {
+  .sidebar:not(.open) { display: none; }
+  .sidebar.open .side-only-narrow { display: flex; }
+  .narrow-bar .side-item { width: 44px; min-width: 44px; min-height: 44px; padding: 0; justify-content: center; flex-shrink: 0; }
+}
+/* the small UI cleanup, row 6: Menu and Needs you take their own line; the boxes fill the rows under it */
+@media (max-width: 900px) {
+  .narrow-bar { flex: 1 1 100%; }
+  .strip-row { gap: 6px; }
+  .strip { padding: 4px 12px 8px; }
+  .agent-box { flex: 1 1 auto; }
+}
+
+/* ---------- UI B N4 (Q6): a section's label folds it ---------- */
+.side-fold { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.side-fold-mark { font-size: 10px; }
+@media (hover: hover) and (pointer: fine) { .side-fold:hover { color: var(--text-2); } }
+
+/* ---------- UI B N5 (Q6, board 3): the Settings tab, a page in the main column ---------- */
+.settings-tabs { flex-basis: 100%; background: transparent; box-shadow: none; padding: 0; gap: 4px; border-radius: 0; }
+.settings-tabs .tab { font-size: 13.5px; min-height: 36px; border-radius: 0; background: transparent; box-shadow: none; }
+.settings-tabs .tab[aria-selected="true"] { background: transparent; color: var(--strong); box-shadow: inset 0 -2px 0 var(--accent); }
+.settings-page { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.settings-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.settings-line .panel-note { flex: 1 1 280px; margin: 0; }
+.settings-line .sheet-sub { margin-left: 0; }
+.settings-prefs, .settings-history { display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 12px; background: var(--side); box-shadow: inset 0 0 0 1px var(--line); }
+.settings-link { min-height: 52px; }
+.settings-link-words { display: flex; flex-direction: column; min-width: 0; }
+
+/* ---------- UI B N6 (Q4, Q11): What now? and the project's bar share one line when wide; ids and order as they were ---------- */
+@media (min-width: 901px) {
+  .stream-head .what-now { flex: 1 1 320px; }
+  .stream-head .project-bar { flex: 0 1 auto; flex-basis: auto; margin: 0 -8px 0 auto; }
+  .stream-head .head-where { flex: 1 1 60%; }
+}
+.rail-item span { white-space: nowrap; }
+
+/* ---------- UI B N8 (Q3): Memory's plain link and its start command ---------- */
+.mem-control { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--side); box-shadow: inset 0 0 0 1px var(--line); }
+.mem-control a { color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; min-height: 28px; }
+.mem-control .panel-note { margin: 0; }
+.mem-control-start { display: flex; align-items: flex-start; gap: 8px; }
+.mem-control-start > span { flex: 1 1 auto; min-width: 0; }
+
+/* ---------- UI B row 14 (board 2, board 3): the Models sheet at a phone's width; Settings → Models read first ---------- */
+.models-section-title { font-weight: 600; color: var(--strong); margin-top: 4px; }
+.models-row { display: flex; flex-direction: column; gap: 6px; padding: 8px 6px; box-shadow: inset 0 -1px 0 var(--line); min-width: 0; }
+.models-row-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.models-row-name { color: var(--text); overflow-wrap: anywhere; min-width: 0; flex: 1 1 10em; }
+.models-row-now { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; min-width: 0; }
+.models-yours { font: 11px var(--mono); color: var(--accent-text); }
+.models-row.open { margin: 4px 0; padding: 10px 12px; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--info-line); }
+.models-row-title { font-weight: 600; color: var(--strong); overflow-wrap: anywhere; }
+.models-row-pick { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.models-row-pick .select { flex: 1 1 auto; min-width: 0; max-width: 100%; }
+.models-said.ok { color: var(--ok-text); }
+.models-fold > summary { min-height: 36px; display: flex; align-items: center; gap: 6px; color: var(--muted); cursor: pointer; }
+@media (max-width: 600px) {
+  .sheet-backdrop:has(> .models-sheet) { padding: 0; }
+  .sheet.models-sheet { width: 100%; height: 100%; max-height: none; border-radius: 0; }
+  .models-sheet .np-foot { margin-top: auto; position: sticky; bottom: 0; background: var(--card); padding: 10px 0; }
+}
+
+/* ---------- UI B row 13 (Sheets): Setup's rows, quieter; the Terminal steps to copy ---------- */
+.settings-page .setup-row { padding: 0; border-radius: 12px; }
+.settings-page .setup-row > summary { padding: 10px 14px; }
+.settings-page .setup-body { padding: 0 14px 14px; }
+.setup-without { margin: 0 14px 8px; }
+.setup-body pre { user-select: all; }
+.settings-page .mem-note { margin: 0 14px 10px; }
+
+/* ---------- UI B row 12 (board 1): Notes and the Spec section: each Save under its own box, one Close at the very end ---------- */
+.notes-foot, .spec-section .np-foot { justify-content: flex-start; flex-direction: row-reverse; }
+.notes-foot .np-foot-note, .spec-section .np-foot .np-foot-note { margin-right: 0; margin-left: auto; }
+.pn-block { margin: -4px 0; }
+.spec-section { padding-top: 16px; }
+@media (max-width: 600px) {
+  .sheet-backdrop:has(> .notes-sheet) { padding: 0; }
+  .sheet.notes-sheet { width: 100%; height: 100%; max-height: none; border-radius: 0; }
+  .notes-sheet .spec-labels { max-height: 150px; overflow-y: auto; padding: 8px 10px; border-radius: 9px; background: var(--side); box-shadow: inset 0 0 0 1px var(--line); }
+  .notes-sheet > .np-foot:last-child { position: sticky; bottom: -18px; margin: 0 -20px -18px; padding: 10px 20px; background: var(--card); box-shadow: 0 -1px 0 var(--line-2); }
+}
+
+/* ---------- UI B row 11 (Sheets2): Secrets, names first ---------- */
+.secrets-sheet .sc-row { min-height: 40px; background: var(--side); }
+.secrets-sheet .sc-name { flex: 0 1 auto; }
+.secrets-sheet .np-hint:empty { display: none; }
+
+/* ---------- UI B row 10 (Sheets): New project ---------- */
+.sheet.np #np-does { color: var(--text-3); }
+.sheet.np .np-other { margin-top: 0; }
+.np-mode-btn.is-on { background: var(--fill-2); }
+
+/* ---------- UI B row 9 (Sheets2): Ideas ---------- */
+.ideas-sheet .idea-row { background: var(--side); box-shadow: inset 0 0 0 1px var(--line); }
+.ideas-sheet .idea-actions .btn { min-height: 36px; }
+
+/* ---------- UI B row 8 (Sheets2): Run's confirm ---------- */
+.pconfirm-sheet .pc-line { margin: 0; }
+.pconfirm-sheet .pc-fact { margin: 0; }
+
+/* ---------- UI B row 7 (D26): Tests and Run command ---------- */
+.tests-sheet .ts-words { min-height: 84px; }
+.sheet.np > .panel-note { margin: 0; }
+
+/* ---------- UI B row 6 (D26): Add files and Turn on undo ---------- */
+.drop-sheet .git-names, .git-sheet .git-names { background: var(--side); }
+.git-sheet .np-folder { align-items: center; }
+
+/* ---------- UI B row 5 (D26): the Router notes editor ---------- */
+.notes-sheet .notes-sections .pill { background: var(--side); }
+
+/* ---------- UI B row 4 (D26): Shortcuts, Pin, Save ---------- */
+.keys { row-gap: 10px; }
+
+/* ---------- UI B row 3 (D17): the side panel's head and tabs ---------- */
+.panel-head { gap: 6px; padding: 10px 16px 0; }
+.panel-head .tabs { background: transparent; box-shadow: none; padding: 0; gap: 4px; border-radius: 0; }
+.panel-head .tab { border-radius: 0; background: transparent; box-shadow: none; }
+.panel-head .tab[aria-selected="true"] { background: transparent; color: var(--strong); box-shadow: inset 0 -2px 0 var(--accent); }
+
+/* ---------- UI B row 2 (AllTasks): its head ---------- */
+.stream-head .search { flex: 1 1 220px; max-width: none; }
+
+/* ---------- UI B row 1: All tasks and Log files as two tabs ---------- */
+.history-tabs { flex-basis: 100%; order: -1; background: transparent; box-shadow: none; padding: 0; gap: 4px; border-radius: 0; margin-bottom: 4px; }
+.history-tabs .tab { font-size: 13.5px; min-height: 36px; border-radius: 0; background: transparent; box-shadow: none; }
+.history-tabs .tab[aria-selected="true"] { background: transparent; color: var(--strong); box-shadow: inset 0 -2px 0 var(--accent); }
+
+/* ---------- UI B's live check: the drawer's foot stays in reach; a fold says it opens ---------- */
+@media (max-width: 900px) {
+  .sidebar.open { overflow: hidden; }
+  .sidebar.open .side-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+}
+.models-fold > summary::before { content: "▸"; font-size: 10px; }
+.models-fold[open] > summary::before { content: "▾"; }
+
+/* ---------- UI B's live check: the phone's head, measured at 340 px on the longest case against Q11's 210 ---------- */
+@media (max-width: 600px) {
+  .agent-box { min-height: 32px; padding: 6px 10px; }
+  .stream-head { padding-top: 8px; padding-bottom: 6px; gap: 2px 8px; align-items: center; }
+  .stream-head .stream-title { order: -2; flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; }
+  .stream-head .project-tools { order: -1; flex: none; min-height: 36px; }
+  .stream-head .head-where { display: none; }
+  .stream-head .what-now { row-gap: 2px; font-size: 13px; }
+  .stream-head .what-now .next-chip { min-height: 36px; padding: 4px 12px; font-size: 13px; }
+}
+
+/* ---------- the small UI cleanup, row 11 (notes 2 and 4): the composer on a phone; +, the team and Send stay on one line ---------- */
+@media (max-width: 600px) {
+  #slots .team-slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  #slots .team-slots .slot-why { grid-column: 1 / -1; }
+  #slots .team-slots .dot { display: none; }
+  #slots .slot-inline { min-width: 0; }
+  #slots .slot-select { min-width: 0; max-width: 100%; }
+  #context-tag { order: -1; flex: 1 1 100%; max-width: none; }
+}
+
+/* ---------- UI B's live check: with the side panel open on a wide window the sidebar steps aside; the rail stays ---------- */
+@media (min-width: 901px) {
+  .app.panel-open, .app.side-hidden.panel-open { grid-template-columns: 64px minmax(0, 1fr) minmax(360px, 46%); }
+  .app.panel-open .sidebar { display: none; }
 }

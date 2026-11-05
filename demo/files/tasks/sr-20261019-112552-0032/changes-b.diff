@@ -1,0 +1,9 @@
+diff --git a/loans.py b/loans.py
+--- a/loans.py
++++ b/loans.py
+@@ -1,3 +1,5 @@
+ def lend(packet, member):
++    if packet.stock < 1:
++        return False
+     packet.stock -= 1
+     return member.loans.append(packet)

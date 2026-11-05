@@ -2,35 +2,47 @@
 brief 20): one Grok model pinned by name in config/agents.json, every tool denied, text in and text out. The prompt
 is the command's one positional argument; the answer is read from its stream-json events: the assistant text blocks
 (the terminal `result` field only when there is none), the init event's served model, every tool event counted and
-named. Each call runs from a fresh scratch folder workspace/cursor/<call_id>/ that holds only the deny file
-.cursor/cli.json, with the five-name environment (router/safety.py, cursor_env), and the folder is removed afterwards
-whatever happened. Never --force, --yolo, --resume, --api-key; the router refuses to run while CURSOR_API_KEY is set.
+named. Each call runs from a fresh scratch folder in the system's temporary folder (brief 32, R0: never inside the
+router's folder, whose CLAUDE.md Cursor's command line read as workspace rules) that holds only the deny file
+.cursor/cli.json, with the five-name environment (router/safety.py, cursor_env); a call is refused when any folder above
+it holds an instruction file, and the folder is removed afterwards whatever happened. Never --force, --yolo, --resume,
+--api-key; the router refuses to run while CURSOR_API_KEY is set.
 Proved by the Phase 0 canary probes on agent 2026.10.16-e3cb207 (2026-10-19): a read, a shell command and a listing,
 all refused by the deny file; the pass is pinned to that version in probe_state.json (`cursor_sandbox`) and proved
-again by `sr probe` when the command moves (router/cursor_probe.py)."""
+again by `sr probe` when the command moves (router/cursor_probe.py); since brief 32 (R0) by three canaries, the third for
+rules read from the folders above."""
 import json
 import os
 import re
 import shutil
 import subprocess
+import tempfile
 import unicodedata
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 
-from router import checking, safety, search
+from router import checking, safety
 
 WORKER_TIMEOUT = 600      # the number the Claude worker uses (choice 6)
 STATUS_TIMEOUT = 10       # `agent status` and `agent --version`: local reads, never a model call (decision 9)
 PROMPT_LIMIT = 100_000    # characters: the prompt rides on the command line (decision 2)
-WORKSPACE = safety.WORKSPACE
-SCRATCH_ROOT = "cursor"   # workspace/cursor/<call_id>/, under the folder the other workers use
+SCRATCH_PREFIX = "sr-cursor-"  # brief 32 (R0): <system temporary folder>/sr-cursor-<call_id>-<random>/
 DENY_FILE = Path(".cursor") / "cli.json"
-# Decision 3, the file the canaries proved: every shell command, read and write, relative and absolute. "Deny rules
-# take precedence over allow rules" (the permissions page), so ~/.cursor/cli-config.json cannot widen it. Changing
-# this file means running the canaries again.
-DENY = {"permissions": {"allow": [], "deny": ["Shell(*)", "Read(**)", "Write(**)", "Read(/**)", "Write(/**)"]}}
+# Decision 3, the file the canaries proved: every shell command, read and write, relative and absolute; brief 32 (R0):
+# and every MCP tool (`Mcp(server:tool)`, `*` for wildcards), so a server Cursor's own config allows is denied here.
+# "Deny rules take precedence over allow rules" (the permissions page), so ~/.cursor/cli-config.json cannot widen it.
+# Changing this file means running the canaries again.
+DENY = {"permissions": {"allow": [], "deny": ["Shell(*)", "Read(**)", "Write(**)", "Read(/**)", "Write(/**)",
+                                              "Mcp(*:*)"]}}
+# Brief 32 (R0): the files a coding agent's command line reads as rules or instructions from its folder and those above
+# it. None may sit in any folder above a scratch folder: the call is refused, never made.
+INSTRUCTION_NAMES = ("CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", "AGENT.md", "GEMINI.md", ".cursorrules", ".cursor",
+                     ".windsurfrules", ".clinerules", ".github/copilot-instructions.md")
+CANARIES = ("read", "list", "rules")  # brief 32 (R0): what a pass of the sandbox probe must have run
 LOGIN_OK = "Logged in as"       # `agent status` on the owner's Mac, 2026-10-19: "✓ Logged in as <address>"
 SANDBOX_KEY = "cursor_sandbox"  # probe_state.json: the agent version the canary probes passed on (the owner, 2026-10-19)
+MCP_LISTING = "getMcpToolsToolCall"  # the stream's tool kind for Cursor listing the MCP tools it could use (R0, fix 3)
 # Decision 8: after the scope paragraph, on every Cursor call (build, review, re-ask; a routed call too).
 NO_TOOLS_SENTENCE = (
     "You have no tools in this session: do not try to read, write, run or search anything, and put everything you "
@@ -127,42 +139,85 @@ def deny_text():
     return json.dumps(DENY, indent=2) + "\n"
 
 
-def scratch_folder(call_id):
-    """workspace/cursor/<call_id>/, made fresh (an older folder of the same name removed), holding the deny file."""
-    scratch = WORKSPACE / SCRATCH_ROOT / str(call_id)
-    if scratch.exists():
-        shutil.rmtree(scratch)
-    (scratch / DENY_FILE.parent).mkdir(parents=True)
+def temp_root():
+    """The system's temporary folder, where every scratch folder is made (brief 32, R0)."""
+    return Path(tempfile.gettempdir())
+
+
+def instruction_files_above(folder):
+    """Each instruction file (INSTRUCTION_NAMES) in `folder` or any folder above it, as paths; [] when there is none."""
+    found = []
+    for place in (Path(folder).resolve(), *Path(folder).resolve().parents):
+        found += [place / name for name in INSTRUCTION_NAMES if (place / name).exists()]
+    return found
+
+
+def guard(folder):
+    """R0's per-call guard (brief 32): the refusal for a Cursor call whose scratch folder is made in `folder`, when
+    `folder` or any folder above it holds an instruction file; None when none does. Cursor's command line reads such
+    files as rules from the folders above it, with or without git, and no flag turns that off (D's step 1), so this
+    guard is what keeps them out of every call (the design chat's fix of 29 Oct), and the probe's third canary checks it."""
+    above = instruction_files_above(folder)
+    if not above:
+        return None
+    return (f"refused: {above[0].name} sits above Cursor's scratch folder (in {above[0].parent}); Cursor would read it "
+            "as rules, so no call was made")
+
+
+def _safe_name(call_id):
+    return re.sub(r"[^A-Za-z0-9._-]", "-", str(call_id))[:80]
+
+
+def scratch_folder(call_id, parent=None):
+    """A fresh scratch folder holding the deny file: a new folder in the system's temporary folder (brief 32, R0), or,
+    for the probe, `<parent>/<call_id>/` (an older folder of that name removed)."""
+    if parent is None:
+        scratch = Path(tempfile.mkdtemp(prefix=f"{SCRATCH_PREFIX}{_safe_name(call_id)}-", dir=temp_root()))
+    else:
+        scratch = Path(parent) / _safe_name(call_id)
+        if scratch.exists():
+            shutil.rmtree(scratch)
+        scratch.mkdir(parents=True)
+    (scratch / DENY_FILE.parent).mkdir()
     (scratch / DENY_FILE).write_text(deny_text())
     return scratch
 
 
 def remove_scratch(scratch):
-    """The scratch folder goes, and workspace/cursor/ with it when nothing else is there."""
+    """The scratch folder goes, whatever is in it; the folder it was made in stays."""
     shutil.rmtree(scratch, ignore_errors=True)
-    try:
-        scratch.parent.rmdir()
-    except OSError:
-        pass
 
 
-def call(prompt, *, model, run=subprocess.run, environ=os.environ, call_id="call"):
+def call(prompt, *, model, run=subprocess.run, environ=os.environ, call_id="call", parent=None):
     """One `agent -p` from a fresh scratch folder: the raw outcome, not yet judged (the probe judges its own way).
-    stdin is closed, so the command can never wait on a prompt. The folder is removed whatever happened."""
-    scratch = scratch_folder(call_id)
+    stdin is closed, so the command can never wait on a prompt. The folder is removed whatever happened. `parent`: the
+    probe's own folder to make it in (brief 32, R0); a task's call is always made in the system's temporary folder."""
+    scratch = scratch_folder(call_id, parent=parent)
     try:
         args = argv(model, scratch, prompt)
         try:
             proc = run(args, cwd=scratch, env=safety.cursor_env(environ), stdin=subprocess.DEVNULL,
                        capture_output=True, text=True, timeout=WORKER_TIMEOUT)
-        except subprocess.TimeoutExpired:
-            raise WorkerError(f"cursor timed out after {WORKER_TIMEOUT} s") from None
+        except subprocess.TimeoutExpired as e:
+            raise _timed_out(e, model) from None
         except OSError as e:
             raise WorkerError(f"could not start agent ({type(e).__name__})") from None
         stdout, stderr = proc.stdout or "", proc.stderr or ""
         return Outcome(args, proc.returncode, stdout, stderr, parse(stdout))
     finally:
         remove_scratch(scratch)
+
+
+def _timed_out(error, model):
+    """Cleanup 1 (2.0a): what a timeout holds, kept as a finished call's stream is, the record marked `partial`; the call
+    still fails. subprocess.run's TimeoutExpired gives the output read so far as bytes, even in text mode. None held: the
+    failure as it always was."""
+    held = error.stdout.decode("utf-8", "replace") if isinstance(error.stdout, bytes) else (error.stdout or "")
+    words = f"cursor timed out after {WORKER_TIMEOUT} s"
+    if not held:
+        return WorkerError(words)
+    return WorkerError(f"{words}; its partial stream is kept", served={**served_record(parse(held), model), "partial": True},
+                       stream=held)
 
 
 # ---------- the stream ----------
@@ -213,7 +268,8 @@ def _tool_event(event):
     outcome = files = None
     if subtype == "completed":
         result = body.get("result") if isinstance(body.get("result"), dict) else {}
-        outcome = "denied" if "permissionDenied" in result else "error" if "error" in result else "success"
+        outcome = ("denied" if "permissionDenied" in result else "rejected" if "rejected" in result  # brief 32 (P): a
+                   else "error" if "error" in result else "success")  # refused call is a refusal, never `success`
         success = result.get("success") if isinstance(result.get("success"), dict) else {}
         if isinstance(success.get("totalFiles"), int) and not isinstance(success.get("totalFiles"), bool):
             files = success["totalFiles"]
@@ -236,15 +292,42 @@ def tool_label(tool):
 
 def tool_ran(tool):
     """Why a completed tool event is a breach of the sandbox, or None: a read, shell or write that completed without
-    a denial or an error, or a listing that found anything (choice 10 with the owner's change 2). A denied or errored
-    call, an empty listing and any other tool are counted and kept, never failed on."""
+    a denial, a rejection or an error, or a listing that found anything (choice 10 with the owner's change 2). A denied,
+    rejected or errored call, an empty listing and any other tool are counted and kept, never failed on."""
     if tool["subtype"] != "completed":
         return None
-    if tool["kind"] in FENCED_TOOLS and tool["outcome"] not in ("denied", "error"):
+    if tool["kind"] in FENCED_TOOLS and tool["outcome"] not in ("denied", "rejected", "error"):
         return f"a tool ran: {tool['kind']}"
     if tool["kind"] == GLOB_TOOL and (tool["files"] or 0) >= 1:
         return f"a tool ran: {GLOB_TOOL} ({_files_text(tool['files'])})"
     return None
+
+
+def mcp_tools(parsed):
+    """The MCP tools Cursor listed in the stream (its `getMcpToolsToolCall` results), sorted, each once (brief 32, R0:
+    the probe records them). A listing's content is a JSON object, a list of them, or one object a line."""
+    names = set()
+    for event in parsed.events:
+        tool_call = event.get("tool_call") if event.get("type") == "tool_call" else None
+        body = tool_call.get(MCP_LISTING) if isinstance(tool_call, dict) else None
+        success = ((body or {}).get("result") or {}).get("success") if isinstance(body, dict) else None
+        content = success.get("content") if isinstance(success, dict) else None
+        if not isinstance(content, str):
+            continue
+        try:
+            found = [json.loads(content)]
+        except ValueError:
+            found = []
+            for line in content.splitlines():
+                try:
+                    found.append(json.loads(line))
+                except ValueError:
+                    continue
+        for item in found:
+            for entry in item if isinstance(item, list) else [item]:
+                if isinstance(entry, dict) and isinstance(entry.get("tool"), str):
+                    names.add(entry["tool"])
+    return sorted(names)
 
 
 def served_record(parsed, asked):
@@ -316,6 +399,9 @@ def run(prompt, *, model, run=subprocess.run, environ=os.environ, call_id="call"
                           "command never reads its first word as a subcommand")
     if len(prompt) > PROMPT_LIMIT:
         raise WorkerError(f"refused: the prompt is {len(prompt)} characters; cursor's limit is {PROMPT_LIMIT}")
+    refusal = guard(temp_root())  # brief 32 (R0): nothing above the folder Cursor reads as rules
+    if refusal:
+        raise WorkerError(refusal)
     return judge(call(prompt, model=model, run=run, environ=environ, call_id=call_id), model)
 
 
@@ -396,11 +482,44 @@ class Readiness(tuple):
         return made
 
 
+def _entry(state_path):
+    try:
+        data = json.loads(Path(state_path).read_text())
+    except (OSError, ValueError):
+        return None
+    entry = data.get(SANDBOX_KEY) if isinstance(data, dict) else None
+    return entry if isinstance(entry, dict) and isinstance(entry.get("version"), str) else None
+
+
+def passed_version(state_path):
+    """The agent version the sandbox probe passed on, or None. Brief 32 (R0): only a pass that ran every canary of
+    CANARIES counts, so the two-canary probe's pass is no pass and the router probes again."""
+    entry = _entry(state_path)
+    return entry["version"] if entry is not None and list(entry.get("canaries") or ()) == list(CANARIES) else None
+
+
+def record_pass(state_path, version, *, mcp=(), rules_from_above=(), now=None):
+    """A pass of the sandbox probe: the agent version, when, the canaries it ran, the MCP tools Cursor listed and the
+    rule files above its folder whose markers showed in its stream (the design chat's fix of 29 Oct)."""
+    path = Path(state_path)
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        data = {}
+    data[SANDBOX_KEY] = {"version": version, "passed_at": (now or datetime.now(timezone.utc)).isoformat(timespec="seconds"),
+                         "canaries": list(CANARIES), "mcp_tools": sorted(mcp), "rules_from_above": list(rules_from_above)}
+    path.write_text(json.dumps(data, indent=2) + "\n")
+
+
 def ready(state_path, run=subprocess.run, environ=os.environ):
     """(True, None), or (False, reason): asked once per command before the first Cursor call (the owner's change 3).
-    The sandbox probe's pass on record (probe_state.json) must be on the installed agent version, and the command
-    must be signed in. Two local reads, never a model call. A Readiness, so the refusal's code rides along."""
-    recorded = search.passed_version(state_path, SANDBOX_KEY)
+    The sandbox probe's pass on record (probe_state.json) must be on the installed agent version, with every canary
+    (brief 32, R0), and the command must be signed in. Two local reads, never a model call. A Readiness, so the
+    refusal's code rides along."""
+    recorded = passed_version(state_path)
+    if recorded is None and _entry(state_path) is not None:  # brief 32 (R0): a pass from before the third canary
+        return Readiness((False, "cursor: Cursor's safety check gained a canary since its pass on record; the router "
+                                 "checks it again before Cursor's next task"), "probe_failed")
     if recorded is None:  # brief 23 (decision 5): plain words, what the router does next; never "run sr probe"
         return Readiness((False, "cursor: no safety check on record for Cursor yet; the router checks it before Cursor's "
                                  "next task"), "probe_failed")

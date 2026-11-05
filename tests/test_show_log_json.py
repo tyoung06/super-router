@@ -121,15 +121,21 @@ def test_vote_lists_the_answers_and_the_tally(world):
 
 
 def test_redteam_lists_each_attack_with_what_the_reviser_answered(world):
-    world.worker, world.chatgpt = Scripted(BUILD, REVISION), Chat(ATTACKS, "PASS")
+    # brief 32: presets 1.7's redteam answers by label; this world's Cursor isn't ready, so its second attack is left out
+    world.worker = Scripted(BUILD, REVISION.replace("## Answered\n3.", "## Answered\nA3:"))
+    world.chatgpt = Chat(ATTACKS, "PASS")
     world.json("relay", "redteam", "a one-page budget ritual")
     doc = _show(world, "1")
     assert doc["outcome"] == "passed"
     assert doc["attacks"] == [
-        {"n": 1, "severity": "high", "text": "No trigger for a change is defined.", "answered": None},
-        {"n": 2, "severity": "medium", "text": "Groceries only.", "answered": None},
-        {"n": 3, "severity": "low", "text": "Sunday may clash with plans.",
-         "answered": "Sunday is the user's choice; the plan says to move it if needed."}]
+        {"label": "A1", "attacker": "chatgpt", "n": 1, "severity": "high", "text": "No trigger for a change is defined.",
+         "answered": None, "check": "ok"},
+        {"label": "A2", "attacker": "chatgpt", "n": 2, "severity": "medium", "text": "Groceries only.", "answered": None,
+         "check": "ok"},
+        {"label": "A3", "attacker": "chatgpt", "n": 3, "severity": "low", "text": "Sunday may clash with plans.",
+         "answered": "Sunday is the user's choice; the plan says to move it if needed.", "check": "ok"}]
+    assert [(l["letter"], l["state"]) for l in doc["attack_lists"]] == [("A", "ran"), ("B", "left_out")]
+    assert doc["attack_lists"][1]["line"].startswith("One attacker: Cursor isn't available (")
     assert "## Answered" not in doc["result"]
 
 

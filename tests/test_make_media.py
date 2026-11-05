@@ -87,11 +87,13 @@ def _make_media_task(conn, task_id="sr-20261013-120000-ab12"):
 def test_the_do_and_fix_calls_to_grok_carry_the_instructions_and_the_check_does_not(conn):
     task = _make_media_task(conn)
     _, kind, agent, prompt, _ = cli._plan_call(task, checking.Step("do"))
-    assert (kind, agent) == ("do", "grok") and prompt == grok.make_media_prompt(task["task_id"], TASK)
+    assert (kind, agent) == ("do", "grok") and prompt == grok.make_media_prompt(  # brief 29.1: the deliverable line
+        task["task_id"], f"{TASK}\n\n{checking.DELIVERABLE_LINE}")
     _, kind, agent, prompt, _ = cli._plan_call(task, checking.Step("fix", result="r", fix_list="1. bigger"))
-    imagine = grok.imagine_instructions(task["task_id"])  # brief 11.1 (E1): right after the review notes
-    assert (kind, agent) == ("fix", "grok") and imagine in prompt
-    assert prompt.index("===== REVIEW NOTES =====") < prompt.index(imagine) < prompt.index("===== EARLIER RESULT =====")
+    imagine = grok.imagine_instructions(task["task_id"])  # brief 11.1 (E1): right after the review notes, which brief
+    assert (kind, agent) == ("fix", "grok") and imagine in prompt  # 29.1 splits into the MUST FIX and SUGGESTIONS blocks
+    assert prompt.index("===== MUST FIX =====") < prompt.index("===== SUGGESTIONS =====") < prompt.index(imagine) \
+        < prompt.index("===== EARLIER RESULT =====")
     _, kind, agent, prompt, _ = cli._plan_call(task, checking.Step("check", result="r"))
     assert (kind, agent) == ("check", "claude") and "Grok Imagine" not in prompt
 
@@ -209,7 +211,7 @@ def test_grok_makes_an_image_the_router_pulls_it_and_claude_checks(conn, monkeyp
     assert "CHECKED: passed." in out and code == 0
     # the checker got Grok's image as a copy under out/ (Phase E)
     prompt, kwargs = worker.calls[0]
-    assert kwargs == {"files": [(saved[0], "out/twenty-something.png")], "tag": tid}
+    assert {k: v for k, v in kwargs.items() if k != "choice"} == {"files": [(saved[0], "out/twenty-something.png")], "tag": tid}  # 33.3: choice= too
     assert "in your working folder: out/twenty-something.png" in prompt and "Read tool" in prompt
 
 

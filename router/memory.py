@@ -157,8 +157,22 @@ def start_marker(tag):
 
 
 def caps():
-    """The caps from config/settings.json (decision 9): max_items, max_chars, query_chars."""
-    return {name: settings.memory_setting(f"memory_{name}")[0] for name in ("max_items", "max_chars", "query_chars")}
+    """The caps from config/settings.json (decision 9; brief 29.1, decision 25): newest, matches, max_chars,
+    query_chars."""
+    return {name: settings.memory_setting(f"memory_{name}")[0]
+            for name in ("newest", "matches", "max_chars", "query_chars")}
+
+
+def writes_of(row):
+    """The task's retain records alone (brief 30: its Forget and Remember again records left out)."""
+    return [w for w in log.memory_of(row) if not (log.FORGET_KEYS & set(w))]
+
+
+def forgotten(row):
+    """Brief 30 (decision 15): the date of the owner's Forget when it is the task's newest Forget or Remember again
+    record, else None."""
+    marks = [w for w in log.memory_of(row) if log.FORGET_KEYS & set(w)]
+    return marks[-1].get("forgotten") if marks else None
 
 
 def storable(row, *, off_counts=True):
@@ -167,11 +181,14 @@ def storable(row, *, off_counts=True):
     versus candidate whose review failed (the go's amendment 4). Never an unchecked delivery, a failed check, or a task
     that is not done. Brief 27 (decision 7): never a task whose newest write record is `skipped: off` (delivered while
     memory was off), so the backfill, the rebuild and entry one never take it; `store` passes `off_counts=False`, judging
-    a delivery by the setting at that delivery."""
-    if row["status"] != "done":
+    a delivery by the setting at that delivery. Brief 30 (decision 15): never a forgotten task, so no block carries it,
+    the query never takes its text, a recall naming it is dropped and the backfill and the rebuild never store it."""
+    if row["status"] != "done" or row["mode"] == "suggest":  # brief 33.4 (decision 10): a suggest's result is its ideas
+        return False
+    if forgotten(row) is not None:
         return False
     if off_counts:
-        writes = log.memory_of(row)
+        writes = writes_of(row)
         if writes and writes[-1].get("skipped") == OFF:
             return False
     state = row["check_state"]
@@ -212,7 +229,8 @@ def section_of(row, calls):
 def content_of(row, calls):
     """Decision 4: the task text, a blank line, the delivered result as `sr show` prints it, and on a project task
     the `## Handoff` section from the delivered call's text. The one text the retain stores and entry one shows."""
-    parts = [row["task"], row["result"] or ""]
+    from router import checking  # checking reads context, which reads this module; kept local
+    parts = [row["task"], checking.without_next(row["result"] or "")]  # brief 33 (decision 6): never the agent's Next
     section = section_of(row, calls)
     if section:
         parts.append(section)
@@ -276,70 +294,95 @@ def entries_of_block(text):
     return entries
 
 
-def query_of(task_text, query_chars):
-    """Decision 8: the task text cut to the query cap (Hindsight refuses a query past 500 tokens)."""
-    return (task_text or "")[:query_chars]
+def query_of(task_text, query_chars, before=None):
+    """Decision 8: the task text cut to the query cap (Hindsight refuses a query past 500 tokens). Brief 29.1 (decision
+    26): with `before`, the text of the tag's newest delivered task, the query is the task's text, a line break and that
+    text, cut to the cap by cutting the earlier task's text first; the task's own text is cut only when it alone passes
+    the cap. A tag's first task searches with its own text."""
+    own = task_text or ""
+    room = query_chars - len(own) - 1
+    if not before or room <= 0:
+        return own[:query_chars]
+    return f"{own}\n{before[:room]}"
 
 
 def task_of_document(conn, document_id):
-    """The log row a recall result names, or None (a document the log does not know)."""
+    """The log row a recall result names, or None (a document the log does not know, or a piece: brief 29)."""
     if not isinstance(document_id, str) or not document_id.startswith("task-"):
         return None
-    return log.get_task(conn, document_id[len("task-"):])
+    row = log.get_task(conn, document_id[len("task-"):])
+    return None if row is not None and log.is_piece(row) else row
 
 
 def rows_under(conn, tag):
-    """Every task with the tag, newest first."""
+    """Every task with the tag, newest first. Brief 29 (decision 13): never a piece of a split (a row with a parent):
+    the split is the project's task, its pieces are never the newest task a memory block starts with."""
     kind, _, name = tag.partition(":")
     column = "project" if kind == "project" else "chat"
-    return conn.execute(f"SELECT rowid AS n, * FROM tasks WHERE {column} = ? ORDER BY created_at DESC, rowid DESC",
-                        (name,)).fetchall()
+    return conn.execute(f"SELECT rowid AS n, * FROM tasks WHERE {column} = ? AND parent IS NULL"
+                        " ORDER BY created_at DESC, rowid DESC", (name,)).fetchall()
 
 
-def newest_storable(conn, tag, exclude_task_id):
-    """Entry one: the newest delivered task under the tag from the log, never the task being run."""
+def newest_storable(conn, tag, exclude_task_id, count):
+    """The `count` newest delivered tasks under the tag from the log, newest first, never the task being run: the newest
+    three that start the block (brief 29.1, decision 25; before it, entry one alone)."""
+    found = []
     for row in rows_under(conn, tag):
+        if len(found) == count:
+            break
         if row["task_id"] != exclude_task_id and storable(row):
-            return row
-    return None
+            found.append(row)
+    return found
 
 
 @dataclass(frozen=True)
 class Gathered:
     tag: str
-    entries: tuple          # newest first, capped at max_items
+    entries: tuple          # the newest tasks, then the matches, each part newest first (brief 29.1, decision 25)
     found: int              # after the drops, before the cap
     dropped: tuple          # task numbers dropped for still looking like a key
     unavailable: str | None # why the store could not be used, or None
+    query: str = ""         # brief 30 (A3): the query as sent, redacted and cut
 
 
-def gather(conn, task, client, secrets, *, max_items, max_chars, query_chars):
-    """Decision 8: entry one from the log (its content's head), then the recall matches (`document_id` to task, the
-    matching chunk as the text when it is a substring of the task's content, else the content's head; the task being
-    run, a stray from another tag, a non-storable source, a duplicate by number, and a key-like text are dropped),
-    newest first, at most `max_items`. Any failure on recall means no block at all (decision 12)."""
+def _get(row, key):
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return None
+
+
+def gather(conn, task, client, secrets, *, newest, matches, max_chars, query_chars):
+    """Brief 29.1 (decisions 25 and 26): the tag's `newest` delivered tasks from the log (their content's head), newest
+    first and never ranked, then up to `matches` recall matches not among them (`document_id` to task, the matching chunk
+    as the text when it is a substring of the task's content, else the content's head; the task being run, a stray from
+    another tag, a non-storable source, a duplicate by number, and a key-like text are dropped), newest first. The query
+    is the task's text and the newest task's (query_of). Any failure on recall means no block at all (decision 12)."""
     tag = log.tag_of(task)
     entries, dropped, seen = [], [], set()
 
+    source = _get(task, "from_task")  # brief 33 (decision 9): the source is in the from-block whole, so never here
+
     def take(row, chunk=None):
-        if row["task_id"] == task["task_id"] or row["n"] in seen or not storable(row):
-            return
+        if row["task_id"] in (task["task_id"], source) or row["n"] in seen or not storable(row):
+            return None
         seen.add(row["n"])
         entry = entry_of(row, log.calls_for(conn, row["task_id"]))
         content = safety.redact(entry.text, secrets)
         text = chunk if chunk and chunk in content else content  # the matching chunk, else the content's head
         if safety.key_like(text) is not None:
             dropped.append(row["n"])
-            return
-        entries.append(dataclasses.replace(entry, text=text))
+            return None
+        return dataclasses.replace(entry, text=text)
 
+    rows = newest_storable(conn, tag, task["task_id"], count=newest)
+    before = safety.redact(rows[0]["task"] or "", secrets) if rows else None
+    query = safety.redact(query_of(task["task"], query_chars, before), secrets)  # brief 30 (A3): kept as sent
     try:
-        results = client.recall(query_of(task["task"], query_chars), tag, max_tokens=RECALL_MAX_TOKENS)
+        results = client.recall(query, tag, max_tokens=RECALL_MAX_TOKENS)
     except Unavailable as e:
-        return Gathered(tag, (), 0, (), str(e))
-    newest = newest_storable(conn, tag, task["task_id"])
-    if newest is not None:
-        take(newest)
+        return Gathered(tag, (), 0, (), str(e), query)
+    head = [e for e in (take(row) for row in rows) if e is not None]
     for result in results:
         if not isinstance(result, dict):
             continue
@@ -349,9 +392,11 @@ def gather(conn, task, client, secrets, *, max_items, max_chars, query_chars):
         row = task_of_document(conn, result.get("document_id"))
         if row is not None:
             chunk = result.get("text")
-            take(row, chunk if isinstance(chunk, str) else None)
+            found = take(row, chunk if isinstance(chunk, str) else None)
+            if found is not None:
+                entries.append(found)
     entries.sort(key=lambda e: e.n, reverse=True)
-    return Gathered(tag, tuple(entries[:max_items]), len(entries), tuple(dropped), None)
+    return Gathered(tag, tuple(head + entries[:matches]), len(head) + len(entries), tuple(dropped), None, query)
 
 
 def for_call(conn, task, client, secrets, *, reuse=None):
@@ -379,8 +424,8 @@ def for_call(conn, task, client, secrets, *, reuse=None):
         return [], {"tag": tag, OFF: True}
     found = gather(conn, task, client, secrets, **caps())
     if found.unavailable is not None:
-        return [], {"tag": tag, "unavailable": True, "reason": found.unavailable}
-    base = {"tag": tag, "found": found.found}
+        return [], {"tag": tag, "unavailable": True, "reason": found.unavailable, "query": found.query}
+    base = {"tag": tag, "found": found.found, "query": found.query}  # brief 30 (A3): the query this call searched with
     if found.dropped:
         base["dropped"] = list(found.dropped)
     return list(found.entries), base
@@ -409,15 +454,16 @@ def ending_state(row, calls):
     return f"{row['status']}/{row['check_state']}/{len(calls)}"
 
 
-def store(conn, row, calls, client, secrets):
+def store(conn, row, calls, client, secrets, *, as_step=False):
     """Decisions 5 and 6: retain a delivered task's content under its tag, or say why not. Returns (the write record
     without `at`, the line for the owner), or None when nothing belongs on the row: no tag, not storable, or a record
-    already written for this ending. A failed retain never raises; nothing retries."""
+    already written for this ending. A failed retain never raises; nothing retries. Brief 34 (decision 2): `as_step`
+    stores a run's step when the run lands (a piece otherwise stores none)."""
     tag = log.tag_of(row)
-    if not tag:
-        return None
+    if not tag or (log.is_piece(row) and not as_step):  # brief 29 (decision 13): a piece stores no memory; its split
+        return None  # stores one; brief 34: a run's steps are stored at its land
     state = ending_state(row, calls)
-    writes = log.memory_of(row)
+    writes = writes_of(row)  # brief 30: a Forget record is not a write
     if writes and writes[-1].get("state") == state:
         return None
     if not storable(row, off_counts=False):
@@ -437,8 +483,9 @@ def store(conn, row, calls, client, secrets):
 
 
 def tagged_rows_oldest_first(conn):
-    return conn.execute("SELECT rowid AS n, * FROM tasks WHERE project IS NOT NULL OR chat IS NOT NULL"
-                        " ORDER BY created_at, rowid").fetchall()
+    """Every tagged task, oldest first; never a piece (brief 29): the split stores the one memory."""
+    return conn.execute("SELECT rowid AS n, * FROM tasks WHERE (project IS NOT NULL OR chat IS NOT NULL)"
+                        " AND parent IS NULL ORDER BY created_at, rowid").fetchall()
 
 
 def _retain_row(conn, client, row, secrets):
@@ -492,6 +539,46 @@ def rebuild(conn, client, secrets, out):
     return stored, skipped
 
 
+def _delete_forgotten(conn, client, have, out):
+    """Every forgotten task's document the bank still holds, deleted. Returns how many."""
+    gone = 0
+    for row in tagged_rows_oldest_first(conn):
+        document = f"task-{row['task_id']}"
+        if forgotten(row) is not None and document in have:
+            try:
+                client.delete_document(document)
+                gone += 1
+            except Unavailable as e:
+                out(f"memory: could not delete {document} ({e}); the next backfill tries again")
+    return gone
+
+
+def forget(conn, row, client, secrets, *, date, undo=False):
+    """Brief 30 (decision 15): `sr forget <n>` adds a `forgotten` record and deletes the task's document from the bank now
+    when the store answers (else the next backfill does); `--undo` (Remember again) adds `remembered` and stores the task
+    now when it is storable again by today's rules and the store answers (else the backfill does; a delivery made while
+    memory was off stays unstored). The log keeps the task; HANDOFF.md is never touched; a block already sent never
+    changes. Returns the line for the owner. Refusals are the caller's (an open task, an untagged task, a piece)."""
+    log.add_memory_write(conn, row["task_id"], {"remembered" if undo else "forgotten": date})
+    row = log.get_task(conn, row["task_id"])
+    document = f"task-{row['task_id']}"
+    if client is None or settings.memory_mode() == OFF:
+        return ("memory is off, so the bank was not touched; the next backfill " +
+                ("stores it" if undo and storable(row) else "takes it out" if not undo else "has nothing to store"))
+    if not undo:
+        try:
+            client.delete_document(document)
+        except Unavailable as e:
+            return f"the store did not answer ({e}); the next backfill deletes {document}"
+        return f"{document} deleted from the bank"
+    if not storable(row):
+        return "it stays out of the bank: it was never storable (not delivered, a failed check, or delivered while memory was off)"
+    reason = _retain_row(conn, client, row, secrets)
+    if reason is None:
+        return f"{document} stored in the bank again"
+    return f"it could not be stored now ({reason}); the next backfill stores it"
+
+
 def backfill(conn, client, secrets, out):
     """Build brief 22 (decision 8; rules v2.31, Memory "Down"): after a start, every delivered, storable tagged task the
     bank is missing (its `task-<task_id>` not among the bank's documents) is stored, oldest first: what `rebuild` does,
@@ -501,6 +588,9 @@ def backfill(conn, client, secrets, out):
     except Unavailable as e:
         out(f"memory: backfill skipped: {e}")
         return 0, 0
+    gone = _delete_forgotten(conn, client, have, out)  # brief 30 (decision 15): a forgotten task's document leaves the bank
+    if gone:
+        out(f"memory: backfill: deleted {gone} forgotten task(s)")
     rows = [row for row in tagged_rows_oldest_first(conn) if storable(row) and f"task-{row['task_id']}" not in have]
     stored, skipped, reasons = _retain_all(conn, client, rows, secrets, out, counting=False)
     out(f"memory: backfill: stored {stored}, skipped {skipped}")

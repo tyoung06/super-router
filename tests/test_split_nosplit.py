@@ -35,7 +35,7 @@ def test_the_planner_prompt_says_what_may_not_be_split_and_offers_no_split():
     assert "Work that needs another part's result stays in one piece with that part: a function and its tests are one piece." in text
     assert ("If the task is one chain, where each part needs the one before it, do not split it: return only "
             "`## No split` with one line saying why.") in text
-    assert split.plan_prompt(TASK) == TASK + "\n\n" + text
+    assert split.plan_prompt(TASK, "TEAMS") == TASK + "\n\n" + text + "\n\nTEAMS"  # brief 29: the menu after the words
 
 
 def test_the_reask_shape_names_no_split_as_the_other_answer():

@@ -1,0 +1,17 @@
+{
+ "api_version": 1,
+ "project": {
+  "name": "seed-library",
+  "run_status": {
+   "running": false,
+   "state": null,
+   "command": null,
+   "started": null,
+   "ended": null,
+   "exit": null,
+   "output": "",
+   "folder": "~/Projects/seed-library",
+   "env_names": []
+  }
+ }
+}

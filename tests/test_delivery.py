@@ -9,7 +9,8 @@ import pytest
 
 from router import __main__ as cli
 from router import chatgpt_worker, checking, claude_worker, log, media, safety
-from tests.helpers import JEV_OK, shipped_roster
+from tests.helpers import claude_stream, JEV_OK, shipped_roster, today
+from tests.helpers import less_next
 
 ENVIRON = {"HOME": "/h", "PATH": "/bin", "USER": "t", "LANG": "C"}
 MODEL = "gpt-6.1-sol"
@@ -54,7 +55,11 @@ class SeesTheCopies:
             raise self.raises
         if self.write_codex_file and "--output-last-message" in argv:
             Path(argv[argv.index("--output-last-message") + 1]).write_text(self.stdout)
-        return subprocess.CompletedProcess(argv, self.returncode, self.stdout, "")
+            return subprocess.CompletedProcess(argv, self.returncode, self.stdout, "")
+        # brief 33.3: every Claude call is stream-json; a non-zero exit carries its text on stderr, as Claude Code prints it
+        if self.returncode:
+            return subprocess.CompletedProcess(argv, self.returncode, "", self.stdout)
+        return subprocess.CompletedProcess(argv, self.returncode, claude_stream(self.stdout), "")
 
 
 # ---------- the layout and the paragraph ----------
@@ -118,7 +123,7 @@ def test_claude_with_files_runs_inside_the_copy_folder_with_read_only_and_cleans
     answer = claude_worker.run("describe logo.png", run=run, environ=ENVIRON, files=_items(tmp_path), tag="sr-1")
     assert answer == "the answer"
     argv, kwargs, held = run.calls[0]
-    assert argv == safety.claude_argv("sonnet", tools="Read") and argv[-2:] == ["--tools", "Read"]
+    assert argv == safety.claude_argv("sonnet", tools="Read") and argv[argv.index("--tools") + 1] == "Read"
     assert kwargs["cwd"] == folders / "task-sr-1" and kwargs["input"] == "describe logo.png"
     assert held == ["frames/frame_01.jpg", "logo.png", "paper.pdf"]
     assert sorted(folders.iterdir()) == [], "workspace/ is empty after the call"
@@ -128,7 +133,7 @@ def test_claude_without_files_runs_exactly_as_before(folders):
     run = SeesTheCopies()
     claude_worker.run("hi", run=run, environ=ENVIRON)
     argv, kwargs, held = run.calls[0]
-    assert argv[-2:] == ["--tools", ""] and kwargs["cwd"] == folders and held == []
+    assert argv[argv.index("--tools") + 1] == "" and kwargs["cwd"] == folders and held == []
 
 
 def test_claude_with_files_cleans_up_when_the_call_fails(tmp_path, folders):
@@ -188,7 +193,8 @@ def test_the_do_prompt_names_the_files_as_data_and_the_check_prompt_names_what_c
     _, kind, agent, prompt, _ = cli._plan_call(task, checking.Step("check", result="a logo and a paper"))
     assert (kind, agent) == ("check", "chatgpt")
     assert prompt == checking.checker_prompt("what is in these", "a logo and a paper", no_tools=False, can_browse=False,
-                                             files_text=media.files_paragraph("chatgpt", media.layout("sr-1", log.files_of(task))))
+                                             files_text=media.files_paragraph("chatgpt", media.layout("sr-1", log.files_of(task))),
+                                             sent_on=today())  # Proof 2's round 2: the task's date
     assert "You cannot open these: paper.pdf" in prompt and "sanity check only" in prompt
 
 
@@ -210,7 +216,7 @@ def test_a_task_without_files_gets_no_paragraph(conn):
     log.set_route(conn, "sr-0", agents=("claude", "grok", "chatgpt", "muse"), agent="claude", route_reason="best", skill="writing",
                   skill_source="jev", checker="chatgpt", check_state="pending")
     task = log.get_task(conn, "sr-0")
-    assert cli._plan_call(task, checking.Step("do"))[3] == "write a haiku"
+    assert less_next(cli._plan_call(task, checking.Step("do"))[3]) == "write a haiku\n\n" + checking.DELIVERABLE_LINE  # brief 29.1
     assert cli._delivery(task, checking.Step("do")) == []
 
 
@@ -243,7 +249,9 @@ def test_the_loop_hands_the_copies_to_the_doer_and_the_checker_each_in_its_own_f
     for_chatgpt = media.layout(tid, records, agent="chatgpt")
     assert [rel for _, rel in for_claude] == ["logo.png", "paper.pdf"], "Claude gets the PDF itself"
     assert [rel for _, rel in for_chatgpt] == ["logo.png", "pages/paper-page-1.png", "pages/paper-page-2.png", "pages/paper-page-3.png"]
-    assert seen == [("claude", {"files": for_claude, "tag": tid}), ("chatgpt", {"files": for_chatgpt, "tag": tid})]
+    # brief 33.3: every worker call also gets its model choice (`choice=`); the copies are what this test is about
+    assert [(a, {k: v for k, v in kw.items() if k != "choice"}) for a, kw in seen] == [
+        ("claude", {"files": for_claude, "tag": tid}), ("chatgpt", {"files": for_chatgpt, "tag": tid})]
     assert row["check_state"] == "passed"
 
 

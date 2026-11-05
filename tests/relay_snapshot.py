@@ -51,7 +51,7 @@ def run(name, slots=None):
         "grok": [{k: _clean(v, tid) for k, v in sent.items()} for sent in hook.sent],
         "claude": [_clean(p, tid) for p in worker.prompts],
         "chatgpt": [_clean(p, tid) for p in chatgpt.prompts],
-        "chatgpt_kwargs": chatgpt.kwargs,
+        "chatgpt_kwargs": [{k: v for k, v in kw.items() if k != "choice"} for kw in chatgpt.kwargs],  # 33.3: choice= too
         "task": {k: _clean(row[k], tid) for k in row.keys() if k not in ROW_SKIP},
         "calls": [{k: _clean(c[k], tid) for k in c.keys() if k not in CALL_SKIP} for c in calls],
     }

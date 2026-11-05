@@ -13,6 +13,7 @@ entry; a folder already there is registered as `add` registers it. `plan_new` is
 written. Nothing here deletes anything.
 """
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,7 +28,7 @@ START = "<!-- sr:start -->"
 END = "<!-- sr:end -->"
 KEEP = 8            # entries the block holds, newest first
 WARN_LINES = 300    # past this many lines the router warns after a write (and at `sr project add`)
-ENTRY_HEAD = re.compile(r"^### #\d+ ")
+ENTRY_HEAD = re.compile(r"^### (?:#\d+ |\d{4}-\d{2}-\d{2} · )")  # brief 28: a dated head (files added) is an entry too
 
 
 class ProjectError(safety.SafeError):
@@ -133,7 +134,7 @@ def add(name, folder, *, path=None):
         raise ProjectError(f"{safety.one_line(str(folder))} is not a folder")
     registry = read_registry(path)
     if name in registry:
-        raise ProjectError(f"{name} is already registered at {safety.one_line(registry[name])}; remove it first")
+        raise ProjectError(f"{name} is already registered at {safety.one_line(tilde(registry[name]))}; remove it first")
     handoff = folder / HANDOFF
     created = marked = False
     if not handoff.exists():
@@ -165,6 +166,64 @@ def folder_of(name, *, path=None):
     """The registered folder of `name`, or None."""
     found = read_registry(path).get(name)
     return Path(found) if found else None
+
+
+# ---------- a project's test command (brief 28, decision 17) ----------
+
+TESTS_PATH = safety.REPO_ROOT / "config" / "project_tests.json"   # gitignored: the router's, never in a project
+TESTS_NAME = "config/project_tests.json"
+
+
+def read_tests(path=None):
+    """{name: [words]}. A missing file is no commands; one that can't be read is a ProjectError."""
+    path = Path(path or TESTS_PATH)
+    try:
+        raw = path.read_text()
+    except FileNotFoundError:
+        return {}
+    except OSError:
+        raise ProjectError(f"{TESTS_NAME} could not be read") from None
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        raise ProjectError(f"{TESTS_NAME} could not be read: it is not JSON") from None
+    if not isinstance(data, dict) or not all(
+            isinstance(k, str) and isinstance(v, list) and v and all(isinstance(w, str) for w in v)
+            for k, v in data.items()):
+        raise ProjectError(f"{TESTS_NAME} could not be read: it is not a map of names to words")
+    return data
+
+
+def _write_tests(data, path=None):
+    path = Path(path or TESTS_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_name(path.name + ".tmp")
+    temp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    os.replace(temp, path)
+
+
+def tests_of(name, *, path=None):
+    """The project's test words, or None when it has none (or the file can't be read)."""
+    try:
+        return read_tests(path).get(name)
+    except ProjectError:
+        return None
+
+
+def set_tests(name, words, *, path=None):
+    data = read_tests(path)
+    data[name] = list(words)
+    _write_tests(data, path)
+
+
+def clear_tests(name, *, path=None):
+    """Drop the project's test command; True when there was one."""
+    data = read_tests(path)
+    if name not in data:
+        return False
+    del data[name]
+    _write_tests(data, path)
+    return True
 
 
 # ---------- making a project (brief 26) ----------
@@ -209,8 +268,14 @@ def _notes_problem(notes, secrets):
     """Why the starting notes are refused, or None: past NOTES_LIMIT, a line that is one of the router's markers (the
     test `_marker_lines` uses), or a line the redactor would change or the key scan matches (the two checks a handoff
     passes before every call, context.load). Names the line; never the text."""
-    if len(notes) > NOTES_LIMIT:
-        return f"the starting notes are {len(notes):,} characters; at most {NOTES_LIMIT:,}"
+    return notes_problem(notes, secrets)
+
+
+def notes_problem(notes, secrets, *, limit=NOTES_LIMIT, what="the starting notes"):
+    """`_notes_problem` with its cap and its words given (brief 30, decision 12: a project's notes, saved or pinned from
+    the page, against `project_notes_max`)."""
+    if len(notes) > limit:
+        return f"{what} are {len(notes):,} characters; at most {limit:,}"
     lines = notes.splitlines()
     for n, line in enumerate(lines, 1):
         if line.strip() in (START, END):
@@ -449,18 +514,46 @@ def render_block(entries, nl="\n"):
     return nl + body + nl + nl
 
 
-def write_entry(folder, entry):
-    """The one write the router makes in a project folder: read HANDOFF.md, put `entry` at the top of the block,
-    keep the newest KEEP entries, write back with nothing outside the markers changed. Returns (the file's line
-    count after, the line the block starts on)."""
-    handoff = handoff_path(folder)
-    text = _read_text(handoff)
+def with_entry(text, entry):
+    """`text` with `entry` at the top of its block and the newest KEEP entries kept; nothing outside the markers changed.
+    Pure (build brief 28: a land commits the text before it is written)."""
     before, _, after, nl = split_block(text)
     entries = [entry.strip("\n")] + entries_of(text)
     new = before + render_block(entries[:KEEP], nl) + after
     if not before.endswith(nl):  # the START line was the file's last line, without a newline
         new = before + nl + render_block(entries[:KEEP], nl) + after
-    _write_text(handoff, new)
+    return new
+
+
+def _entry_number(entry):
+    m = re.match(r"^### #(\d+) ", entry)
+    return int(m.group(1)) if m else None
+
+
+def with_entries(text, entries):
+    """`text` with its block holding exactly `entries` (newest first, at most KEEP); nothing outside the markers changed."""
+    before, _, after, nl = split_block(text)
+    new = before + render_block(entries[:KEEP], nl) + after
+    if not before.endswith(nl):
+        new = before + nl + render_block(entries[:KEEP], nl) + after
+    return new
+
+
+def replace_entry(text, n, entry):
+    """Brief 28 (decision 12): task n's entry becomes `entry` where it stands; with none in the block, `entry` goes on top."""
+    entries = entries_of(text)
+    for i, found in enumerate(entries):
+        if _entry_number(found) == n:
+            return with_entries(text, entries[:i] + [entry.strip("\n")] + entries[i + 1:])
+    return with_entry(text, entry)
+
+
+def write_entry(folder, entry):
+    """The one write the router makes in a project folder: read HANDOFF.md, put `entry` at the top of the block,
+    keep the newest KEEP entries, write back with nothing outside the markers changed. Returns (the file's line
+    count after, the line the block starts on)."""
+    new = with_entry(_read_text(handoff_path(folder)), entry)
+    _write_text(handoff_path(folder), new)
     return line_count(new), block_start(new)
 
 

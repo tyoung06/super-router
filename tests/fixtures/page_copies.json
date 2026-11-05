@@ -10,5 +10,10 @@
    "copy": "sr split --go sr-20261021-000803-3d77 --answer y --skill 1=writing --skill 2=code"},
   {"request": {"action": "split_go", "task_id": "sr-20261021-000803-3d77", "choice": "n"}, "copy": "sr split --go sr-20261021-000803-3d77 --answer n"},
   {"request": {"action": "floor", "skill": "planning", "answers": "sr-20261021-000803-3d77", "text": "redo it's calendar for $5"},
-   "copy": "sr route --skill planning --answers sr-20261021-000803-3d77 -- 'redo it'\"'\"'s calendar for $5'"}
+   "copy": "sr route --skill planning --answers sr-20261021-000803-3d77 -- 'redo it'\"'\"'s calendar for $5'"},
+  {"request": {"action": "models_set", "selector": {"skill": "code"}, "agent": "claude", "model": "claude-opus-5-5"},
+   "copy": "sr models set --skill code --agent claude --model claude-opus-5-5"},
+  {"request": {"action": "models_clear", "selector": {"team": "redteam", "stage": 2}, "agent": "chatgpt"},
+   "copy": "sr models clear --team redteam --stage 2 --agent chatgpt"},
+  {"request": {"action": "models_fable", "to": "on"}, "copy": "sr models fable on"}
 ]

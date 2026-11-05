@@ -1,0 +1,13 @@
+diff --git a/loans.py b/loans.py
+--- a/loans.py
++++ b/loans.py
+@@ -1,4 +1,9 @@
++class OutOfStock(Exception):
++    pass
++
++
+ def lend(packet, member):
++    if packet.stock < 1:
++        raise OutOfStock(packet.name)
+     packet.stock -= 1
+     return member.loans.append(packet)

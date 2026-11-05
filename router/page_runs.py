@@ -61,9 +61,11 @@ class Runs:
         self._runs, self._ids, self._lock = collections.OrderedDict(), itertools.count(1), threading.Lock()
         self.on_finished = None  # brief 26 (decision 11): called with (a copy of the run, its exit) before it reads as ended
 
-    def start(self, args, display, kind="action", request=None):
-        """`sr <args>` started now; its record (a copy). Raises OSError when the command can't start."""
-        proc = self.popen([*self.prefix, *args], cwd=str(self.root), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+    def start(self, args, display, kind="action", request=None, stdin=None):
+        """`sr <args>` started now; its record (a copy). Raises OSError when the command can't start. Brief 31 (decision
+        9): `stdin` is a secret's value, written to the child's stdin and closed; it is never kept on the record."""
+        proc = self.popen([*self.prefix, *args], cwd=str(self.root),
+                          stdin=subprocess.DEVNULL if stdin is None else subprocess.PIPE, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE, text=True, start_new_session=True)
         run = {"id": f"run-{next(self._ids)}", "kind": kind, "display": display, "started": _iso(self.clock()),
                "pid": proc.pid, "running": True, "exit": None, "envelope": None, "message": None, "stderr": "",
@@ -72,7 +74,7 @@ class Runs:
             self._runs[run["id"]] = run
             self._prune()
             found = dict(run)
-        self.thread(target=self._wait, args=(run["id"], proc), daemon=True).start()
+        self.thread(target=self._wait, args=(run["id"], proc, stdin), daemon=True).start()
         return found
 
     def record(self, kind, display):
@@ -106,9 +108,9 @@ class Runs:
                 run["task_id"] = envelope["task_id"]
             self._prune()
 
-    def _wait(self, run_id, proc):
+    def _wait(self, run_id, proc, stdin=None):
         try:
-            stdout, stderr = proc.communicate()
+            stdout, stderr = proc.communicate(input=stdin) if stdin is not None else proc.communicate()
         except Exception as e:  # the pipes broke: say so, never crash the server
             stdout, stderr = "", f"the page server lost this command's output ({type(e).__name__})"
         self.finished(run_id, proc.returncode, stdout, stderr)

@@ -1,0 +1,17 @@
+{
+ "api_version": 1,
+ "notes": {
+  "name": "seed-library",
+  "folder": "~/Projects/seed-library",
+  "notes": "",
+  "block": "<!-- sr:start -->\n\n### #33 · 2026-10-19 · code · claude\nProduced:\npackets.py changed; test_packets.py added\nStatus:\nPackets count their loans.\nNext:\nShow the count on the list.\n\n### #32 · 2026-10-19 · failed: not passed after one fix round\n\n### #31 · 2026-10-19 · code · claude\nProduced:\nloans.py changed; test_loans.py added\nStatus:\nLoans have due dates.\nNext:\nShow overdue loans first.\n\n<!-- sr:end -->",
+  "hash": "e3b0c44298fc1c14",
+  "chars": 0,
+  "lines": 0,
+  "max": 20000,
+  "git": false,
+  "tracked": false,
+  "exists": true,
+  "has_block": true
+ }
+}

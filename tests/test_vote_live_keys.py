@@ -68,4 +68,4 @@ def test_run_3s_label_routes_claude_then_chatgpt_and_the_count_line_quotes_the_t
 
 def test_the_budget_is_the_briefs():
     assert BUDGET == {"claude": 4, "chatgpt": 4, "grok": 2, "jev": 0}
-    assert log.VERSION == 16   # no migration in brief 17; brief 18 added version 11; brief 19 added version 12 (chat, memory); 20 13; 21 14; 22 15; 25 16
+    assert log.VERSION == 21   # no migration in brief 17; brief 18 added version 11; brief 19 added version 12 (chat, memory); 20 13; 21 14; 22 15; 25 16; 28 17; 33 18; 33.1 19; 33.3 20; 34 21

@@ -1,0 +1,34 @@
+{
+ "api_version": 1,
+ "task_id": null,
+ "n": null,
+ "status": null,
+ "waiting_on": null,
+ "outcome": null,
+ "reason_code": null,
+ "exit": 0,
+ "message": "Auto runs step 3 of plan #65, 23 calls at most.\nA step already started finishes, so the run can pass its budget by up to one step's calls.",
+ "auto": {
+  "plan": {
+   "task_id": "sr-20261019-112718-0046",
+   "n": 65
+  },
+  "from_step": 3,
+  "to_step": 3,
+  "steps": [
+   3
+  ],
+  "budget": 23,
+  "used": 17,
+  "estimate": {
+   "calls": 4,
+   "max_calls": 4,
+   "jev_labels": 1
+  },
+  "first_stop_here": null,
+  "overrun": "A step already started finishes, so the run can pass its budget by up to one step's calls.",
+  "words": "Auto runs step 3 of plan #65, 23 calls at most.",
+  "spec_changed": false,
+  "spec_line": null
+ }
+}

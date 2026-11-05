@@ -43,7 +43,9 @@ test("the guide tells no one to run sr probe or sr memory (rules: no maintenance
 
 test("a Setup row per piece with its live state, as the top strip words it, and when each agent was checked", () => {
   const rows = setupRows(STATUS);
-  assert.deepEqual(rows.map((r) => r.name), ["Claude", "ChatGPT", "Cursor", "Grok Bot", "Jev", "Memory"]);
+  assert.deepEqual(rows.map((r) => r.name), ["Claude", "ChatGPT", "Cursor", "Grok Bot", "Jev", "Memory", "Git",  // brief 28: Git
+    "Router notes",  // brief 30 (decision 10): the router notes' row
+    "Models"]);  // brief 33.3 (decision 12): the model defaults' row
   const by = Object.fromEntries(rows.map((r) => [r.key, r]));
   assert.deepEqual([by.claude.tone, by.claude.state], ["ok", "online"]);
   assert.deepEqual([by.chatgpt.tone, by.chatgpt.state], ["bad", "signed out"]);
@@ -72,7 +74,7 @@ test("a Log files row names its task when the log has it, else its id, and each 
   const folder = { task_id: task.task_id, files: [{ name: "01-do-claude.md", path: `tasks/${task.task_id}/01-do-claude.md`, root: "tasks",
     kind: "text", size: 10, round: { order: 1, role: "do", agent: "claude" } }] };
   const view = logFolderView(folder, TASKS);
-  assert.equal(view.title, `#${task.n} · ${task.text}`);
+  assert.equal(view.title, `#${task.n} · ${task.task_id}`);  // UI B N7 (D20)
   assert.deepEqual(view.files.map((f) => f.name), ["01 · build · Claude"]);
   assert.equal(logFolderView({ task_id: "sr-20200101-000000-0000", files: [] }, TASKS).title, "sr-20200101-000000-0000");
 });

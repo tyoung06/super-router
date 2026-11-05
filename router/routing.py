@@ -71,6 +71,48 @@ NO_FILES_FOR = {"grok": NO_FILES_FOR_GROK,
                 "cursor": "returned: a task with files can't go to cursor (a file goes only to Claude and ChatGPT)"}
 
 
+# Brief 29.1 (decision 24): a tagged task Jev left under its 0.4 floor, or labeled none_of_these, is the router's follow-up:
+# Claude does it and ChatGPT checks (ChatGPT does it and Claude checks when Claude isn't available), with no question. It is
+# the router's route, not a skill: never among Jev's options or the page's chips, and never a `--skill`.
+FOLLOW_UP = "follow_up"
+FOLLOW_UP_SOURCE = "router"
+FOLLOW_UP_ROW = {"best": "claude", "second": "chatgpt"}
+FOLLOW_UP_STATUSES = ("below_floor", "none_of_these")
+
+
+# Brief 33.2 fix 1b (the owner's call on Phase 0 item (iii), 31 Oct): a `--no-files` task reads a read-only copy of the
+# project, which only Claude can, so its doer is always Claude and its checker ChatGPT, whatever the label or `--skill`
+# would pick; a skill that would come back runs too. The route reason says so in one line, read back by the card.
+NO_FILES_DOER = "Doer set to Claude: --no-files reads the project's files"
+NO_FILES_ROW = {"best": "claude", "second": "chatgpt"}
+NO_FILES_RETURNS = ("not_routed", "unavailable", "files_to_agent")  # a skill's own return; the owner's answers stay
+
+
+def for_no_files(decision, table=None, roster=None):
+    """A `--no-files` decision: Claude does it and ChatGPT checks (unchecked, saying why, without ChatGPT). A decision that
+    already sends to Claude is kept as it is; any other send, or a skill that would come back, becomes Claude's with the
+    route reason `Doer set to Claude: --no-files reads the project's files (<what it would have been>)`."""
+    if decision.action == "send" and decision.agent == "claude":
+        return decision
+    if decision.action == "send":
+        was = f"{decision.skill or 'the task'} would have gone to {availability.name_of(decision.agent)}"
+    elif decision.action == "return" and decision.code in NO_FILES_RETURNS:
+        was = f"{decision.skill} would have come back: {(decision.reason or '').removeprefix('returned: ')}"
+    else:
+        return decision
+    checker, why = pick_checker(NO_FILES_ROW, "claude", table or _table(None, roster))
+    state, note = ("pending", None) if checker else ("unchecked", f"{NO_CHECKER} ({why})")
+    return Decision("send", decision.skill, decision.skill_source, "claude", f"{NO_FILES_DOER} ({was})", checker, state,
+                    note)
+
+
+def skill_row(roster, skill):
+    """A task's skill row: the skill table's, or the follow-up's own pair; None for anything else."""
+    if skill == FOLLOW_UP:
+        return FOLLOW_UP_ROW
+    return roster.skills.get(skill) if roster is not None and skill else None
+
+
 def decide(jev, roster, *, override=None, answer=None, can_ask=True, files=False, tagged=False, available=None):
     """jev: Jev's answer (router/jev.py). override: the tagged agent, if any. answer: the owner's
     skill key, NONE_OF_THESE or NO_ANSWER, once the owner was asked. can_ask: False when there is no
@@ -101,6 +143,8 @@ def _table(available, roster):
 def _decide(jev, roster, *, override, answer, can_ask, tagged, table):
     if override:
         return _for_override(jev, roster, override, table)
+    if tagged and answer is None and jev["status"] in FOLLOW_UP_STATUSES:  # decision 24: judged on the tagged floor
+        return _for_follow_up(table)
     if jev["status"] == "ok" and jev.get("label") in roster.skills:
         return _for_skill(jev["label"], "jev", roster, tagged, table)
     if answer is None:
@@ -198,6 +242,21 @@ def _for_skill(skill, source, roster, tagged=False, table=None):
         reason = "best" if agent == best else stand_in_reason(best, table(best).why)
     checker, state, note = _checking(skill, row, agent, table)
     return Decision("send", skill, source, agent, reason, checker, state, note)
+
+
+def _for_follow_up(table):
+    """Claude does it, ChatGPT checks; with Claude not available, ChatGPT does it and Claude checks; with neither, it
+    comes back. Never Grok or Cursor."""
+    agent = next((a for a in ("claude", "chatgpt") if table(a).available), None)
+    if agent is None:
+        return Decision("return", FOLLOW_UP, FOLLOW_UP_SOURCE, reason="returned: no agent available for it",
+                        code="unavailable")
+    reason = "best" if agent == "claude" else stand_in_reason("claude", table("claude").why)
+    checker, why = pick_checker(FOLLOW_UP_ROW, agent, table)
+    if checker is None:
+        return Decision("send", FOLLOW_UP, FOLLOW_UP_SOURCE, agent, reason, None, "unchecked",
+                        f"unchecked: no other agent available to check ({why})")
+    return Decision("send", FOLLOW_UP, FOLLOW_UP_SOURCE, agent, reason, checker, "pending")
 
 
 def _for_override(jev, roster, agent, table=None):

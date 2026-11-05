@@ -43,7 +43,7 @@ class Answers:
     def __init__(self, *answers):
         self.answers, self.prompts = list(answers), []
 
-    def __call__(self, prompt):
+    def __call__(self, prompt, **kwargs):  # brief 33.3: the worker gets choice=
         self.prompts.append(prompt)
         answer = self.answers.pop(0)
         if isinstance(answer, BaseException) or isinstance(answer, type):

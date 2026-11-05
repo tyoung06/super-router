@@ -42,16 +42,28 @@ def _read(path):
     return data if isinstance(data, dict) else {}
 
 
+# The design chat's fix of 29 Oct (brief 32's D): the rules canary's marker check, judged by a rule since replaced (the
+# canary checks the per-call guard now). A Cursor failure on record for it reads as no record, as a pass from before the
+# third canary reads as no pass; a failure of any other check stands.
+OLD_RULES_CHECK = "rules canary: the marker is nowhere in the stream"
+
+
+def _old_rule(key, found):
+    return key == cursor_worker.SANDBOX_KEY and str(found.get("reason") or "").startswith(OLD_RULES_CHECK)
+
+
 def failure(path, key):
     """The failure on record for probe `key` ({version, kind, at, reason}), or None."""
     found = _read(path).get(f"{key}_failure")
-    return found if isinstance(found, dict) else None
+    return found if isinstance(found, dict) and not _old_rule(key, found) else None
 
 
-def record_failure(path, key, version, kind, reason, now=None):
+def record_failure(path, key, version, kind, reason, now=None, found=None):
+    """`found` (brief 30, A2): what a failed file check found, names only, kept beside its line."""
     data = _read(path)
     data[f"{key}_failure"] = {"version": version, "kind": kind, "reason": reason,
-                              "at": _now(now).isoformat(timespec="seconds")}
+                              "at": _now(now).isoformat(timespec="seconds"),
+                              **({"found": found} if found is not None else {})}
     path.write_text(json.dumps(data, indent=2) + "\n")
 
 
@@ -70,7 +82,7 @@ def held_back(path, key, version, now=None):
 def held_back_in(data, key, version, now=None):
     """`held_back` on probe_state.json's contents already read (build brief 24: availability is pure)."""
     found = (data or {}).get(f"{key}_failure")
-    if not isinstance(found, dict) or found.get("version") != version:
+    if not isinstance(found, dict) or found.get("version") != version or _old_rule(key, found):
         return None
     if found.get("kind") == RAN_FAILED:
         return found
@@ -112,9 +124,10 @@ def _retry_at(found):
 def claude_gate(state_path, *, folder, out, checks, version=search.claude_version, now=None, sleep=time.sleep):
     """What a command hands its Claude calls as `claude_ready` (asked at most once per command and mode by
     `_ready_once`): True when the probe named by `mode` (search, or the --web file mode) passed on the installed Claude
-    Code version. With no pass on that version, and none held back by a failure on record, the router runs every Claude
-    probe missing on that version first, one at a time by the lock (decision 7, Phase 0 choice 5). `checks` maps each key
-    to a function that makes that probe's `command_check` (main builds them with the config)."""
+    Code version. With no pass on that version, and none held back by a failure on record, the router runs that probe
+    first, under the lock (decision 7). Brief 29.1 (issue 3): only the probe this call needs, never the `--web` file check
+    for a call without `--web`. `checks` maps each key to a function that makes that probe's `command_check` (main builds
+    them with the config)."""
     def check(mode=None):
         key = mode or search.SEARCH_KEY
         installed = version()
@@ -125,12 +138,10 @@ def claude_gate(state_path, *, folder, out, checks, version=search.claude_versio
         if held_back(state_path, key, installed, now):
             return False
         with locks.held("probe-claude", folder=folder, task_id=runs.current(), on="probe", sleep=sleep):
-            for probe_key in CLAUDE_KEYS:
-                if search.ready(state_path, installed, probe_key) or held_back(state_path, probe_key, installed, now):
-                    continue  # passed meanwhile (another task probed), or held back
-                out(f"probe: {WORDS[probe_key]} has no pass on Claude Code {installed}; probing (one call)")
-                result = checks[probe_key]()()
-                out(_claude_line(state_path, probe_key, result, now))
+            if not (search.ready(state_path, installed, key) or held_back(state_path, key, installed, now)):
+                out(f"probe: {WORDS[key]} has no pass on Claude Code {installed}; probing (one call)")  # passed or held
+                result = checks[key]()()  # back meanwhile (another task probed): nothing to run
+                out(_claude_line(state_path, key, result, now))
         return search.ready(state_path, installed, key)
     return check
 
@@ -141,8 +152,9 @@ def _claude_line(state_path, key, result, now):
         clear_failure(state_path, key)
         return f"probe: {WORDS[key]} passed on Claude Code {version}"
     kind = COULD_NOT_RUN if could_not_run(result) else RAN_FAILED
-    if version != "unknown":
-        record_failure(state_path, key, version, kind, _reason(result), now)
+    if version != "unknown":  # the design chat's fix of 29 Oct: the other tools by name, those that ran and those refused
+        tools = getattr(result, "tools", None)
+        record_failure(state_path, key, version, kind, _reason(result), now, found=dict(tools) if tools else None)
     what = ("search stays off" if key == search.SEARCH_KEY else "its --web file mode stays off")
     if kind == COULD_NOT_RUN:
         return (f"probe: {WORDS[key]} could not run on Claude Code {version} ({_reason(result)}); {what} for now and "
@@ -156,7 +168,7 @@ def cursor_ready(state_path, *, model, folder, out, ready=cursor_worker.ready, c
                  installed=cursor_worker.installed_version, now=None, sleep=time.sleep):
     """What a command asks before any row of a task with a Cursor slot or `@cursor`, and before the first Cursor call in
     a command (decision 7): a Readiness. When the only thing missing is the sandbox pass on the installed `agent`, the
-    two canaries run first, one probe at a time by the lock: a pass records the version and the task goes on; a failure
+    canaries (three since brief 32, R0) run first, one probe at a time by the lock: a pass records the version and the task goes on; a failure
     refuses with `probe_failed` in plain words (never "run sr probe"). Signed out stays `signed_out`."""
     found = ready(state_path)
     if found[0] or getattr(found, "code", None) == "signed_out":
@@ -174,7 +186,7 @@ def cursor_ready(state_path, *, model, folder, out, ready=cursor_worker.ready, c
         refused = _cursor_held_back(state_path, version, now)
         if refused:
             return refused
-        out(f"probe: Cursor's safety check has no pass on agent {version}; running its two canaries (two pool calls)")
+        out(f"probe: Cursor's safety check has no pass on agent {version}; running its three canaries (three pool calls)")
         result = (check or cursor_probe.command_check(state_path, model=model))()
         if result.standing or result.passed:
             clear_failure(state_path, cursor_worker.SANDBOX_KEY)
@@ -184,7 +196,9 @@ def cursor_ready(state_path, *, model, folder, out, ready=cursor_worker.ready, c
             code = "signed_out" if "signed in" in result.skipped else "probe_failed"
             return cursor_worker.Readiness((False, f"cursor: {result.skipped}"), code)
         kind = COULD_NOT_RUN if could_not_run(result) else RAN_FAILED
-        record_failure(state_path, cursor_worker.SANDBOX_KEY, result.agent_version, kind, _reason(result), now)
+        read = getattr(result, "rules_from_above", None)  # the design chat's fix of 29 Oct: what Cursor read from above
+        record_failure(state_path, cursor_worker.SANDBOX_KEY, result.agent_version, kind, _reason(result), now,
+                       found={"rules_from_above": list(read)} if read else None)
         refused = _cursor_held_back(state_path, result.agent_version, now)
         out(f"probe: {refused[1]}")
         return refused
@@ -263,6 +277,87 @@ def chatgpt_gate(state_path, *, folder, out, check, version, now=None, sleep=tim
                 return True, None
             why = _codex_held(state_path, result.codex_version, now) or (
                 f"ChatGPT's safety check failed on codex {result.codex_version}")
+            out(f"probe: {why}")
+            return False, why
+    return ready
+
+
+# ---------- Claude's file check (build brief 28, decision 6) ----------
+
+FILES_WORDS = "Claude's file check"
+
+
+def record_files(state_path, result, now=None):
+    """What a file check found, kept per Claude Code version: a pass (any failure cleared), or the failure with its kind.
+    `sr probe` and the intake gate both record this way. Returns the kind, or None on a pass."""
+    from router import files_probe
+    version = result.claude_version
+    if result.passed:
+        search.record_pass(state_path, version, now, key=files_probe.KEY)
+        clear_failure(state_path, files_probe.KEY)
+        return None
+    search.clear(state_path, key=files_probe.KEY)
+    kind = COULD_NOT_RUN if could_not_run(result) else RAN_FAILED
+    if version != "unknown":  # brief 30 (A2): a check that ran and failed keeps what it found; one that could not run, nothing
+        found = result.found() if kind == RAN_FAILED and hasattr(result, "found") else None
+        record_failure(state_path, files_probe.KEY, version, kind, _reason(result), now, found=found)
+    return kind
+
+
+def files_why(state_path, version, now=None):
+    """Why file mode is off on Claude Code `version` for its file check, in the card's words, or None when it passed.
+    Pure on the state file: nothing runs (status and the page read this)."""
+    from router import files_probe
+    if version in (None, "unknown"):
+        return "Claude Code gave no version, so its file check can't be read"
+    if search.ready(state_path, version, files_probe.KEY):
+        return None
+    found = held_back(state_path, files_probe.KEY, version, now)
+    if found is not None and found.get("kind") == RAN_FAILED:
+        return f"{FILES_WORDS} failed on Claude Code {version} ({found.get('reason')}); file mode is off on this version"
+    if found is not None:
+        return (f"{FILES_WORDS} could not run on Claude Code {version} ({found.get('reason')}); it is tried again "
+                f"{_retry_at(found)}")
+    return f"{FILES_WORDS} hasn't passed on Claude Code {version}"
+
+
+def files_view_why(state_path, version, now=None):
+    """What status and the page read (D, 27 Oct: the owner's go; decision 6, a fail turns file mode off): None, file mode
+    on, while the check simply hasn't run on `version`, since intake runs it before the task; else `files_why`, for what
+    intake refuses without running it (an unknown version, or a failure on record holding the check back). Pure on the
+    state file: nothing runs."""
+    from router import files_probe
+    if version in (None, "unknown") or held_back(state_path, files_probe.KEY, version, now) is not None:
+        return files_why(state_path, version, now)
+    return None
+
+
+def files_gate(state_path, *, folder, out, check, version=search.claude_version, now=None, sleep=time.sleep):
+    """What intake asks before a file-mode task (decision 6): (True, None) when the file check passed on the installed
+    Claude Code. With no pass and no failure holding it back, the probe runs first (`check`, one Claude call), one Claude
+    probe at a time by the `probe-claude` lock (a second task waits, `waiting_on: probe`), and the answer is what it
+    found. Otherwise (False, why) in the card's words, never "run sr probe"."""
+    from router import files_probe
+
+    def ready():
+        installed = version()
+        if installed == "unknown":
+            return False, files_why(state_path, installed, now)
+        if search.ready(state_path, installed, files_probe.KEY):
+            return True, None
+        if held_back(state_path, files_probe.KEY, installed, now):
+            return False, files_why(state_path, installed, now)
+        with locks.held("probe-claude", folder=folder, task_id=runs.current(), on="probe", sleep=sleep):
+            if search.ready(state_path, installed, files_probe.KEY):
+                return True, None  # passed meanwhile: another task probed
+            if held_back(state_path, files_probe.KEY, installed, now):
+                return False, files_why(state_path, installed, now)
+            out(f"probe: {FILES_WORDS} has no pass on Claude Code {installed}; probing (one Claude call)")
+            result = check()
+            if record_files(state_path, result, now) is None:
+                out(f"probe: {FILES_WORDS} passed on Claude Code {result.claude_version}")
+                return True, None
+            why = files_why(state_path, result.claude_version, now)
             out(f"probe: {why}")
             return False, why
     return ready

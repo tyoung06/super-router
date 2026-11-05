@@ -1,0 +1,1 @@
+Saturday mornings: most members garden then, and the library sits by the beds.

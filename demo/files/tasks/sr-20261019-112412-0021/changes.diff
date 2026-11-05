@@ -1,0 +1,27 @@
+diff --git a/loans.py b/loans.py
+index 3f1a2b4..8c9d0e1 100644
+--- a/loans.py
++++ b/loans.py
+@@ -1,6 +1,9 @@
++from datetime import date, timedelta
++
+ class Loan:
+-    def __init__(self, packet, member):
++    def __init__(self, packet, member, lent_on):
+         self.packet = packet
+         self.member = member
++        self.due = lent_on + timedelta(weeks=4)
+diff --git a/test_loans.py b/test_loans.py
+new file mode 100644
+index 0000000..5b6c7d8
+--- /dev/null
++++ b/test_loans.py
+@@ -0,0 +1,8 @@
++import unittest
++from datetime import date
++from loans import Loan
++
++
++class DueDate(unittest.TestCase):
++    def test_four_weeks_out(self):
++        self.assertEqual(Loan("kale", "ada", date(2026, 10, 1)).due, date(2026, 10, 29))

@@ -1,0 +1,29 @@
+{
+ "api_version": 1,
+ "project": {
+  "name": "plot-planner",
+  "run_status": {
+   "running": true,
+   "state": "running",
+   "command": [
+    "python3",
+    "planner.py",
+    "--serve"
+   ],
+   "ran": [
+    "python3",
+    "planner.py",
+    "--serve"
+   ],
+   "started": "2026-10-19T11:01:00+00:00",
+   "ended": null,
+   "exit": null,
+   "output": "key length: 21\n[REDACTED]\nServing the plot planner on http://127.0.0.1:8000\n11:01:04 bed 3: watered (12 litres)\n11:01:34 bed 5: compost turned\n11:02:04 bed 1: seedlings thinned\n",
+   "folder": "~/Projects/plot-planner",
+   "env_names": [
+    "MAP_TILES_TOKEN",
+    "WEATHER_API_KEY"
+   ]
+  }
+ }
+}

@@ -58,6 +58,7 @@ class Result:
     claude_version: str
     seconds: float
     queries: list = field(default_factory=list)
+    tools: dict = field(default_factory=dict)  # the design chat's fix of 29 Oct: the other tools, {ran, refused}, by name
 
     @property
     def passed(self):
@@ -87,8 +88,9 @@ def judge(*, returncode, stdout, stderr, config, home_names, prompt_text, folder
                         f"{len(image_read)} read(s) inside the copy folder"))
     searches = [c["input"] for c in calls if c["name"] == "WebSearch"]
     checks.append(Check("WebSearch ran", bool(searches), f"{len(searches)} search(es) in Claude's tool log"))
-    others = sorted({str(c["name"]) for c in calls if c["name"] not in claude_worker.WEB_FILE_TOOLS})
-    checks.append(Check("no other tool ran", not others, ", ".join(others) if others else "none in the tool log"))
+    # the design chat's fix of 29 Oct: a tool asked for and refused never ran, as Claude's file probe reads it
+    ran, refused = claude_worker.ran_and_refused(calls, claude_worker.WEB_FILE_TOOLS)
+    checks.append(Check("no other tool ran", not ran, claude_worker.tools_line(ran, refused)))
     outside = [c for c in reads if not (claude_worker.read_path(c["input"])
                                         and claude_worker.inside(claude_worker.read_path(c["input"]), folder))]
     touched = [c for c in outside if c["error"] is not True]   # a Read outside that did not fail
@@ -139,7 +141,9 @@ def probe(*, config, env_path, home, workspace=None, run=subprocess.run, environ
     after = _listing(workspace)
     checks[-1] = Check("workspace/ unchanged", before == after,
                        "" if before == after else f"{len(set(after) - set(before))} new item(s)")
-    return Result(checks, version, seconds, queries)
+    ran, refused = claude_worker.ran_and_refused(claude_worker.tool_calls(claude_worker._events(proc.stdout or "")),
+                                                 claude_worker.WEB_FILE_TOOLS)
+    return Result(checks, version, seconds, queries, tools={"ran": ran, "refused": refused})
 
 
 def command_check(state_path, **probe_kw):

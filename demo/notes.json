@@ -1,0 +1,28 @@
+{
+ "api_version": 1,
+ "notes": {
+  "state": "set",
+  "why": null,
+  "line": null,
+  "reason_code": null,
+  "sections": {
+   "all_agents": 58,
+   "claude": 25,
+   "chatgpt": 49,
+   "grok": 50,
+   "cursor": 25,
+   "planner": 48
+  },
+  "total": 330,
+  "max": 6000,
+  "grok": {
+   "share": 108,
+   "limit": 3662,
+   "line": "Grok gets these only on a call they fit."
+  },
+  "hash": "8b61a57199701a87",
+  "default": false,
+  "text": "## All agents\n<a line every agent follows, such as how you like answers>\n\n## Claude\n<a line for Claude alone>\n\n## ChatGPT\n<a line for ChatGPT alone, such as how it checks>\n\n## Grok\n<a line for Grok Bot alone, such as what it names>\n\n## Cursor\n<a line for Cursor alone>\n\n## Planner\n<how you like a task split and its teams picked>\n",
+  "path": "config/router-notes.md"
+ }
+}

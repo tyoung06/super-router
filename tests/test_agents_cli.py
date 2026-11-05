@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from router import __main__ as cli
+from router import checking, __main__ as cli
 from router import log, roster, routing
 from tests.helpers import shipped_roster, fake_label
 
@@ -80,7 +80,7 @@ def test_sending_goes_through_the_lookup(conn, monkeypatch):
     monkeypatch.setitem(cli.SENDERS, "claude", fake)
     code, _ = _route(conn, "@claude hi")
     row = log.recent_tasks(conn)[0]
-    assert code == 0 and seen == [(row["task_id"], row["task_id"], "do", "hi")]
+    assert code == 0 and seen == [(row["task_id"], row["task_id"], "do", "hi\n\n" + checking.DELIVERABLE_LINE)]  # 29.1
 
 
 # ---------- main reads the config ----------

@@ -7,6 +7,7 @@ import json
 
 import pytest
 
+from router import checking
 from router import __main__ as cli
 from router import cursor_worker, fallback, jev, log, presets, relay, resume, routing
 from router.roster import Roster
@@ -14,6 +15,7 @@ from tests.helpers import fake_label, roster_with, shipped_roster
 from tests.test_cursor_send import READY, SERVED, Cursor, Ready, answer
 from tests.test_loop import Clock, Scripted
 from tests.test_relay import CONFIG, SECRET, Chat, RelayHook
+from tests.helpers import less_next
 
 ROSTER = roster_with(cursor=True)
 LOADED = presets.load_presets(ROSTER, tuple(cli.SENDERS), relay.CONTRACTS, roles=relay.ROLES, verdicts=relay.VERDICTS)
@@ -69,7 +71,7 @@ def test_cursor_may_fill_versus_a_or_b(conn, slot):
 
 REFUSED = [("research-build", "research"), ("research-build", "build"), ("research-build", "check"),
            ("collab", "lead"), ("collab", "partner"),
-           ("redteam", "build"), ("redteam", "attack"), ("redteam", "check"),
+           ("redteam", "build"), ("redteam", "check"),  # brief 32 (decision 12): redteam's attack slots are Cursor's too
            ("vote", "a"), ("vote", "b"), ("vote", "c")]
 
 
@@ -77,7 +79,8 @@ REFUSED = [("research-build", "research"), ("research-build", "build"), ("resear
 def test_every_other_slot_is_refused_with_the_reason_before_any_row(conn, preset, slot):
     code, out, row, hook, cursor = _relay(conn, preset, [(slot, "cursor")])
     assert code == 2 and row is None and cursor.prompts == [] and hook.sent == []
-    assert f"Refused: cursor may fill versus a or b only (rules v2.28, Cursor), not {preset} {slot}." in out
+    assert (f"Refused: cursor may fill versus a or b; redteam attack or attack2 only (rules v2.28, Cursor), not {preset} "
+            f"{slot}.") in out
     assert "Nothing was logged or sent." in out
 
 
@@ -90,7 +93,7 @@ def test_a_not_live_cursor_is_refused_as_any_agent_is(conn):
 
 
 def test_the_allow_list_is_the_rules_v2_28_one():
-    assert presets.SLOTS_FOR == {"cursor": {"versus": ("a", "b")}}
+    assert presets.SLOTS_FOR == {"cursor": {"versus": ("a", "b"), "redteam": ("attack", "attack2")}}  # brief 32
     assert presets.slot_allowed("cursor", "versus", "a") and not presets.slot_allowed("cursor", "versus", "c")
     assert presets.slot_allowed("grok", "collab", "lead") and presets.slot_allowed("chatgpt", "vote", "c")
 
@@ -106,8 +109,8 @@ def test_project_with_a_cursor_slot_is_refused_with_the_cursor_reason_first(conn
     projects.add("demo", str(folder))
     code, out, row, hook, cursor = _relay(conn, "versus", [("b", "cursor")], project="demo")
     assert code == 2 and row is None and cursor.prompts == []
-    assert ("Refused: --project with cursor in slot b is refused: a Cursor slot on a --project task (rules v2.28, Cursor). "
-            "Nothing was logged or sent.") in out
+    assert ("Refused: --project with cursor in slot b is refused: on a --project task Cursor may fill redteam's attack or "
+            "attack2 only (rules v2.28, Cursor; brief 32). Nothing was logged or sent.") in out
     assert "research-build and redteam only" not in out  # the Cursor reason, not the preset's
 
 
@@ -143,7 +146,8 @@ def test_at_cursor_live_is_an_override_cursor_does_it_and_the_skills_second_chec
     assert code == 0, out
     assert (row["agent"], row["route_reason"], row["checker"], row["check_state"], row["status"]) == (
         "cursor", "override", "chatgpt", "passed", "done")
-    assert cursor.prompts == [cursor_worker.wrap("write a haiku")]  # the task alone, no search line, no files
+    assert [less_next(p) for p in cursor.prompts] == [cursor_worker.wrap("write a haiku\n\n" + checking.DELIVERABLE_LINE)]  # the task and brief
+    # 29.1's deliverable line (decision 20: any agent), no search line, no files
     do = log.get_call(conn, row["task_id"])
     assert do["agent"] == "cursor" and log.served_of(do)["model"] == SERVED["model"]
     assert "you chose it with @cursor" in out and row["result"] == "a haiku about trays"
@@ -266,3 +270,34 @@ def test_the_cursor_entry_changes_no_other_agents_prompt():
     assert cursor_worker.NO_TOOLS_SENTENCE not in relay.review_prompt(TASK, "x")
     assert cursor_worker.NO_TOOLS_SENTENCE not in checking.checker_prompt(TASK, "r", no_tools=True)
     assert cursor_worker.NO_TOOLS_SENTENCE not in checking.fix_prompt(TASK, "r", "1. x")
+
+
+# ---------- brief 30 (A4): a refused Cursor resume names its stop ----------
+
+@pytest.mark.parametrize("error,words", [
+    ("cursor timed out after 600 s", "its call stopped (cursor timed out after 600 s); run the task again"),
+    ("Cursor isn't configured (no model in config/agents.json, or the config didn't load)",
+     "its call stopped (Cursor isn't configured (no model in config/agents.json, or the config didn't load)); "
+     "run the task again"),
+    ("served model 'Grok 4.6' is not the one asked for (grok-4.7-high); the text was not used",
+     "its call stopped (served model 'Grok 4.6' is not the one asked for (grok-4.7-high); the text was not used); "
+     "run the task again"),
+    ("agent exited 1: something else went wrong", "its call stopped (agent exited 1: something else went wrong); "
+     "run the task again"),
+])
+def test_a_refused_cursor_resume_names_the_stop_when_it_wasnt_the_pool(conn, error, words):
+    code, out, row, hook, cursor = _relay(conn, "versus", [("b", "cursor")], cursor=Cursor(cursor_worker.WorkerError(error)))
+    calls = log.calls_for(conn, row["task_id"])
+    plan = resume.decide(row, calls, live=ROSTER.live, preset=LOADED.presets["versus"])
+    assert not plan.ok and plan.reason == f"cursor is never resumed: {words}"
+    assert "pool" not in plan.reason
+
+
+@pytest.mark.parametrize("error", ["agent reported an error: usage limit reached",
+                                   "agent exited 1: PRO_USER_USAGE_LIMIT",
+                                   "agent exited 1: You are out of usage for this week"])
+def test_the_pools_words_only_when_the_pool_stopped_it(conn, error):
+    code, out, row, hook, cursor = _relay(conn, "versus", [("b", "cursor")], cursor=Cursor(cursor_worker.WorkerError(error)))
+    plan = resume.decide(row, log.calls_for(conn, row["task_id"]), live=ROSTER.live, preset=LOADED.presets["versus"])
+    assert plan.reason == ("cursor is never resumed: a Cursor stop is the pool's limit, not a plan limit; run the task again "
+                           "when the week resets, or with another agent in the slot")

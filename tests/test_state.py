@@ -50,9 +50,11 @@ def _of(conn, tid, **kw):
 # ---------- the vocabularies ----------
 
 def test_the_vocabularies_are_the_owners():
-    assert state.WAITING_ON == ("needs_label", "split_plan", "pick", "vote_pick", "grok", "piece", "probe", "memory")
+    assert state.WAITING_ON == ("needs_label", "split_plan", "pick", "vote_pick", "grok", "piece", "probe", "memory",
+                                "land",  # brief 28 (decision 10)
+                                "answers")  # brief 33.4 (decision 5)
     assert state.OUTCOMES == ("passed", "fixed", "failed_check", "returned", "cancelled", "timed_out", "picked", "tie",
-                              "skipped", "stopped", "unchecked", "plan_limit", "process_ended")
+                              "skipped", "stopped", "unchecked", "plan_limit", "process_ended", "blocked")  # 29.1
     assert state.RESERVED == ()  # brief 22 made process_ended (B2), probe (D1) and memory (D2) happen
     assert "check_failed" not in state.WAITING_ON + state.OUTCOMES  # The owner's Q4: a rescue is never a wait
 

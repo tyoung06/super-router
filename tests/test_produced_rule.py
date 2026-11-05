@@ -50,11 +50,10 @@ def test_the_build_line_and_the_checker_line_carry_the_new_sentences():
     assert context.HANDOFF_LINE.endswith(
         "If nothing was written to disk, write `nothing written:` followed by the exact heading or first line of what "
         "the result contains and one clause on what it holds.")
-    assert ("On a `nothing written` result, the heading or first line it names must be in the result and its clause must "
-            "be true of it; a `Produced` that names nothing the result contains, or describes it wrongly, is a failure."
-            in checking.CHECK_HANDOFF_LINE)
+    # brief 29.1 (decision 19): the checker judges `### Produced` only for what is false; a heading quoted inexactly is a note
+    assert "a heading quoted inexactly, or a line that could say more is a [note]" in checking.CHECK_HANDOFF_LINE
     prompt = checking.checker_prompt("t", "r", no_tools=True, handoff=True)
-    assert "On a `nothing written` result" in prompt and prompt.index("On a `nothing written`") < prompt.index("===== TASK =====")
+    assert prompt.index(checking.CHECK_HANDOFF_LINE) < prompt.index("===== TASK =====")
 
 
 def test_a_bare_nothing_written_is_re_asked_once_and_the_named_one_reaches_the_entry(project, conn):
@@ -69,7 +68,7 @@ def test_a_bare_nothing_written_is_re_asked_once_and_the_named_one_reaches_the_e
     entry = log.handoff_of(log.get_task(conn, row["task_id"]))[0]["text"]
     assert "Produced:\nnothing written: ## Presets, the five presets one line each\n" in entry
     assert (project / "HANDOFF.md").read_text().count("nothing written: ## Presets, the five presets one line each") == 1
-    assert "On a `nothing written` result" in chat.prompts[0]  # the checker's project line carries the new sentence
+    assert checking.CHECK_HANDOFF_LINE in chat.prompts[0]  # brief 29.1 (decision 19): the checker's handoff line
 
 
 def test_a_bare_nothing_written_after_the_re_ask_still_stops_the_task(project, conn):

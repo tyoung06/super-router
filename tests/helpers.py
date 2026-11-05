@@ -12,21 +12,44 @@ ALL_AGENTS = ("claude", "grok", "chatgpt", "muse")
 # Build brief 21, B1: presets 1.6 is 1.5 plus one `"description": "...",` line per preset, its first key (the owner's own
 # commit, their lines). The pins on the shipped file read it through these two, so they hold before and after that commit,
 # and still catch any other change.
-SHIPPED_PRESET_VERSIONS = ("1.5", "1.6")
+SHIPPED_PRESET_VERSIONS = ("1.5", "1.6", "1.7")
 _DESCRIPTION_LINE = re.compile(r'(?m)^      "description": "(?:[^"\\\n]|\\.)*",\n')
+# Build brief 32: presets 1.7 is 1.6 with redteam's second attacker and nothing else. The pins on the shipped file read a
+# 1.7 file as 1.6 with 1.6's redteam put back (after checking, in code, that redteam and the version line are all that
+# changed), so every other preset is still pinned byte for byte; 1.7's redteam is pinned in tests/test_redteam2_presets.py.
+PRESETS_V16 = Path(__file__).parent / "fixtures" / "presets_v1_6.json"
+
+
+def _redteam_block(text):
+    lines = text.splitlines(keepends=True)
+    start = lines.index('    "redteam": {\n')
+    end = next(i for i in range(start + 1, len(lines)) if lines[i] == "    },\n")
+    return "".join(lines[start:end + 1])
+
+
+def _as_v16(text):
+    """A 1.7 file's text as 1.6's: its redteam block back to 1.6's, its version line too; any other change fails here."""
+    if '"version": "1.7"' not in text:
+        return text
+    old = PRESETS_V16.read_text()
+    back = text.replace(_redteam_block(text), _redteam_block(old), 1).replace('"version": "1.7"', '"version": "1.6"', 1)
+    assert back == old, "presets 1.7 changed more than redteam's second attacker"
+    return back
 
 
 def shipped_presets_text():
-    """config/presets.json's text, each preset's description line out and a 1.6 version read as 1.5 (byte-for-byte pins)."""
+    """config/presets.json's text, each preset's description line out and a 1.6 version read as 1.5 (byte-for-byte pins);
+    a 1.7 file read as 1.6 first (brief 32)."""
     from router import presets
-    text = _DESCRIPTION_LINE.sub("", presets.PRESETS_PATH.read_text())
+    text = _DESCRIPTION_LINE.sub("", _as_v16(presets.PRESETS_PATH.read_text()))
     return text.replace('"version": "1.6"', '"version": "1.5"', 1)
 
 
 def shipped_presets_doc():
-    """config/presets.json as data, each preset's `description` out wherever it sits and a 1.6 version read as 1.5."""
+    """config/presets.json as data, each preset's `description` out wherever it sits and a 1.6 version read as 1.5; a 1.7
+    file read as 1.6 first (brief 32)."""
     from router import presets
-    doc = json.loads(presets.PRESETS_PATH.read_text())
+    doc = json.loads(_as_v16(presets.PRESETS_PATH.read_text()))
     for entry in doc["presets"].values():
         entry.pop("description", None)
     if doc.get("version") == "1.6":
@@ -54,14 +77,31 @@ def add_row(conn, task_id, task="t", agent="claude", reason="best", source="cli"
     log.set_route(conn, task_id, agents=ALL_AGENTS, agent=agent, route_reason=reason)
 
 
+# Build brief 33: the tasks table exactly as log version 17 made it (before tasks.from_task and tasks.idea; version 17
+# had no ideas table, and its calls table is today's).
+# Build brief 33.3: the tables exactly as log version 19 made them (before tasks.models and calls.model, effort, time_limit).
+V20_SCHEMA = log.SCHEMA.replace(",\n    auto            TEXT", "")  # brief 34: log 21 adds auto
+assert "auto" not in V20_SCHEMA and "models" in V20_SCHEMA
+V19_SCHEMA = V20_SCHEMA.replace(",\n    models          TEXT", "")
+V19_CALLS_SCHEMA = log.CALLS_SCHEMA.replace(",\n    model       TEXT,\n    effort      TEXT,\n    time_limit  INTEGER", "")
+assert "models" not in V19_SCHEMA and "plan_step" in V19_SCHEMA and "time_limit" not in V19_CALLS_SCHEMA and "tests" in V19_CALLS_SCHEMA
+# Build brief 33.1: the tasks table exactly as log version 18 made it (before tasks.plan and plan_step).
+V18_SCHEMA = V19_SCHEMA.replace(",\n    plan            TEXT,\n    plan_step       TEXT", "")
+assert "plan_step" not in V18_SCHEMA and "from_task" in V18_SCHEMA
+V17_SCHEMA = V18_SCHEMA.replace(",\n    from_task       TEXT,\n    idea            INTEGER", "")
+assert "from_task" not in V17_SCHEMA and "idea " not in V17_SCHEMA and "project_files" in V17_SCHEMA
+# Build brief 28: the tables exactly as log versions 15 and 16 made them (before tasks.project_files and calls.tests).
+V16_SCHEMA = V17_SCHEMA.replace(",\n    project_files   TEXT", "")
+V16_CALLS_SCHEMA = V19_CALLS_SCHEMA.replace(",\n    tests       TEXT", "")
+assert "project_files" not in V16_SCHEMA and "tests " not in V16_CALLS_SCHEMA
 # Build brief 22: the tables exactly as log version 14 made them (before tasks.pid, run_started_at and answered_by).
-V14_SCHEMA = (log.SCHEMA.replace(",\n    pid             INTEGER", "").replace(",\n    run_started_at  TEXT", "")
+V14_SCHEMA = (V16_SCHEMA.replace(",\n    pid             INTEGER", "").replace(",\n    run_started_at  TEXT", "")
               .replace(",\n    answered_by     TEXT", ""))
 assert not any(name in V14_SCHEMA for name in ("pid ", "run_started_at", "answered_by"))
 # Build brief 21: the tables exactly as log version 13 made them (before tasks.reason_code and calls.round_file). The
 # old-log builders start from these, so a version N log never carries a column a later version added.
 V13_SCHEMA = V14_SCHEMA.replace(",\n    reason_code     TEXT", "")
-V13_CALLS_SCHEMA = log.CALLS_SCHEMA.replace(",\n    round_file  TEXT", "")
+V13_CALLS_SCHEMA = V16_CALLS_SCHEMA.replace(",\n    round_file  TEXT", "")
 assert "reason_code" not in V13_SCHEMA and "round_file" not in V13_CALLS_SCHEMA
 
 
@@ -298,8 +338,10 @@ def count_lines_in(prompt):
     one from before Phase W must be equal after this."""
     import re
     from router import checking
-    removed = prompt.count("\n\n" + checking.LENGTH_RULE_LINE)
-    prompt = prompt.replace("\n\n" + checking.LENGTH_RULE_LINE, "")
+    removed = 0
+    for line in (checking.LENGTH_RULE_LINE, checking.CHECK_LENGTH_LINE):  # brief 29.1: the check's form of the rule
+        removed += prompt.count("\n\n" + line)
+        prompt = prompt.replace("\n\n" + line, "")
     pattern = re.compile(r"\n\nThe result is [0-9]+ words?\.(?: The task's own words on length: [^\n]*)?(?=\n\n)")
     removed += len(pattern.findall(prompt))
     return pattern.sub("", prompt), removed
@@ -309,3 +351,95 @@ def page_source():
     """The page's text: brief 23 moved its script and styles out of index.html (the CSP allows no inline script)."""
     static = Path(__file__).resolve().parent.parent / "static"
     return "".join((static / name).read_text(encoding="utf-8") for name in ("index.html", "app.js", "app.css"))
+
+
+# Build brief 29 (rules 2.41, Split; decision 5): under each piece the planner writes `team:` and `why:`. A plan from the
+# tests before brief 29 gets those two lines under each numbered piece, route by default, so it still meets the contract.
+_PLAN_HEADING = re.compile(r"^\s{0,3}#{1,2}(?!#)\s*(\S+)")
+_PLAN_ITEM = re.compile(r"^\s*\d+[.)]")
+
+
+def teamed(plan, team="route", why="One writer and a checker are enough."):
+    """`plan` with a `team: <team>` and a `why: <why>` line after each numbered line under `## Pieces`. `team` may be a
+    list, one per piece."""
+    found, in_pieces, k = [], False, 0
+    for line in plan.split("\n"):
+        heading = _PLAN_HEADING.match(line)
+        if heading:
+            in_pieces = heading.group(1).rstrip(":.").lower() == "pieces"
+        found.append(line)
+        if in_pieces and _PLAN_ITEM.match(line):
+            name = team[k] if isinstance(team, (list, tuple)) else team
+            found += [f"team: {name}", f"why: {why}"]
+            k += 1
+    return "\n".join(found)
+
+
+def plan_menu(roster, *, project=False, available=None):
+    """The planner's TEAMS list as `sr split` builds it in a test: config/presets.json, the roster's live agents."""
+    from router import __main__ as cli
+    from router import teams
+    return teams.menu_block(teams.menu(cli._presets_quietly(), roster, available, project=project,
+                                       send_paths=tuple(cli.SENDERS)))
+
+
+def plan_prompt_as_sent(task, roster, *, search=False):
+    """The planner's prompt a split without a project sends in a test (brief 29: the TEAMS list after the words)."""
+    from router import split
+    return split.plan_prompt(task, plan_menu(roster), search=search)
+
+
+def as_recheck(prompt, reply):
+    """Brief 29.1 (decision 15): a fake agent's scripted re-check reply in the old shape (`PASS`, or `FIX` with a list),
+    answered in the new one, so a test written before the re-check gave one line per first-list must keeps its meaning:
+    an old PASS is every FIRST CHECK must `fixed`; an old FIX is every one `not fixed`, with the old list's first item as
+    what is still wrong. A reply already in the new shape, a BLOCKED one, one with neither word, and every other prompt
+    come back as they are. The reader's own tests (tests/test_check_reader.py) script the new shape directly."""
+    from router import checking
+    if not isinstance(reply, str) or checking.RECHECK_FORMAT not in (prompt or ""):
+        return reply
+    start = f"===== {checking.FIRST_CHECK_LABEL} =====\n"
+    end = f"\n===== END {checking.FIRST_CHECK_LABEL} ====="
+    if start not in prompt:
+        return reply
+    block = prompt.split(start, 1)[1].split(end, 1)[0]
+    first = checking.read_check("FIX\n" + block)
+    found = checking.read_recheck(reply, first)
+    if found.lines or found.said not in ("PASS", "FIX") or not first.musts:
+        return reply
+    if found.said == "PASS":
+        return "PASS\n" + "\n".join(f"{i.n}. fixed" for i in first.musts)
+    old = checking.read_check(reply)
+    what = old.items[0].text if old.items else "still wrong"
+    return "FIX\n" + "\n".join(f"{i.n}. not fixed: {what}" for i in first.musts)
+
+
+def today():
+    """The local date a row made now carries: what a check's `The task was sent on` line (Proof 2's round 2) reads."""
+    from router import log, memory
+    return memory.local_date(log._iso())
+
+
+def less_next(prompt):
+    """Build brief 33 (decision 5): a prompt whose result can be delivered, sent off a project, ends with the `## Next`
+    line; this is that prompt without it, so the rest still compares byte for byte with what it was. Fails when the
+    line isn't there."""
+    from router import checking
+    tail = f"\n\n{checking.NEXT_LINE}"
+    assert prompt.endswith(tail), "the prompt doesn't end with the ## Next line"
+    return prompt[:-len(tail)]
+
+
+def claude_stream(text="The answer.", *, model="claude-sonnet-5-5", used=None, tools=(), rate=None, effort=None, is_error=False):
+    """Build brief 33.3: a `claude -p --output-format stream-json` stream with one result, as every Claude call reads it now:
+    the init event (its model, tools and, when set, effort), an optional rate-limit event, then the result event with
+    `modelUsage` for the models that answered (`used`, the asked model by default)."""
+    init = {"type": "system", "subtype": "init", "model": model, "tools": list(tools), "mcp_servers": []}
+    if effort:
+        init["effort"] = effort
+    events = [init]
+    if rate is not None:
+        events.append({"type": "rate_limit_event", "rate_limit_info": rate})
+    events.append({"type": "result", "subtype": "success", "is_error": is_error, "result": text, "total_cost_usd": 0.0,
+                   "modelUsage": {m: {"costUSD": 0.0} for m in (used if used is not None else [model])}})
+    return "\n".join(json.dumps(e) for e in events) + "\n"

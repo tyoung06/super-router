@@ -318,6 +318,10 @@ def test_main_runs_the_probe_with_the_configs_model_and_no_log(monkeypatch, tmp_
     # Brief 20: and the Cursor sandbox half, faked as a pass that stands (no call)
     from router import cursor_probe
     monkeypatch.setattr(cursor_probe, "command_check", lambda *a, **kw: (lambda: cursor_probe.Result([], "v", 0.0, standing="v")))
+    # Brief 28 (decision 6): and Claude's file check, faked to pass here too
+    from router import files_probe
+    monkeypatch.setattr(files_probe, "probe", lambda **kw: files_probe.Result(
+        [files_probe.Check(files_probe.RAN_TO_THE_END, True)], "2.1.301", 1.0))
     assert cli.main(["probe"], platform="darwin") == 0
     assert prepared == [True]
     assert seen["model"] == "gpt-6.1-sol" and seen["env_path"] == env_file and seen["home"] == Path.home()

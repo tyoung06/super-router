@@ -66,7 +66,7 @@ def test_route_prints_a_safe_answer_but_logs_the_raw_one(conn):
     lines = []
     code = cli.cmd_route(
         "@claude hi", conn=conn, config=CONFIG, roster=ROSTER, label=fake_label(), environ={}, settings_paths=[],
-        post=None, worker=lambda t: "\x1b[2Jboo‮",
+        post=None, worker=lambda t, **kw: "\x1b[2Jboo‮",  # brief 33.3: the worker gets choice=
         out=lines.append,
     )
     assert code == 0

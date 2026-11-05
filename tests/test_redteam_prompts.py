@@ -46,7 +46,8 @@ def test_the_fix_prompt_is_byte_for_byte_what_it_was_without_the_new_parameters(
 
 def test_the_redteam_build_asks_for_collabs_deliverable_shape_and_versus_is_unchanged():
     p = relay.prompt_for("build", TASK, None, task_alone=True, deliverable_shape=True)
-    assert p == "\n\n".join([TASK, checking.SCOPE_PARAGRAPH, relay.TASK_DELIVERABLE_LINE])
+    assert p == "\n\n".join([TASK, checking.SCOPE_PARAGRAPH, relay.TASK_DELIVERABLE_LINE,
+                              checking.DELIVERABLE_LINE_UNFINISHED])  # brief 29.1 (decision 20): its `## Unfinished` form
     assert "`## Deliverable`" in p and "`## Unfinished`" in p and "## Missing" not in p
     assert relay.prompt_for("build", TASK, None, task_alone=True) == relay.task_build_prompt(TASK)
 

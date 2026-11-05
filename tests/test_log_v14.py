@@ -9,18 +9,18 @@ import pytest
 
 from router import __main__ as cli
 from router import log
-from tests.helpers import V14_SCHEMA
+from tests.helpers import V14_SCHEMA, V16_CALLS_SCHEMA
 
 V14_ADDED = "reason_code column added to tasks; round_file column added to calls"
 V14_THEN_15 = V14_ADDED + "; pid, run_started_at and answered_by columns added to tasks"  # brief 22: a version 13 log lands on 15
-V14_THEN_16 = V14_THEN_15 + "; " + log.V16_ADDED  # brief 25: ...and now on 16
+V14_THEN_16 = V14_THEN_15 + "; " + log.V16_ADDED + "; " + log.V17_ADDED + "; " + log.V18_ADDED + "; " + log.V19_ADDED + "; " + log.V20_ADDED + "; " + log.V21_ADDED  # ...and on 16, 17, 18, 19
 
 
 def test_a_new_log_is_version_14_with_reason_code_last_on_tasks_and_round_file_last_on_calls():
     c = log.init_db(":memory:")
-    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 16
-    assert [r[1] for r in c.execute("PRAGMA table_info(tasks)")][-6:] == ["chat", "memory", "reason_code", "pid", "run_started_at", "answered_by"]
-    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-3:] == ["memory", "served", "round_file"]
+    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 21
+    assert [r[1] for r in c.execute("PRAGMA table_info(tasks)")][-13:] == ["chat", "memory", "reason_code", "pid", "run_started_at", "answered_by", "project_files", "from_task", "idea", "plan", "plan_step", "models", "auto"]
+    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-7:] == ["memory", "served", "round_file", "tests", "model", "effort", "time_limit"]
     c.close()
 
 
@@ -29,7 +29,7 @@ def _make_v13(path):
     label, one done with a Cursor call), and their calls."""
     c = sqlite3.connect(path)
     tasks_v13 = V14_SCHEMA.replace(",\n    reason_code     TEXT", "")
-    calls_v13 = log.CALLS_SCHEMA.replace(",\n    round_file  TEXT", "")
+    calls_v13 = V16_CALLS_SCHEMA.replace(",\n    round_file  TEXT", "")  # brief 28: never the tests column
     assert "reason_code" not in tasks_v13 and "round_file" not in calls_v13
     c.executescript(f"{tasks_v13}; {calls_v13}; PRAGMA user_version = 13;")
     rows = (("sr-1", "returned", "returned: needs your label", None), ("sr-2", "done", "best", "passed"),
@@ -51,7 +51,7 @@ def _make_v13(path):
 def test_init_db_refuses_a_version_13_log_and_names_the_two_columns(tmp_path):
     db = tmp_path / "router.db"
     _make_v13(db)
-    with pytest.raises(log.VersionError, match=r"version 13 log.*sr migrate.*version 16 \(" + V14_THEN_16 + r"\)"):
+    with pytest.raises(log.VersionError, match=r"version 13 log.*sr migrate.*version 21 \(" + V14_THEN_16 + r"\)"):
         log.init_db(db)
 
 
@@ -63,7 +63,7 @@ def test_upgrade_from_version_13_adds_both_columns_and_keeps_every_row(tmp_path)
     assert (done["from"], done["rows"], done["calls"], done["highest"]) == (13, 3, 2, 3)
     assert done["backup"].name.startswith("router-v13-") and done["backup"].exists()
     c = log.init_db(db)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert c.execute("PRAGMA user_version").fetchone()[0] == 21
     # decision 3: old rows are not backfilled; the returned task's reason stays prose, its code NULL
     assert [tuple(r) for r in c.execute("SELECT task_id, reason_code, route_reason FROM tasks ORDER BY rowid")] == [
         ("sr-1", None, "returned: needs your label"), ("sr-2", None, "best"), ("sr-3", None, "relay")]
@@ -71,7 +71,7 @@ def test_upgrade_from_version_13_adds_both_columns_and_keeps_every_row(tmp_path)
         ("sr-2", None), ("sr-3-s2", None)]
     assert log.served_of(log.get_call(c, "sr-3-s2"))["model"] == "Grok 4.7 256K High"  # the version 13 column kept
     c.close()
-    with pytest.raises(log.MigrateRefused, match="already a version 16"):
+    with pytest.raises(log.MigrateRefused, match="already a version 21"):
         log.migrate(db, backups)
 
 
@@ -93,7 +93,7 @@ def test_sr_migrate_prints_the_backup_the_columns_and_the_counts(tmp_path, capsy
     out = capsys.readouterr().out
     assert "Log: router.db, version 13, 3 rows (highest #3), integrity ok, no open tasks." in out
     assert "Backup copy: backups/router-v13-" in out
-    assert f"Upgraded in place: {V14_THEN_16}, now version 16." in out
+    assert f"Upgraded in place: {V14_THEN_16}, now version 21." in out
     assert "Checked after: 3 rows, 2 calls, highest #3, every version 13 column unchanged" in out
 
 

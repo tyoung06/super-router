@@ -1,0 +1,29 @@
+diff --git a/packets.py b/packets.py
+index 0d1e2f3..4a5b6c7 100644
+--- a/packets.py
++++ b/packets.py
+@@ -3,5 +3,8 @@ class Packet:
+     def __init__(self, crop):
+         self.crop = crop
++        self.lend_count = 0
+ 
+     def lend(self, member):
+-        return Loan(self, member, date.today())
++        loan = Loan(self, member, date.today())
++        self.lend_count += 1
++        return loan
+diff --git a/test_packets.py b/test_packets.py
+new file mode 100644
+index 0000000..9e8f7a6
+--- /dev/null
++++ b/test_packets.py
+@@ -0,0 +1,9 @@
++import unittest
++from packets import Packet
++
++
++class LendCount(unittest.TestCase):
++    def test_each_loan_counts(self):
++        packet = Packet("beans")
++        packet.lend("ada"), packet.lend("lin")
++        self.assertEqual(packet.lend_count, 2)

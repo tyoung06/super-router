@@ -29,10 +29,14 @@ test("a card's verdict in one line, as the owner wrote them", () => {
   assert.equal(line((t) => t.outcome === "plan_limit").text, "Stopped · plan limit on Claude");
   assert.equal(line((t) => t.check_note === "overdue: grok, 12 min").text, "Waiting on Grok · overdue, 12 min");
   assert.equal(line((t) => t.check_note === "waiting: grok, 6 min").text, "Waiting on Grok · 6 min");
-  assert.deepEqual(line((t) => t.waiting_on === "pick"), { tone: "warn", text: "Waiting for your pick" });
+  assert.deepEqual(line((t) => t.waiting_on === "pick" && !t.parent), { tone: "warn", text: "Waiting for your pick" });
+  // brief 29 (decision 10): a versus piece waiting for its pick says the join waits for it
+  const piece = TASKS.find((t) => t.waiting_on === "pick" && t.parent);
+  assert.equal(verdictLine(piece, null).text,
+    `Waiting for your pick · piece ${piece.piece_of.piece} of split #${piece.piece_of.n}: the join waits for it`);
 });
 
-test("a check that failed to run reads as such; its raw words go behind Details", () => {
+test("a check that failed to run reads as such; its raw words are in Details too (UI A row 18: the card shows the why, A6)", () => {
   const task = { task_id: "x", status: "done", outcome: "unchecked", skill: "writing", agent: "claude", checker: "chatgpt",
     check_note: "check failed: codex exited 1: Selected model is at capacity" };
   const show = { calls: [{ kind: "do", agent: "claude", status: "done" }, { kind: "check", agent: "chatgpt", status: "failed", reason_code: null }] };

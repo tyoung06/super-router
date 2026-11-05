@@ -39,7 +39,7 @@ def _route(conn, task="@grok what is up on X", *, post=None, worker=None,
         code = cli.cmd_route(
             task, conn=conn, config=CONFIG, roster=ROSTER, label=fake_label(), environ={}, settings_paths=[],
             post=post or (lambda *a, **k: _Reply()),
-            worker=worker or (lambda t: "an answer"), fetch=fetch or (lambda: []),
+            worker=worker or (lambda t, **kw: "an answer"), fetch=fetch or (lambda: []),  # brief 33.3: choice= too
             close=close or (lambda n: None), sleep=sleep or (lambda s: None), clock=lambda: 0.0,
             wait=True, out=out or lines.append,
         )

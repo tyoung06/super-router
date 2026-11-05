@@ -25,6 +25,7 @@
     "shuffle_options": true,
     "shuffle_note": "TypeSafe's docs say Jev 1.13 can lean toward the first option in a list. Shuffle the option order on every call.",
     "min_confidence": 0.8,
+    "tagged_min_confidence": 0.4,
     "min_confidence_note": "Provisional. Below it, the router asks the owner instead of routing. Recheck after round 2.",
     "criteria_format_note": "When a skill has a not_for field, send Jev an object for that option: {\"what\": description, \"not_for\": not_for}. Otherwise send the description string."
   },

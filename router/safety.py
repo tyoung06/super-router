@@ -203,18 +203,28 @@ def prepare_workspace(workspace=WORKSPACE, run=subprocess.run):
         raise SafeError(f"git init in workspace/ failed: {proc.stderr.strip()[:200]}")
 
 
-def claude_argv(model, tools=""):
+def _effort(effort):
+    """Brief 33.3 (decision 9): `--effort <level>` when the call sets one; nothing otherwise, so the model keeps its own."""
+    return ["--effort", effort] if effort else []
+
+
+def claude_argv(model, tools="", effort=None, stream=True):
     """Flags for every claude call. Task text never goes here; it goes on stdin. `tools` is ""
     (no tools) except on a call with files, which gets "Read" and runs inside the task's copy
-    folder: --safe-mode confines Read to the working folder (proven 2026-10-13, brief 4's gate)."""
+    folder: --safe-mode confines Read to the working folder (proven 2026-10-13, brief 4's gate).
+    Brief 33.3 (decision 7): the output is stream-json (which needs --verbose) on every call, so the model that
+    answered is on the record (the init event and the result's modelUsage); the answer is the result event's text.
+    `stream=False` leaves the output flags to the caller (the label test's client asks for json with a schema)."""
     return [
         "claude",
         "-p",
         "--model", model,
+        *_effort(effort),
         "--strict-mcp-config",
         "--no-session-persistence",
         "--safe-mode",
         "--tools", tools,
+        *(["--output-format", "stream-json", "--verbose"] if stream else []),
     ]
 
 
@@ -224,7 +234,7 @@ CLAUDE_DENIED_TOOLS = ("WebFetch", "Bash", "Read", "Write", "Edit", "MultiEdit",
                        "Task", "Agent")
 
 
-def claude_search_argv(model):
+def claude_search_argv(model, effort=None):
     """Flags for a Claude call with web search (rules v2.15, Web search; only router/search.py turns it
     on). Everything a plain call has, but the one built-in tool is WebSearch, allowed without a prompt
     (Claude Code 2.1.301: "WebSearchTool requires permission"); every other tool is denied by name; and
@@ -234,6 +244,7 @@ def claude_search_argv(model):
         "claude",
         "-p",
         "--model", model,
+        *_effort(effort),
         "--strict-mcp-config",
         "--no-session-persistence",
         "--safe-mode",
@@ -250,7 +261,7 @@ def claude_search_argv(model):
 CLAUDE_DENIED_WITH_FILES = tuple(t for t in CLAUDE_DENIED_TOOLS if t != "Read")
 
 
-def claude_web_files_argv(model):
+def claude_web_files_argv(model, effort=None):
     """Flags for a Claude call with a file on a --web task: everything a search call has, but the built-in tools are
     Read and WebSearch. Only router/search.py turns it on, and only after the --web file probe passed on this
     Claude Code version. [GUESS] `--tools` takes two names as it takes one; the probe proves it from the init event."""
@@ -258,12 +269,49 @@ def claude_web_files_argv(model):
         "claude",
         "-p",
         "--model", model,
+        *_effort(effort),
         "--strict-mcp-config",
         "--no-session-persistence",
         "--safe-mode",
         "--tools", "Read", "WebSearch",
         "--allowedTools", "WebSearch",
         "--disallowedTools", *CLAUDE_DENIED_WITH_FILES,
+        "--output-format", "stream-json",
+        "--verbose",
+    ]
+
+
+# Build brief 28 (decisions 3, 6 and 7; rules 2.40, Project files): a file-mode call runs in the task's copy of the
+# project. A build call (a routed doer, research-build's build, redteam's build and revise, their fix rounds) gets the file
+# tools that read and write; a check or review call gets the ones that only read; WebSearch where today's call has it.
+# No tool that runs a command, ever. --restricted confines the file tools to the working folder and ignores the user,
+# project and local settings files; --safe-mode keeps CLAUDE.md, hooks, plugins, skills and MCP servers out;
+# acceptEdits approves edits inside the working folder only, and with --permission-prompts none anything that would
+# prompt (a read or a write outside it) is denied. The file tools are never in --allowedTools: a bare `Read` rule
+# matches every read (Claude Code's docs, Configure permissions), so they stay inside the working folder's default.
+CLAUDE_FILE_TOOLS = ("Read", "Edit", "Write", "Glob", "Grep")
+CLAUDE_READ_TOOLS = ("Read", "Glob", "Grep")
+
+
+def claude_files_argv(model, *, write, search, effort=None):
+    """Flags for a Claude call on a file-mode task, run with the copy as its working folder. `write`: a build call
+    (edits allowed inside the copy); else read only. `search`: WebSearch too (router/search.py decides it)."""
+    tools = list(CLAUDE_FILE_TOOLS if write else CLAUDE_READ_TOOLS) + (["WebSearch"] if search else [])
+    denied = [t for t in CLAUDE_DENIED_TOOLS if t not in tools]
+    return [
+        "claude",
+        "-p",
+        "--model", model,
+        *_effort(effort),
+        "--strict-mcp-config",
+        "--no-session-persistence",
+        "--safe-mode",
+        "--restricted",
+        "--tools", *tools,
+        *(["--allowedTools", "WebSearch"] if search else []),
+        "--disallowedTools", *denied,
+        *(["--permission-mode", "acceptEdits"] if write else []),
+        "--permission-prompts", "none",
         "--output-format", "stream-json",
         "--verbose",
     ]
@@ -284,10 +332,11 @@ CODEX_DISABLED_FEATURES = (
 )
 
 
-def codex_argv(model, web_search, output_file, images=(), cd=None):
+def codex_argv(model, web_search, output_file, images=(), cd=None, effort=None):
     """Flags for every codex call. The prompt never goes here; it goes on stdin (`-`). On a call
     with files, `cd` is the task's copy folder and each image goes in with --image (the only way
-    ChatGPT can see a file: commands and the image tool stay off)."""
+    ChatGPT can see a file: commands and the image tool stay off). Brief 33.3 (decision 9): `effort` goes on the
+    command line as Codex's own config key (`-c model_reasoning_effort="<level>"`), per call; none sets nothing."""
     argv = [
         "codex", "exec",
         "--sandbox", "read-only",
@@ -302,6 +351,8 @@ def codex_argv(model, web_search, output_file, images=(), cd=None):
         "-c", f'web_search="{web_search}"',
         "-c", "project_doc_max_bytes=0",  # no AGENTS.md text reaches the model
     ]
+    if effort:
+        argv += ["-c", f'model_reasoning_effort="{effort}"']
     for feature in CODEX_DISABLED_FEATURES:
         argv += ["--disable", feature]
     for image in images:

@@ -73,6 +73,8 @@ def decide(task, calls, *, live, preset=None):
     names; `preset` is a relay task's preset. Eligibility is checked in the brief's order, each with
     its own reason; nothing here writes to the log."""
     status = task["status"]
+    if _mode(task) == "suggest":  # brief 33.4 (decision 12): no re-ask and no resume; a click costs the same
+        return _no("a suggest is never resumed; click Suggest ideas again", code="wrong_state")
     if status in ("queued", "sent"):
         return _no(f"it is still open ({status}); run `sr check` to finish it", code="wrong_state")
     stopped = calls[-1] if calls else None
@@ -80,16 +82,23 @@ def decide(task, calls, *, live, preset=None):
     # rules v2.17: a fallback is never resumed; a stopped fallback is run again with `sr fallback`
     if stopped_round and log.fallback_of(stopped):
         return _no(f"fallback. Run sr fallback {task['n']} again when it lifts.", stopped=stopped)
+    # Build brief 28 (decision 18): a stopped Claude build, revise or fix call on a file-mode task is made again by Claude,
+    # whatever stopped it, after the copy is put back to its snapshot from before that call (the caller restores it)
+    if stopped_round and _file_mode_build(task, stopped):
+        return _file_mode(task, calls, stopped, live=live, preset=preset)
     # Build brief 22 (decision 3; the owner's Q1 (b)): a process-ended stop is made again by the same agent
     if stopped_round and stopped["reason_code"] == PROCESS_ENDED:
         return _process_ended(task, calls, stopped, live=live, preset=preset)
     if any(log.fallback_of(c) and c["status"] == "done" for c in calls):
         return _no("a fallback is never resumed", stopped=stopped)
-    # Rules v2.28 (Resume): a stopped Cursor call is never resumed. Its stop is the pool's limit, or any other failure,
-    # never a plan limit of Claude's or ChatGPT's; the owner runs the task again when the week resets, or with another agent.
+    # Rules v2.28 (Resume): a stopped Cursor call is never resumed. Brief 30 (A4): the refusal's words come from the stopped
+    # call: the pool's weekly limit only when its words say so (plan_limit.cursor_pool), else the reason it stopped.
     if stopped_round and stopped["agent"] == "cursor":
-        return _no("cursor is never resumed: a Cursor stop is the pool's limit, not a plan limit; run the task again when "
-                   "the week resets, or with another agent in the slot", stopped=stopped)
+        if plan_limit.cursor_pool(stopped["text"]):
+            return _no("cursor is never resumed: a Cursor stop is the pool's limit, not a plan limit; run the task again "
+                       "when the week resets, or with another agent in the slot", stopped=stopped)
+        why = _first_line(stopped["text"]) or "no reason was logged"
+        return _no(f"cursor is never resumed: its call stopped ({why}); run the task again", stopped=stopped)
     if status == "done" and not (stopped_round and stopped["kind"] in ("check", "fix", "recheck")):
         return _no("it is done; only a task stopped by a plan limit or by a process that ended can be resumed")
     if status not in ("done", "failed"):
@@ -162,6 +171,24 @@ def _process_ended(task, calls, stopped, *, live, preset):
     return _plan(task, stopped, agent, preset)
 
 
+def _file_mode_build(task, stopped):
+    from router import filecalls
+    return filecalls.build_call(task, stopped)
+
+
+def _file_mode(task, calls, stopped, *, live, preset):
+    """Brief 28 (decision 18): the stopped build call is made again by Claude, once per task, with its copy restored first.
+    The copy must still be there (a discarded or cancelled task's is gone)."""
+    from router import filecalls
+    if not filecalls.active(task):
+        return _no("its copy of the project is gone (discarded or cancelled); run the task again", stopped=stopped)
+    if any(is_resume(c) for c in calls):
+        return _no("it was already resumed once; discard it and run the task again", code="already_used", stopped=stopped)
+    if live is not None and "claude" not in live:
+        return _no("claude isn't live, so it can't make the call again", code="not_live", stopped=stopped)
+    return _plan(task, stopped, "claude", preset)
+
+
 REVISE_REFUSAL = "revise stage can only be done by the agent that built stage 1"
 
 
@@ -174,17 +201,20 @@ def _redteam_refusal(preset, calls, kind, n, sub):
         return None
     if n == revise.n:
         return REVISE_REFUSAL
-    attack = preset.attack_stage
-    if attack is None:
-        return None
-    if n == revise.revise_of and sub == attack.agent:
-        return (f"{sub} would build stage {n} and revise it at stage {revise.n}, but {sub} attacks it at stage "
-                f"{attack.n}; an attacker does not attack its own build. Run it again")
-    if n == attack.n:
-        built = relay.accepted(calls, attack.attack_of)
-        if built is not None and built["agent"] == sub:
-            return (f"{sub} would attack stage {attack.attack_of}, which {sub} built; an attacker does not attack "
-                    "its own build. Run it again")
+    attacks = getattr(preset, "attack_stages", None) or ((preset.attack_stage,) if preset.attack_stage else ())
+    for attack in attacks:  # brief 32: every attack stage, the second attack's too
+        if n == revise.revise_of and sub == attack.agent:
+            return (f"{sub} would build stage {n} and revise it at stage {revise.n}, but {sub} attacks it at stage "
+                    f"{attack.n}; an attacker does not attack its own build. Run it again")
+        if n == attack.n:
+            built = relay.accepted(calls, attack.attack_of)
+            if built is not None and built["agent"] == sub:
+                return (f"{sub} would attack stage {attack.attack_of}, which {sub} built; an attacker does not attack "
+                        "its own build. Run it again")
+            other = next((a for a in attacks if a.n != n and a.attack_of == attack.attack_of), None)
+            if other is not None and other.agent == sub:  # decision 12: two lists from one agent are not two attackers
+                return (f"{sub} would attack stage {attack.attack_of} twice (it makes stage {other.n}'s list); two lists "
+                        "from one agent are not two attackers. Run it again")
     return None
 
 

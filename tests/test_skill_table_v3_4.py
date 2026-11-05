@@ -41,8 +41,10 @@ def test_version_3_4_adds_recall_after_quick_answer_exactly_as_the_owners_file_g
 def test_no_other_skill_and_nothing_else_changed_from_3_3():
     for name, skill in V3_3["skills"].items():
         assert TABLE["skills"][name] == skill, name  # description, not_for, best, second, confidence, note, interim
-    for field in ("models", "labeler", "changes_from_v2", "changes_from_v3", "changes_from_v3_1", "changes_from_v3_2"):
+    for field in ("models", "changes_from_v2", "changes_from_v3", "changes_from_v3_1", "changes_from_v3_2"):
         assert TABLE[field] == V3_3[field], field
+    # brief 29.1 (decision 24): the labeler gains the tagged floor beside the 0.8 floor, and nothing else
+    assert TABLE["labeler"] == {**V3_3["labeler"], "tagged_min_confidence": 0.4}
     assert set(TABLE) == set(V3_3) | {"changes_from_v3_3"}
 
 

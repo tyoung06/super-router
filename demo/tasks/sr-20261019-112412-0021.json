@@ -1,0 +1,342 @@
+{
+ "api_version": 1,
+ "task_id": "sr-20261019-112412-0021",
+ "n": 31,
+ "created_at": "2026-10-19T11:24:18+00:00",
+ "updated_at": "2026-10-19T11:24:48+00:00",
+ "sent_at": null,
+ "source": "cli",
+ "text": "Give each seed loan a due date four weeks out, with a test.",
+ "status": "done",
+ "waiting_on": null,
+ "outcome": "passed",
+ "reason_code": null,
+ "mode": "route",
+ "preset": null,
+ "parent": null,
+ "project": "seed-library",
+ "chat": null,
+ "tag": "project:seed-library",
+ "skill": "code",
+ "skill_source": "jev",
+ "agent": "claude",
+ "checker": "chatgpt",
+ "check_state": "passed",
+ "check_note": null,
+ "route_reason": "best",
+ "failed_stage": null,
+ "web": false,
+ "files": [],
+ "result": "Each loan now has a due date, four weeks out, and a test checks it.",
+ "result_url": null,
+ "jev": {
+  "status": "ok",
+  "label": "code",
+  "confidence": 0.97,
+  "tokens": 640,
+  "needs_split": 0.08,
+  "error": null
+ },
+ "slots": null,
+ "working": null,
+ "steps": {
+  "chain": null,
+  "now": null
+ },
+ "fallback": {
+  "ok": false,
+  "agent": null,
+  "reason": "not eligible: a file-mode task never falls back; discard it and run it again, or resume a stopped call"
+ },
+ "resume": {
+  "ok": false,
+  "substitute": null,
+  "agent": null,
+  "checker": null,
+  "reason": "it is done; only a task stopped by a plan limit or by a process that ended can be resumed"
+ },
+ "pid": null,
+ "run_started_at": null,
+ "answered_by": null,
+ "stand_in": null,
+ "filled": null,
+ "card_line": null,
+ "takeover": null,
+ "late": null,
+ "project_files": {
+  "base": "4f2a9c1e5b7d3a8f6c0e2b4d6f8a1c3e5b7d9f0a",
+  "branch": "main",
+  "changed": [
+   {
+    "minus": 1,
+    "path": "loans.py",
+    "plus": 4,
+    "status": "changed"
+   },
+   {
+    "minus": 0,
+    "path": "test_loans.py",
+    "plus": 8,
+    "status": "added"
+   }
+  ],
+  "commit": "b7e4d2a9c1f3e5d7b9a1c3e5f7d9b1a3c5e7f9d1",
+  "copy": false,
+  "diff": "tasks/sr-20261019-112412-0021/changes.diff",
+  "files": 12,
+  "latest": "after-sr-20261019-112412-0021",
+  "left_out": [],
+  "mode": "on",
+  "state": "landed",
+  "tests": {
+   "command": [
+    "python3",
+    "-m",
+    "unittest"
+   ],
+   "exit": 0,
+   "outcome": "passed",
+   "output": "tasks/sr-20261019-112412-0021/tests-1.txt",
+   "summary": "OK"
+  },
+  "undo_commit": null,
+  "why": null
+ },
+ "notes": [],
+ "open_musts": [],
+ "land_anyway": false,
+ "no_split": null,
+ "piece_of": null,
+ "router_notes": {
+  "hash": "8b61a57199701a87",
+  "chars": 330,
+  "file": "tasks/sr-20261019-112412-0021/router-notes.md"
+ },
+ "spec": null,
+ "forgotten": null,
+ "save_path": "docs/give-each-seed-loan-a-due.md",
+ "text_only": false,
+ "save_spec": null,
+ "card_actions": {
+  "pin": true,
+  "save": true,
+  "forget": true,
+  "remember": false
+ },
+ "next": [
+  {
+   "kind": "plan_from",
+   "words": "Plan from #31",
+   "later": false,
+   "fill": {
+    "team": "plan",
+    "project": "seed-library",
+    "chat": null,
+    "text": "Plan this project from #31.",
+    "from": "sr-20261019-112412-0021",
+    "idea": null,
+    "step": null
+   }
+  },
+  {
+   "kind": "build_from",
+   "words": "Build from #31",
+   "later": false,
+   "fill": {
+    "team": "route",
+    "project": "seed-library",
+    "chat": null,
+    "text": "",
+    "from": "sr-20261019-112412-0021",
+    "idea": null,
+    "step": null
+   }
+  },
+  {
+   "kind": "agent",
+   "words": "Show overdue loans first.",
+   "later": true,
+   "fill": {
+    "team": "route",
+    "project": "seed-library",
+    "chat": null,
+    "text": "Show overdue loans first.",
+    "from": null,
+    "idea": null,
+    "step": null
+   }
+  }
+ ],
+ "from": null,
+ "idea": null,
+ "plan": null,
+ "plan_step": null,
+ "one_step": null,
+ "questions": null,
+ "models": null,
+ "auto": null,
+ "calls": [
+  {
+   "call_id": "sr-20261019-112412-0021",
+   "order": 1,
+   "kind": "do",
+   "stage": null,
+   "role": null,
+   "agent": "claude",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T11:24:27+00:00",
+   "finished_at": "2026-10-19T11:24:30+00:00",
+   "round_file": "tasks/sr-20261019-112412-0021/01-do-claude.md",
+   "served": {
+    "asked": "claude-opus-5-5",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/models.local.json",
+    "key": "code",
+    "layer": "skill",
+    "model": "claude-opus-5-5",
+    "note": null,
+    "source": "stream: init and modelUsage",
+    "time_limit": 1200
+   },
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "off (probe not passed)",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null,
+    "query": null
+   },
+   "tests": {
+    "command": [
+     "python3",
+     "-m",
+     "unittest"
+    ],
+    "exit": 0,
+    "outcome": "passed",
+    "output": "tasks/sr-20261019-112412-0021/tests-1.txt",
+    "summary": "OK"
+   },
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 348,
+    "from": "sr-20261019-112412-0021",
+    "judge": false,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "claude": 25
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-112412-0021/01-do-claude-prompt.md",
+   "model": "claude-opus-5-5",
+   "effort": null,
+   "time_limit": 1200
+  },
+  {
+   "call_id": "sr-20261019-112412-0021-c1",
+   "order": 2,
+   "kind": "check",
+   "stage": null,
+   "role": null,
+   "agent": "chatgpt",
+   "status": "done",
+   "verdict": "PASS",
+   "sent_at": "2026-10-19T11:24:33+00:00",
+   "finished_at": "2026-10-19T11:24:36+00:00",
+   "round_file": "tasks/sr-20261019-112412-0021/02-check-chatgpt.md",
+   "served": {
+    "asked": "gpt-6.1-sol",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/agents.json",
+    "key": null,
+    "layer": "agent",
+    "model": "gpt-6.1-sol",
+    "note": null,
+    "source": "codex header",
+    "time_limit": 600
+   },
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "allowed",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": "PASS",
+   "router_notes": {
+    "chars": 603,
+    "from": "sr-20261019-112412-0021",
+    "judge": true,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "chatgpt": 49
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-112412-0021/02-check-chatgpt-prompt.md",
+   "model": "gpt-6.1-sol",
+   "effort": null,
+   "time_limit": 600
+  }
+ ],
+ "handoff": {
+  "attached": true,
+  "lines": 2,
+  "total": 2,
+  "left_out": false
+ },
+ "memory_stored": [],
+ "memory_given": [],
+ "candidates": null,
+ "pick": null,
+ "votes": null,
+ "tally": null,
+ "attacks": null,
+ "pieces": null,
+ "join": null,
+ "estimate": null,
+ "menu": null,
+ "original_file": "tasks/sr-20261019-112412-0021/01-do-claude.md",
+ "result_file": "tasks/sr-20261019-112412-0021/01-do-claude.md",
+ "from_given": null
+}

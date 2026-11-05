@@ -7,6 +7,7 @@ create (a clash becomes " (2)"), after Media's types and its 50 MB limit. Open i
 path, on macOS only. Temp folders only; no real file is read or written."""
 import os
 import subprocess
+from types import SimpleNamespace
 
 import pytest
 
@@ -241,3 +242,109 @@ def test_the_files_module_never_reads_env_or_the_log():
     text = (pf.ROOT / "router" / "page_files.py").read_text(encoding="utf-8")
     assert "dotenv" not in text and "sqlite3" not in text and "shell=True" not in text
     assert os.path.basename(pf.__file__) == "page_files.py"
+
+
+# ---------- brief 28, C4 (`/break-ui` on the drop sheet): a file dropped on a project ----------
+# The media types are for a task's attachments; a project takes code and data (`sr project files` checks each file: a
+# plain file, no excluded name, 50 MB, the key scan). A name already waiting there from an earlier, refused drop is the
+# same file again only when its bytes are: then it is used as it is; else refused, never renamed (` (2)` would be the
+# name it gets in the project).
+
+@pytest.mark.parametrize("name", ["calc.py", "seed-catalogue-2026.csv", "README (copy).md", "Makefile", "notes.txt"])
+def test_a_project_drop_takes_any_type(tmp_path, name):
+    folder = tmp_path / "Router Drop"
+    written = pf.drop_write(folder, name, b"x = 1\n", project=True)
+    assert written == folder / name and written.read_bytes() == b"x = 1\n"
+    with pytest.raises(pf.Refused, match="can't go on a task"):
+        pf.drop_write(folder, "other.py", b"x", project=False)
+
+
+def test_a_project_drop_keeps_the_name_rules_and_the_50_mb_limit(tmp_path, monkeypatch):
+    folder = tmp_path / "Router Drop"
+    for name in ("../escape.py", ".env", "sub/dir.py", "bad\x07.py"):
+        with pytest.raises(pf.Refused, match="name"):
+            pf.drop_write(folder, name, b"x", project=True)
+    monkeypatch.setattr(media, "MAX_BYTES", 4)
+    with pytest.raises(pf.Refused, match="50 MB"):
+        pf.drop_write(folder, "big.csv", b"12345", project=True)
+    assert not folder.exists() or list(folder.iterdir()) == []
+
+
+def test_a_project_redrop_of_the_same_bytes_is_used_as_it_is_and_another_file_of_that_name_is_refused(tmp_path):
+    folder = tmp_path / "Router Drop"
+    first = pf.drop_write(folder, "loans.csv", b"a,b\n", project=True)
+    assert pf.drop_write(folder, "loans.csv", b"a,b\n", project=True) == first
+    with pytest.raises(pf.Refused, match="an older loans.csv is waiting in the drop folder"):
+        pf.drop_write(folder, "loans.csv", b"a,b,c\n", project=True)
+    assert sorted(p.name for p in folder.iterdir()) == ["loans.csv"] and first.read_bytes() == b"a,b\n"
+    (folder / "link.csv").symlink_to(tmp_path / "elsewhere.csv")  # a link is never followed, never matched
+    (tmp_path / "elsewhere.csv").write_bytes(b"a,b\n")
+    with pytest.raises(pf.Refused, match="an older link.csv"):
+        pf.drop_write(folder, "link.csv", b"a,b\n", project=True)
+
+
+# ---------- Cleanup 1 (2.6): Show in Finder on a project's own folder, nothing inside it ----------
+
+@pytest.fixture
+def garden(tmp_path):
+    folder = tmp_path / "projects" / "garden"
+    (folder / "src").mkdir(parents=True)
+    (folder / "notes.md").write_text("words\n")
+    return folder
+
+
+def _reveal(root, path, garden):
+    seen = []
+    pf.reveal(root, path, projects=[str(garden)], platform="darwin",
+              run=lambda argv, **kw: seen.append(argv) or SimpleNamespace(returncode=0))
+    return seen
+
+
+def test_a_registered_projects_folder_is_revealed(root, garden):
+    assert _reveal(root, str(garden), garden) == [["open", "-R", str(garden.resolve())]]
+
+
+def test_a_folder_given_with_a_tilde_is_revealed(root, garden, monkeypatch):
+    monkeypatch.setenv("HOME", str(garden.parent))
+    seen = []
+    pf.reveal(root, "~/garden", projects=["~/garden"], platform="darwin",
+              run=lambda argv, **kw: seen.append(argv) or SimpleNamespace(returncode=0))
+    assert seen == [["open", "-R", str(garden.resolve())]]
+
+
+def test_a_trailing_slash_is_the_same_folder(root, garden):
+    assert _reveal(root, f"{garden}/", garden) == [["open", "-R", str(garden.resolve())]]
+
+
+@pytest.mark.parametrize("make", [
+    lambda g: str(g / "src"),  # a subfolder
+    lambda g: str(g / "notes.md"),  # a file in it
+    lambda g: str(g.parent),  # the folder above
+    lambda g: str(g.parent / "other"),  # not registered
+    lambda g: f"{g}/src/..",  # a climb that lands on it
+    lambda g: f"{g}/../garden",  # another one
+    lambda g: "",
+])
+def test_anything_else_is_refused(root, garden, make):
+    (garden.parent / "other").mkdir(exist_ok=True)
+    with pytest.raises(pf.Refused):
+        _reveal(root, make(garden), garden)
+
+
+def test_a_link_to_the_folder_is_refused_and_a_registered_link_too(root, garden):
+    link = garden.parent / "link"
+    link.symlink_to(garden)
+    with pytest.raises(pf.Refused):
+        _reveal(root, str(link), garden)
+    with pytest.raises(pf.Refused):
+        _reveal(root, str(link), link)
+
+
+def test_a_folder_named_after_a_project_is_only_read_with_projects_given(root, garden):
+    with pytest.raises(pf.Refused):
+        pf.reveal(root, str(garden), platform="darwin", run=lambda argv, **kw: pytest.fail("ran"))
+
+
+def test_the_files_rule_itself_still_refuses_a_folder(root, garden):
+    with pytest.raises(pf.Refused):
+        pf.resolve(root, str(garden))

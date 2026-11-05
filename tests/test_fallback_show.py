@@ -39,7 +39,7 @@ def test_a_routed_double_fail_ends_with_the_fallback_command(conn):
     assert out.splitlines()[-1] == f"Run: sr fallback {row['n']}  (chatgpt redoes it; claude checks)"
 
 
-def test_a_double_fail_checked_by_grok_says_why_there_is_no_fallback(conn):
+def test_a_double_fail_checked_by_grok_says_why_there_is_no_fallback(conn, grok_room):
     bulk = {"status": "ok", "label": "bulk_text", "confidence": 0.95, "needs_split": 0.1, "tokens": 0}
     code, out, row = _route(conn, bulk, worker=Scripted(FIRST, FIXED), hook=Webhook(c1=CHECK1, c2=FINAL))
     assert (row["checker"], row["check_state"]) == ("grok", "failed"), out
@@ -97,11 +97,13 @@ def test_sr_show_history_marks_the_fallback_row(conn):
 def test_sr_show_after_a_second_double_fail_prints_both_attempts_original_first(conn):
     row = _double_fail_route(conn)
     _fallback(conn, row, chatgpt=Chat(REDO, "REDO-FIXED-x74"), worker=Scripted("FIX\n- still flat", "FIX\n- now too short"))
+    # brief 29.1 (decision 15): the redo's final list names its open must by number, with what is still wrong
     code, lines = _show(conn, row["n"])
     text = "\n".join(lines)
     tail = text[text.index("Both attempts failed their checks twice."):]
     order = [tail.index(s) for s in ("Original result (claude):", FIXED, "Its final fix list (chatgpt):", FINAL_LIST,
-                                     "Redo (chatgpt):", "REDO-FIXED-x74", "Its final fix list (claude):", "- now too short")]
+                                     "Redo (chatgpt):", "REDO-FIXED-x74", "Its final fix list (claude):",
+                                     "1. still flat (not fixed: now too short)")]
     assert order == sorted(order)
     assert lines[-1] == "No fallback: already fell back once"
 

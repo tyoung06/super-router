@@ -1,6 +1,6 @@
 """Build brief 22, C2 (rules v2.31, Router for the interface, "Answers without a terminal"; decisions 2 and 9; Phase 0
 choice 9): `sr split --go <n> --answer y|n` approves or rejects a plan that waits; editing a piece (`e`) stays
-Terminal-only. A piece Jev left under the floor is answered on the same command with `--skill <k>=<key>`; `--answer y`
+changed with `sr split --edit` (brief 29). A piece Jev left under the floor is answered on the same command with `--skill <k>=<key>`; `--answer y`
 while such a piece has no answer is refused before any piece row (`needs_label`, naming the pieces), and `--skill` is
 only for such a piece. Fakes only; every value here is fake."""
 import json
@@ -9,11 +9,12 @@ import pytest
 
 from router import __main__ as cli
 from router import log
+from tests.helpers import teamed
 from tests.test_json_actions import World, jev
 from tests.test_loop import Scripted
 from tests.test_relay import Chat
 
-PLAN = "## Pieces\n1. piece one\n2. piece two\n\n## Join\nput them together"
+PLAN = teamed("## Pieces\n1. piece one\n2. piece two\n\n## Join\nput them together")  # brief 29: a team and a why
 
 
 def _labels(low=()):
@@ -78,10 +79,11 @@ def test_usage_refusals_change_nothing(world, argv):
     assert len(rows) == 1 and rows[0]["check_note"] == log.AWAITING_APPROVAL
 
 
-def test_edit_stays_terminal_only(world):
+def test_answer_e_points_at_the_edit_command(world):
+    """Brief 29 (decision 8): editing is no longer Terminal-only; `--answer` stays y or n and names `sr split --edit`."""
     _waiting_split(world)
     code, out, err = world.run("split", "--go", "1", "--answer", "e", "--json")
-    assert code == 2 and "Terminal-only" in json.loads(err)["message"]
+    assert code == 2 and "to change a piece: sr split --edit 1 --piece <k>" in json.loads(err)["message"]
 
 
 def test_a_piece_under_the_floor_needs_its_answer_before_any_piece_row(world):

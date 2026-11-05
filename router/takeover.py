@@ -156,6 +156,11 @@ def _not_covered(task, calls, stopped, preset):
         return "an override is never taken over: you chose the agent"
     if stopped["agent"] in NEVER:
         return "a Cursor call is never taken over"
+    if _optional_stage(stopped, preset):  # brief 32 (decision 11): skipped, and the chain goes on without it
+        return "an optional stage is skipped, never taken over"
+    from router import filecalls  # filecalls reads availability, which this module's callers import first
+    if filecalls.build_call(task, stopped):  # brief 28 (decision 18): no other agent can change the project's files
+        return "a file-mode build call is never taken over: only Claude changes project files, so sr resume makes it again"
     if preset is not None and (getattr(preset, "has_reviews", False) or getattr(preset, "tallies", False)):
         return f"a {preset.name} task is never taken over"
     if any(log.fallback_of(c) for c in calls):
@@ -169,6 +174,14 @@ def _not_covered(task, calls, stopped, preset):
     if used(calls):
         return "the task's one takeover was used"
     return None
+
+
+def _optional_stage(call, preset):
+    """Whether a call is an optional stage's (brief 32: redteam's second attack)."""
+    if preset is None or call["kind"] not in log.STAGE_KINDS or not call["stage"]:
+        return False
+    stages = getattr(preset, "stages", ())
+    return 0 < call["stage"] <= len(stages) and getattr(preset.stage(call["stage"]), "optional", False)
 
 
 def _refusal(agent, stopped_by, available, files):

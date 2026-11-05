@@ -52,14 +52,12 @@ def _entries(project):
 
 # ---------- the checker ----------
 
-def test_the_checker_line_wording_is_decision_7():
+def test_the_checker_line_wording_is_brief_291_decision_19():  # it replaced brief 18's decision 7 line
     assert checking.CHECK_HANDOFF_LINE == (
-        "The result ends with a `## Handoff` section. Judge its `### Produced` lines against the result: they must "
-        "name what the result actually contains and where. A `Produced` that claims something the result does not "
-        "contain, or omits what it does, is a failure and goes in your fix list. On a `nothing written` result, the "
-        "heading or first line it names must be in the result and its clause must be true of it; a `Produced` that names "
-        "nothing the result contains, or describes it wrongly, is a failure. The `## Handoff` section is a note, "
-        "not part of the deliverable: never count it toward length or format.")
+        "The result ends with a `## Handoff` section, a note for the next task. Judge its `### Produced` lines only for what "
+        "is false: naming something the result doesn't contain or a file the change doesn't touch, or claiming something it "
+        "didn't do, is a [must]. Wording, a heading quoted inexactly, or a line that could say more is a [note]. The "
+        "`## Handoff` section is not part of the deliverable: never count it toward length or format.")
 
 
 def test_the_checker_gets_the_line_before_the_blocks_and_the_count_excludes_the_section(project, conn):
@@ -205,15 +203,16 @@ def test_a_contract_miss_on_a_routed_doer_writes_a_failed_line(project, conn):
     assert _entries(project)[0].endswith("· failed: contract still missing after the re-ask: Handoff: section `## Handoff` is missing")
 
 
-def test_a_task_that_came_back_writes_a_stopped_line(project, conn):
+def test_a_task_that_came_back_before_any_call_writes_no_entry(project, conn):
+    """Brief 29.1 (decision 5, brief 28's issue 15): a project task that comes back before any agent call leaves the
+    handoff as it was (it wrote a `stopped` line before)."""
     (project / "HANDOFF.md").write_text(HANDOFF_TEXT + "\nJEV_API_KEY=abcdefghijklmnop\n")
+    before = _file(project)
     code, out, row, _ = _route(conn, project="demo")
-    assert code == 4
-    assert _entries(project)[0] == f"### #{row['n']} · {cli._now():%Y-%m-%d} · stopped: handoff line 18 looks like a key"
-    assert "JEV_API_KEY=abcdefghijklmnop" in _file(project)  # The owner's part is theirs; the router wrote only its block
+    assert code == 4 and _file(project) == before and log.handoff_of(log.get_task(conn, row["task_id"])) == []
     (project / "HANDOFF.md").write_text(HANDOFF_TEXT)
-    code, out, row, _ = _route(conn, project="demo", jev={**WRITING, "status": "below_floor", "confidence": 0.2})  # no terminal
-    assert code == 4 and _entries(project)[0] == f"### #{row['n']} · {cli._now():%Y-%m-%d} · stopped: needs your label"
+    code, out, row, _ = _route(conn, project="demo", jev={**WRITING, "status": "error", "error": "Timeout"})  # no terminal
+    assert code == 4 and _file(project) == HANDOFF_TEXT
 
 
 def test_a_timed_out_grok_task_writes_a_stopped_line(project, conn):
@@ -269,7 +268,7 @@ def test_after_nine_deliveries_the_block_keeps_eight_and_the_first_section_is_st
 
 def test_a_project_removed_before_delivery_is_said_and_nothing_is_written(project, conn):
     class Removing(Scripted):
-        def __call__(self, prompt):
+        def __call__(self, prompt, **kwargs):  # brief 33.3: the worker gets choice=
             projects.remove("demo")
             return super().__call__(prompt)
     code, out, row, _ = _route(conn, project="demo", worker=Removing(GOOD), chatgpt=Chat("PASS"))

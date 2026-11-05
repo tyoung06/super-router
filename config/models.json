@@ -1,0 +1,95 @@
+{
+  "version": "1.0",
+  "note": "The public model defaults (rules 2.48, Models; build brief 33.3): each agent's allowlist, Claude's default and the time limits. Only the owner edits it. The per-skill and per-stage defaults and the Fable switch are the owner's own, in config/models.local.json (gitignored), written by `sr models` alone. ChatGPT's and Cursor's defaults are their pins in config/agents.json.",
+  "agents": {
+    "claude": {
+      "default": "claude-sonnet-5-5",
+      "allowed": [
+        "claude-haiku-5-5",
+        "claude-sonnet-5-5",
+        "claude-opus-5-5",
+        "claude-fable-5-1"
+      ],
+      "aliases": {
+        "haiku": "claude-haiku-5-5",
+        "sonnet": "claude-sonnet-5-5",
+        "opus": "claude-opus-5-5",
+        "fable": "claude-fable-5-1"
+      },
+      "names": {
+        "claude-haiku-5-5": "Haiku 5.5",
+        "claude-sonnet-5-5": "Sonnet 5.5",
+        "claude-opus-5-5": "Opus 5.5",
+        "claude-fable-5-1": "Fable 5.1"
+      },
+      "gated": [
+        "claude-fable-5-1"
+      ],
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "timeouts": {
+        "default": 600,
+        "claude-haiku-5-5": 600,
+        "claude-sonnet-5-5": 600,
+        "claude-opus-5-5": 1200,
+        "claude-fable-5-1": 1200
+      },
+      "source": "Claude Code 2.1.314's own help and model page (code.claude.com/docs/en/model-config), read 2026-10-29; the limits scaled from the log's Sonnet build calls (brief 33.3, Phase 0)"
+    },
+    "chatgpt": {
+      "allowed": [
+        "gpt-6.1-sol",
+        "gpt-6-astra",
+        "gpt-6.1-terra"
+      ],
+      "names": {
+        "gpt-6.1-sol": "GPT-6.1 Sol",
+        "gpt-6-astra": "GPT-6 Astra",
+        "gpt-6.1-terra": "GPT-6.1 Terra"
+      },
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ],
+      "timeouts": {
+        "default": 600
+      },
+      "source": "Codex's models page (learn.chatgpt.com/docs/models) and config reference, read 2026-10-29 on codex-cli 0.162.1; gpt-6-luna (the Free and Go plans' model) is left out"
+    },
+    "cursor": {
+      "allowed": [
+        "grok-4.7-high",
+        "grok-4.7-low",
+        "grok-4.7-medium",
+        "grok-4.7-xhigh",
+        "grok-4.7-high-fast",
+        "grok-4.7-low-fast",
+        "grok-4.7-medium-fast",
+        "grok-4.7-xhigh-fast",
+        "cursor-grok-4.6-low",
+        "cursor-grok-4.6-medium",
+        "cursor-grok-4.6-high",
+        "cursor-grok-4.6-xhigh",
+        "cursor-grok-4.6-low-fast",
+        "cursor-grok-4.6-medium-fast",
+        "cursor-grok-4.6-high-fast",
+        "cursor-grok-4.6-xhigh-fast",
+        "cursor-grok-4.5-high",
+        "cursor-grok-4.5-high-fast"
+      ],
+      "timeouts": {
+        "default": 600
+      },
+      "source": "the Cursor command line's own listing (agent --list-models, 2026-10-19; brief 20): pinned Grok models only, never auto"
+    }
+  }
+}

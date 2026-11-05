@@ -6,6 +6,8 @@ the backfill, the rebuild and entry one skip it; delivered again while on (a fal
 at each fresh recall and each delivery. A fake store records every request; fake agents; every value here is fake."""
 import pytest
 
+from router import context
+from router import checking
 from router import __main__ as cli
 from router import jsonview, log, memory, memory_auto
 from tests.fake_hindsight import FakeHindsight
@@ -17,6 +19,7 @@ from tests.test_memory_block import TAG, TASK, _block, _done, _entry
 from tests.test_relay import CONFIG, ROSTER, SECRET, Chat
 from tests.test_resume_run import claude_limit
 from tests.test_route_v2 import ok
+from tests.helpers import less_next
 
 OFF_LINE = "memory: off; not saved"
 BACK_OFF = "memory unavailable (memory is off in settings): nothing to recall from"
@@ -52,7 +55,7 @@ class Switching(Scripted):
         super().__init__(*replies)
         self.to = to
 
-    def __call__(self, prompt):
+    def __call__(self, prompt, **kwargs):  # brief 33.3: the worker gets choice=
         set_local(memory=self.to)
         return super().__call__(prompt)
 
@@ -67,7 +70,8 @@ def test_a_routed_task_while_off_never_reaches_the_store(conn):
     code, out, row, _ = _route(conn, chat="tray", worker=worker, chatgpt=chat, hindsight=fake.client)
     assert code == 0 and row["check_state"] == "passed", out
     assert fake.recalls == [] and fake.retains == []
-    assert worker.prompts == [TASK] and memory.start_marker(TAG) not in chat.prompts[0]  # no block on any call
+    assert [less_next(p) for p in worker.prompts] == [f"{TASK}\n\n{checking.DELIVERABLE_LINE}"]  # brief 29.1: the deliverable line, and no block
+    assert memory.start_marker(TAG) not in chat.prompts[0] and context.MEMORY_USE_LINE not in chat.prompts[0]
     assert _records(conn, row["task_id"]) == [{"tag": TAG, "off": True}, {"tag": TAG, "off": True, "from": row["task_id"]}]
     assert _writes(row) == [{"skipped": "off", "state": "done/passed/2"}]
     assert OFF_LINE in out.splitlines()
@@ -154,7 +158,7 @@ def test_a_task_delivered_while_off_is_not_storable_but_store_judges_by_the_sett
 def test_entry_one_skips_a_task_delivered_while_off(conn):
     one = _done(conn, "sr-1", "first task", "first result")
     _off_task(conn)
-    assert memory.newest_storable(conn, TAG, "sr-run")["task_id"] == one["task_id"]
+    assert [r["task_id"] for r in memory.newest_storable(conn, TAG, "sr-run", 3)] == [one["task_id"]]  # brief 29.1
 
 
 def test_the_backfill_and_the_rebuild_skip_a_task_delivered_while_off(conn):

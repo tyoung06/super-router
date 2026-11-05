@@ -27,9 +27,9 @@ def conn():
 
 def test_a_new_log_is_version_12_with_the_three_columns_last():
     c = log.init_db(":memory:")
-    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 16
-    assert [r[1] for r in c.execute("PRAGMA table_info(tasks)")][-8:] == ["project", "handoff", "chat", "memory", "reason_code", "pid", "run_started_at", "answered_by"]
-    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-4:] == ["context", "memory", "served", "round_file"]
+    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 21
+    assert [r[1] for r in c.execute("PRAGMA table_info(tasks)")][-15:] == ["project", "handoff", "chat", "memory", "reason_code", "pid", "run_started_at", "answered_by", "project_files", "from_task", "idea", "plan", "plan_step", "models", "auto"]
+    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-8:] == ["context", "memory", "served", "round_file", "tests", "model", "effort", "time_limit"]
 
 
 # ---------- the tag (decision 7) ----------
@@ -163,15 +163,15 @@ def _make_v11(path):
 def test_upgrade_from_version_11_adds_the_columns_and_keeps_every_row(tmp_path):
     db, backups = tmp_path / "router.db", tmp_path / "backups"
     _make_v11(db)
-    with pytest.raises(log.VersionError, match=r"version 11 log.*sr migrate.*version 16 \(chat and memory columns"):
+    with pytest.raises(log.VersionError, match=r"version 11 log.*sr migrate.*version 21 \(chat and memory columns"):
         log.init_db(db)
     done = log.migrate(db, backups)
     assert done["added"] == log.UPGRADES[11]["added"] == ("chat and memory columns added to tasks; "
-                                                          "memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task")
+                                                          "memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task; project_files column added to tasks; tests column added to calls; from_task and idea columns added to tasks; ideas table added; plan and plan_step columns added to tasks; models column added to tasks; model, effort and time_limit columns added to calls; auto column added to tasks")
     assert (done["rows"], done["calls"], done["highest"]) == (3, 1, 3)
     assert done["backup"].name.startswith("router-v11-") and done["backup"].exists()
     c = log.init_db(db)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert c.execute("PRAGMA user_version").fetchone()[0] == 21
     assert [tuple(r) for r in c.execute("SELECT chat, memory FROM tasks")] == [(None, None)] * 3
     assert [tuple(r) for r in c.execute("SELECT memory FROM calls")] == [(None,)]
     rows = [log.get_task(c, f"sr-{i}") for i in (1, 2, 3)]
@@ -179,7 +179,7 @@ def test_upgrade_from_version_11_adds_the_columns_and_keeps_every_row(tmp_path):
     assert log.project_of(rows[1]) == "demo" and log.handoff_of(rows[1])[0]["lines"] == 9  # the old columns kept
     assert log.context_of(log.get_call(c, "sr-2")) == {"project": "demo"}
     c.close()
-    with pytest.raises(log.MigrateRefused, match="already a version 16"):
+    with pytest.raises(log.MigrateRefused, match="already a version 21"):
         log.migrate(db, backups)
 
 
@@ -188,6 +188,6 @@ def test_every_older_upgrade_lands_on_12_with_the_memory_columns():
         plan = log.UPGRADES[from_version]
         assert "ALTER TABLE tasks ADD COLUMN chat TEXT" in plan["statements"], from_version
         assert "ALTER TABLE tasks ADD COLUMN memory TEXT" in plan["statements"], from_version
-        assert plan["added"].endswith("chat and memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task"), from_version
+        assert plan["added"].endswith("chat and memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task; project_files column added to tasks; tests column added to calls; from_task and idea columns added to tasks; ideas table added; plan and plan_step columns added to tasks; models column added to tasks; model, effort and time_limit columns added to calls; auto column added to tasks"), from_version
         # version 2 makes its calls table from CALLS_SCHEMA, which already has the memory column
         assert ("ALTER TABLE calls ADD COLUMN memory TEXT" in plan["statements"]) == (from_version != 2), from_version

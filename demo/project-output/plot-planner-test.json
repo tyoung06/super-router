@@ -1,0 +1,28 @@
+{
+ "api_version": 1,
+ "project": {
+  "name": "plot-planner",
+  "test_status": {
+   "running": false,
+   "started": null,
+   "head": null,
+   "output": "....\n----------------------------------------------------------------------\nRan 4 tests in 0.006s\n\nOK\n",
+   "last": {
+    "outcome": "passed",
+    "exit": 0,
+    "summary": "OK",
+    "seconds": 0.9,
+    "when": "2026-10-19T11:00:09+00:00",
+    "started": "2026-10-19T11:00:08+00:00",
+    "head": "7d3e1a9000000000000000000000000000000000",
+    "branch": "main",
+    "command": [
+     "python3",
+     "-m",
+     "unittest"
+    ],
+    "output": "20261019T110008.txt"
+   }
+  }
+ }
+}

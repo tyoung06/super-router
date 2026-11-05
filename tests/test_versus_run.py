@@ -13,6 +13,7 @@ from tests.helpers import shipped_roster
 from tests.test_loop import Clock, Scripted
 from tests.test_relay import CONFIG, ROSTER, SECRET, Chat, RelayHook
 from tests.test_resume_run import claude_limit, codex_limit
+from tests.helpers import less_next
 
 LOADED = presets.load_presets(shipped_roster(), tuple(cli.SENDERS), relay.CONTRACTS, roles=relay.ROLES,
                               verdicts=relay.VERDICTS)
@@ -85,8 +86,8 @@ def test_while_the_chain_runs_the_row_names_claude_no_checker_and_a_pending_chec
 
 def test_each_builder_gets_the_task_alone(conn):
     code, out, row, worker, chat = _versus(conn)
-    assert worker.prompts[0] == relay.task_build_prompt(TASK)               # claude, the probe gate shut
-    assert chat.prompts[0] == relay.task_build_prompt(TASK, search=True)    # rules v2.22: chatgpt searches
+    assert less_next(worker.prompts[0]) == relay.task_build_prompt(TASK)    # claude, the probe gate shut
+    assert less_next(chat.prompts[0]) == relay.task_build_prompt(TASK, search=True)  # rules v2.22: chatgpt searches
 
 
 def test_stage_2_gets_no_trace_of_stage_1(conn):

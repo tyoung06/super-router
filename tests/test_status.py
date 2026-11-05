@@ -56,7 +56,8 @@ def world(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cli.cursor_worker, "installed_version", lambda *a, **k: "2026.10.19-6bbf2c4")
     monkeypatch.setattr(cli.memory, "client", lambda *a, **k: FakeStore())
     cli.PROBE_STATE.write_text(json.dumps({"claude_search": {"version": "2.1.305"}, "claude_web_files": {"version": "2.1.304"},
-                                           "cursor_sandbox": {"version": "2026.10.19-6bbf2c4"}}))
+                                           "cursor_sandbox": {"version": "2026.10.19-6bbf2c4",  # brief 32 (R0): all three
+                                                              "canaries": ["read", "list", "rules"]}}))
     return w
 
 
@@ -81,7 +82,8 @@ def test_the_four_agents_live_with_their_checks_models_versions_and_probes(world
         "grok-4.7-high", "gpt-6.1-sol", "sonnet", None)
     assert (by["claude"]["online"], by["cursor"]["online"], by["cursor"]["reason"]) == (True, False, "not signed in (agent login)")
     assert by["claude"]["checked_at"] and by["claude"]["reason"] is None
-    assert by["claude"]["probe"] == {"passed_on": "2.1.305", "current": "2.1.305", "state": "passed", "web_files": "moved"}
+    assert by["claude"]["probe"] == {"passed_on": "2.1.305", "current": "2.1.305", "state": "passed", "web_files": "moved",
+                                     "files": "missing"}  # brief 28 (decision 19): Claude's file check
     assert by["cursor"]["probe"] == {"passed_on": "2026.10.19-6bbf2c4", "current": "2026.10.19-6bbf2c4", "state": "passed"}
     # brief 24 (decision 10): ChatGPT's Codex probe keeps a pass per Codex version, so its state reads as Cursor's does
     assert by["chatgpt"]["probe"] == {"passed_on": None, "current": "0.162.1", "state": "missing"}
@@ -108,13 +110,14 @@ def test_the_presets_their_chains_and_slots(world):
         "research-build": "Grok research → Claude build → ChatGPT check",
         "collab": "Claude plan → ChatGPT amend → Claude build → ChatGPT edit (check)",
         "versus": "Claude build → ChatGPT build → ChatGPT review → Claude review → your pick",
-        "redteam": "Claude build → ChatGPT attack → Claude revise → ChatGPT check",
+        "redteam": "Claude build → ChatGPT attack → Cursor attack → Claude revise → ChatGPT check",  # brief 32
         "vote": "Claude vote → ChatGPT vote → Grok vote → tally"}
     assert all(p["description"] is None or (p["description"].strip() and "\n" not in p["description"])
                for p in by.values())  # 1.5 has none; the owner's 1.6 adds one line each
     slots = {(p, s["name"]): s for p, preset in by.items() for s in preset["slots"]}
     # brief 24 (decision 14): a slot offers only available agents; this world's Cursor check says signed out
-    assert slots[("versus", "a")] == {"name": "a", "default": "claude", "allowed": ["claude", "grok", "chatgpt"]}
+    assert slots[("versus", "a")] == {"name": "a", "default": "claude", "allowed": ["claude", "grok", "chatgpt"],
+                                      "project_refuses": ["cursor"]}  # brief 32 (decision 13)
     assert "cursor" not in slots[("research-build", "build")]["allowed"] and "cursor" not in slots[("vote", "c")]["allowed"]
     assert by["research-build"]["agents"] == ["grok", "claude", "chatgpt"]
 
@@ -147,6 +150,7 @@ def test_jev_s_meter_and_never_its_key(world):
     doc = json.loads(out)
     assert doc["jev"] == {"configured": True, "tokens_month": 700, "cap": 1_000_000, "over_cap": False,
                           "floor": 0.8,  # brief 23 (decision 14): the floor from the skill table
+                          "tagged_floor": 0.4,  # brief 29.1 (decision 24): a tagged task's, beside it
                           "available": True, "why": None}  # brief 24 (decision 14)
     for value in FAKE_ENV.values():
         assert value not in out and json.dumps(value)[1:-1] not in out
@@ -156,7 +160,8 @@ def test_memory_projects_chats_and_the_settings(world, monkeypatch, tmp_path):
     from router import settings
     monkeypatch.setattr(cli.Path, "home", classmethod(lambda cls: tmp_path / "home"))  # brief 27: no install there
     doc = _status(world)
-    assert doc["memory"] == {"setting": "auto", "online": True, "starting": False, "documents": 13, "installed": False}
+    assert doc["memory"] == {"setting": "auto", "online": True, "starting": False, "documents": 13, "installed": False,
+                             "newest": 3, "matches": 5}  # brief 29.1 (decision 25)
     assert (doc["projects"], doc["chats"], doc["serve_port"]) == ([], [], 8765)
     assert "report_path" not in doc
     assert doc["projects_root"] == "~/Projects"  # brief 26 (decision 8): the default, from code
@@ -166,7 +171,7 @@ def test_memory_projects_chats_and_the_settings(world, monkeypatch, tmp_path):
     assert _status(world)["projects_root"] == "~/Desktop/garden-projects"  # as written, `~` and all
     monkeypatch.setattr(cli.memory, "client", lambda *a, **k: FakeStore(up=False))
     assert _status(world)["memory"] == {"setting": "auto", "online": False, "starting": False, "documents": None,
-                                        "installed": False}
+                                        "installed": False, "newest": 3, "matches": 5}  # brief 29.1 (decision 25)
 
 
 def test_memory_installed_reads_the_hindsight_binary_in_the_home_folder(world, monkeypatch, tmp_path):

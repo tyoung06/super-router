@@ -185,7 +185,8 @@ def test_an_unchecked_delivery_is_not_stored(conn):
 
 def test_a_returned_task_and_a_failed_first_call_are_not_stored(conn):
     fake = FakeHindsight()
-    code, out, row, _ = _route(conn, chat="tray", jev={"status": "below_floor", "label": "writing", "confidence": 0.5, "tokens": 0})
+    # brief 29.1 (decision 24): a tagged task at 0.5 routes now; a Jev error with no terminal still comes back
+    code, out, row, _ = _route(conn, chat="tray", jev={"status": "error", "error": "Timeout", "tokens": 0})
     assert row["status"] == "returned"
     code, out, row, _ = _route(conn, chat="tray", worker=Scripted(claude_limit()), hindsight=fake.client)
     assert row["status"] == "failed" and fake.retains == [] and log.memory_of(row) == []

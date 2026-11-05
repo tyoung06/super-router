@@ -31,8 +31,8 @@ def _split(conn, tid="sr-s", task="Write an intro and a checklist."):
 
 def test_a_new_log_is_version_9_with_parent_and_split_plan_last_on_tasks():
     c = log.init_db(":memory:")
-    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 16
-    assert [r[1] for r in c.execute("PRAGMA table_info(tasks)")][-12:] == ["parent", "split_plan", "slots", "web", "project", "handoff", "chat", "memory", "reason_code", "pid", "run_started_at", "answered_by"]
+    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 21
+    assert [r[1] for r in c.execute("PRAGMA table_info(tasks)")][-19:] == ["parent", "split_plan", "slots", "web", "project", "handoff", "chat", "memory", "reason_code", "pid", "run_started_at", "answered_by", "project_files", "from_task", "idea", "plan", "plan_step", "models", "auto"]
 
 
 def test_mode_still_has_no_check_constraint_and_status_keeps_its_own():
@@ -42,7 +42,7 @@ def test_mode_still_has_no_check_constraint_and_status_keeps_its_own():
 
 
 def test_modes_are_route_relay_split_piece():
-    assert log.MODES == ("route", "relay", "split", "piece")
+    assert log.MODES == ("route", "relay", "split", "piece", "plan", "auto", "suggest")  # brief 34: a run; brief 33.4: a suggest
 
 
 # ---------- a split row ----------
@@ -162,18 +162,18 @@ def _make_v8(path):
 def test_upgrade_from_version_8_adds_parent_and_split_plan_and_keeps_every_row(tmp_path):
     db, backups = tmp_path / "router.db", tmp_path / "backups"
     _make_v8(db)
-    with pytest.raises(log.VersionError, match=r"version 8 log.*sr migrate.*version 16 \(parent and split_plan columns added"):
+    with pytest.raises(log.VersionError, match=r"version 8 log.*sr migrate.*version 21 \(parent and split_plan columns added"):
         log.init_db(db)
     done = log.migrate(db, backups)
-    assert done["added"] == log.UPGRADES[8]["added"] == "parent and split_plan columns added to tasks; slots and web columns added to tasks; project and handoff columns added to tasks; context column added to calls; chat and memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task"
+    assert done["added"] == log.UPGRADES[8]["added"] == "parent and split_plan columns added to tasks; slots and web columns added to tasks; project and handoff columns added to tasks; context column added to calls; chat and memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task; project_files column added to tasks; tests column added to calls; from_task and idea columns added to tasks; ideas table added; plan and plan_step columns added to tasks; models column added to tasks; model, effort and time_limit columns added to calls; auto column added to tasks"
     assert (done["rows"], done["calls"], done["highest"]) == (2, 1, 2)
     assert (backups / done["backup"].name).exists() and done["backup"].name.startswith("router-v8-")
     c = log.init_db(db)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert c.execute("PRAGMA user_version").fetchone()[0] == 21
     assert [tuple(r) for r in c.execute("SELECT parent, split_plan FROM tasks")] == [(None, None), (None, None)]
     assert [r["mode"] for r in c.execute("SELECT mode FROM tasks")] == ["route", "route"]
     c.close()
-    with pytest.raises(log.MigrateRefused, match="already a version 16"):
+    with pytest.raises(log.MigrateRefused, match="already a version 21"):
         log.migrate(db, backups)
 
 
@@ -184,12 +184,12 @@ def test_sr_migrate_prints_the_8_to_9_upgrade(tmp_path):
     assert cli.cmd_migrate(db_path=db, backups_dir=backups, out=lines.append) == 0
     out = "\n".join(lines)
     assert "version 8, 2 rows (highest #2)" in out
-    assert "Upgraded in place: parent and split_plan columns added to tasks; slots and web columns added to tasks; project and handoff columns added to tasks; context column added to calls; chat and memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task, now version 16." in out
+    assert "Upgraded in place: parent and split_plan columns added to tasks; slots and web columns added to tasks; project and handoff columns added to tasks; context column added to calls; chat and memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task; project_files column added to tasks; tests column added to calls; from_task and idea columns added to tasks; ideas table added; plan and plan_step columns added to tasks; models column added to tasks; model, effort and time_limit columns added to calls; auto column added to tasks, now version 21." in out
 
 
 def test_every_older_upgrade_lands_on_9_with_the_split_columns():
     for version, plan in log.UPGRADES.items():
-        if version in (9, 10, 11, 12, 13, 14, 15):  # brief 15's 9 -> 10, brief 18's 10 -> 11, brief 19's 11 -> 12, brief 20's 12 -> 13, brief 21's 13 -> 14 and brief 22's 14 -> 15 add later columns only; brief 25's 15 -> 16 renames a stored value only
+        if version in (9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20):  # brief 15's 9 -> 10, brief 18's 10 -> 11, brief 19's 11 -> 12, brief 20's 12 -> 13, brief 21's 13 -> 14 and brief 22's 14 -> 15 add later columns only; brief 25's 15 -> 16 renames a stored value only; brief 28's 16 -> 17 adds later columns only
             continue
         assert "ADD COLUMN parent TEXT" in plan["statements"], version
         assert "ADD COLUMN split_plan TEXT" in plan["statements"], version

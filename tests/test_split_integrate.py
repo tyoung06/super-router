@@ -8,11 +8,13 @@ import pytest
 
 from router import __main__ as cli
 from router import checking, fallback, log, split
+from tests.helpers import plan_prompt_as_sent, today
 from tests.test_relay import CONFIG, ROSTER, Chat
 from tests.test_loop import Scripted
 from tests.test_resume_run import claude_limit, codex_limit
 from tests.test_split_approve import JOIN, P1, P2, PLAN, Ask
 from tests.test_split_wait import R1, R2, JOINED, Env
+from tests.helpers import less_next
 
 TASK = "Write an intro and a checklist. No prices."
 FIX1 = "FIX\n1. The checklist has four items; the task asks for five."
@@ -48,7 +50,7 @@ def _run(conn, claude, chatgpt):
 def test_claude_integrates_from_the_task_the_join_and_every_piece_in_plan_order(conn):
     code, env = _run(conn, (PLAN, R1, R2, JOINED), ("PASS", "PASS", "PASS"))
     prompt = env.worker.prompts[3]
-    assert prompt == split.integrate_prompt(TASK, {"join": JOIN, "inputs": [{"text": P1, "result": R1},
+    assert less_next(prompt) == split.integrate_prompt(TASK, {"join": JOIN, "inputs": [{"text": P1, "result": R1},
                                                                            {"text": P2, "result": R2}]})
     assert prompt.index(f"===== piece 1: {P1} =====\n{R1}") < prompt.index(f"===== piece 2: {P2} =====\n{R2}")
     assert f"Joining line: {JOIN}" in prompt
@@ -67,7 +69,7 @@ def test_chatgpt_checks_the_integration_against_the_original_task_with_search_on
     code, env = _run(conn, (PLAN, R1, R2, JOINED), ("PASS", "PASS", "PASS"))
     check = env.chat.prompts[2]
     assert check == checking.checker_prompt(TASK, JOINED, no_tools=False, can_browse=True, relay=True,
-                                            search=True)  # rules v2.22: the search line
+                                            search=True, sent_on=today())  # rules v2.22: the search line
     assert checking.NO_NEW_RESEARCH_LINE in check and R1 not in check, "the check sees the task and the result only"
     assert env.chat.kwargs[2]["web_search"] == "live"
     row = _split_row(conn)
@@ -125,7 +127,8 @@ def test_sr_fallback_on_a_split_has_chatgpt_integrate_from_the_same_pieces_and_c
     inputs = [{"text": P1, "result": R1}, {"text": P2, "result": R2}]
     assert redo.startswith(split.integrate_prompt(TASK, {"join": JOIN, "inputs": inputs}, search=True))
     assert "Still four items." in redo and JOINED not in redo and FIXED not in redo, "never the failed result"
-    assert worker.prompts[0] == checking.checker_prompt(TASK, "REDONE BY CHATGPT", no_tools=True, relay=True)
+    assert worker.prompts[0] == checking.checker_prompt(TASK, "REDONE BY CHATGPT", no_tools=True, relay=True,
+                                                        could_search=True, sent_on=today())  # brief 29.1: ChatGPT's redo could search
     row = _split_row(conn)
     assert (row["status"], row["agent"], row["checker"], row["check_state"], row["check_note"], row["result"]) == (
         "done", "chatgpt", "claude", "passed", "fallback of claude", "REDONE BY CHATGPT")
@@ -139,12 +142,15 @@ def test_a_piece_falls_back_by_its_own_number(conn):
     env.split(conn, TASK)
     piece2 = log.pieces_of(conn, _split_row(conn)["task_id"])[1]
     assert f"Run: sr fallback {piece2['n']}  (chatgpt redoes it; claude checks)" in env.out
-    worker, chat = Scripted("PASS"), Chat("FIVE ITEMS BY CHATGPT")
+    worker, chat = Scripted("PASS", JOINED), Chat("FIVE ITEMS BY CHATGPT", "PASS")
     code, out = _fallback(conn, piece2, worker, chat)
     assert code == 0, out
     assert chat.prompts[0].startswith(P2), "the piece's redo gets the piece text as its task"
     assert log.get_task(conn, piece2["task_id"])["check_state"] == "passed"
-    assert f"piece 2 of split #{_split_row(conn)['n']}: sr split --go {_split_row(conn)['n']} goes on" in out
+    # brief 29 (decision 11): the split goes on in the same command; the line naming sr split --go is gone
+    assert "goes on." not in out and "All pieces are in." in out
+    row = _split_row(conn)
+    assert (row["status"], row["check_state"], row["result"]) == ("done", "passed", JOINED)
 
 
 # ---------- resume ----------
@@ -167,7 +173,7 @@ def test_an_integration_stopped_on_claudes_plan_limit_resumes_with_chatgpt_and_c
     code, out = _resume(conn, row, worker, chat)
     assert code == 0, out
     inputs = [{"text": P1, "result": R1}, {"text": P2, "result": R2}]
-    assert chat.prompts == [split.integrate_prompt(TASK, {"join": JOIN, "inputs": inputs}, search=True)]
+    assert [less_next(p) for p in chat.prompts] == [split.integrate_prompt(TASK, {"join": JOIN, "inputs": inputs}, search=True)]
     row = _split_row(conn)
     assert (row["status"], row["agent"], row["checker"], row["check_state"], row["result"]) == (
         "done", "chatgpt", "claude", "passed", "JOINED BY CHATGPT")
@@ -182,7 +188,7 @@ def test_a_plan_call_stopped_on_claudes_plan_limit_resumes_with_chatgpt_planning
     worker, chat = Scripted(), Chat(PLAN)
     code, out = _resume(conn, row, worker, chat)
     assert code == 0, out
-    assert chat.prompts == [split.plan_prompt(TASK, search=True)]  # rules v2.22: chatgpt's plan searches
+    assert chat.prompts == [plan_prompt_as_sent(TASK, ROSTER, search=True)]  # rules v2.22: chatgpt's plan searches
     row = _split_row(conn)
     assert (row["status"], row["check_note"]) == ("returned", "awaiting approval")
     assert row["agent"] == "claude", "the planner's substitute doesn't change who integrates"
@@ -203,12 +209,14 @@ def test_a_piece_stopped_on_a_plan_limit_resumes_by_its_own_number(conn):
     piece1 = log.pieces_of(conn, _split_row(conn)["task_id"])[0]
     assert f"Plan limit on claude. Run: sr resume {piece1['n']}  (continues with chatgpt)" in env.out
     assert f"Piece {piece1['task_id']} blocked: it stopped." in env.out
-    worker, chat = Scripted("PASS"), Chat("INTRO BY CHATGPT")
+    worker, chat = Scripted("PASS", JOINED), Chat("INTRO BY CHATGPT", "PASS")
     code, out = _resume(conn, piece1, worker, chat)
     assert code == 0, out
-    assert chat.prompts[0] == f"{P1}\n\n{checking.SEARCH_LINE_GENERAL}"  # rules v2.22: the piece's own search
+    assert chat.prompts[0] == f"{P1}\n\n{checking.DELIVERABLE_LINE}\n\n{checking.SEARCH_LINE_GENERAL}"  # rules v2.22; 29.1
     assert log.get_task(conn, piece1["task_id"])["status"] == "done"
-    assert f"piece 1 of split #{_split_row(conn)['n']}" in out
+    # brief 29 (decision 11): the resumed piece goes on with its split in the same command: the join runs
+    row = _split_row(conn)
+    assert (row["status"], row["result"]) == ("done", JOINED) and "All pieces are in." in out
 
 
 def test_a_redo_that_also_fails_twice_shows_both_attempts(conn):

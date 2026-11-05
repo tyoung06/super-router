@@ -89,6 +89,16 @@ def decide(task, calls, *, live, preset=None):
     yet (only one whose doer's call came back counts, R3), a double fail, a stored fix list, a Claude or
     ChatGPT checker, and whether the original doer is live to check. `live` is the live agent names (None: not known)."""
     relay_task = _mode(task) in ("relay", "split")   # a split's own chain is split.PRESET (rules v2.18)
+    found = log.project_files_of(task)
+    if _mode(task) == "suggest":  # brief 33.4 (decision 10): never checked, so nothing to fall back from
+        return _no("not eligible: a suggest is never checked; click Suggest ideas again")
+    if _mode(task) == "plan":  # brief 33.1 (decision 7)
+        return _no("not eligible: a plan has no fallback; Reject it and plan again")
+    if log.is_piece(task) and log.project_of(task):  # brief 29 (decision 14): its split's one copy, its pieces in order
+        return _no("not eligible: a piece of a project split never falls back; resume a stopped call, skip it, or cancel "
+                   "the split")
+    if found and found.get("mode") == "on":  # brief 28 (decision 18): only Claude changes files, and Claude did the work
+        return _no("not eligible: a file-mode task never falls back; discard it and run it again, or resume a stopped call")
     # 2. never an override, a quick_answer or a versus task
     if task["route_reason"] == "override":
         return _no("not eligible: an override task never falls back; you chose the agent")

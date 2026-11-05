@@ -1,0 +1,11 @@
+{
+ "api_version": 1,
+ "task_id": null,
+ "n": null,
+ "status": null,
+ "waiting_on": null,
+ "outcome": null,
+ "reason_code": "auto_refused",
+ "exit": 2,
+ "message": "Refused: Auto can't start on rain-gauge: task #59 is open on rain-gauge: finish or cancel it first. Nothing was logged or sent."
+}

@@ -12,6 +12,8 @@ import json
 
 import pytest
 
+from router import context
+from router import checking
 from router import __main__ as cli
 from router import log, settings
 from tests.fake_hindsight import FakeHindsight
@@ -23,6 +25,7 @@ from tests.test_memory_block import _block, _done, _entry
 from tests.test_relay import CONFIG, ROSTER, SECRET, Chat
 from tests.test_resume_run import claude_limit
 from tests.test_route_v2 import ok
+from tests.helpers import less_next
 
 RECALL, WRITING = ok("recall"), ok("writing")
 QUESTION = "what did we decide about the tray last time"
@@ -67,7 +70,7 @@ class Flipping(Scripted):
         super().__init__(*replies)
         self.fake = fake
 
-    def __call__(self, prompt):
+    def __call__(self, prompt, **kwargs):  # brief 33.3: the worker gets choice=
         self.fake.online = False
         return super().__call__(prompt)
 
@@ -145,7 +148,7 @@ def test_route_a_tagged_recall_task_runs_when_the_store_answers(conn):
     fake, worker, chat = FakeHindsight(results=[]), Scripted("Last time: rubber."), Chat("PASS")
     code, out, row, _ = _route(conn, QUESTION, chat="tray", jev=RECALL, worker=worker, chatgpt=chat, hindsight=fake.client)
     assert code == 0 and row["status"] == "done" and row["check_state"] == "passed"
-    assert worker.prompts == [f"{QUESTION}\n\n{_block([_entry(one)])}"]
+    assert worker.prompts == [f"{QUESTION}\n\n{checking.DELIVERABLE_LINE}\n\n{context.MEMORY_USE_LINE}\n\n{_block([_entry(one)])}"]
     assert fake.health_calls == 0 and len(fake.recalls) == 1  # the check round reuses the saved block: no ping, no recall
 
 
@@ -154,14 +157,14 @@ def test_a_writing_task_still_runs_without_the_store_as_decision_12_says(conn):
     worker = Scripted("two lines")
     code, out, row, _ = _route(conn, "write two lines about trays", chat="tray", jev=WRITING, worker=worker, chatgpt=Chat("PASS"),
                                hindsight=_offline().client)
-    assert code == 0 and row["status"] == "done" and worker.prompts == ["write two lines about trays"]
+    assert code == 0 and row["status"] == "done" and [less_next(p) for p in worker.prompts] == [f"write two lines about trays\n\n{checking.DELIVERABLE_LINE}"]
     assert out.count("memory: unavailable; this task runs without its memory block") == 1
 
 
 def test_an_untagged_override_recall_task_runs_as_the_overrides_section_says(conn):
     worker = Scripted("I have nothing to recall from.")
     code, out, row, _ = _route(conn, "@claude " + QUESTION, jev=RECALL, worker=worker, chatgpt=Chat("PASS"), hindsight=_offline().client)
-    assert code == 0 and (row["status"], row["route_reason"], row["agent"]) == ("done", "override", "claude") and worker.prompts == [QUESTION]
+    assert code == 0 and (row["status"], row["route_reason"], row["agent"]) == ("done", "override", "claude") and worker.prompts == [f"{QUESTION}\n\n{checking.DELIVERABLE_LINE}"]
 
 
 def test_a_tagged_override_recall_task_comes_back_too(conn):
@@ -180,7 +183,7 @@ def test_the_check_round_in_routes_loop_runs_with_the_saved_block_when_the_store
     code, out, row, _ = _route(conn, QUESTION, chat="tray", jev=RECALL, worker=worker, chatgpt=chat, hindsight=fake.client)
     assert code == 0 and (row["status"], row["check_state"]) == ("done", "passed")
     block = _block([_entry(one)])
-    assert worker.prompts == [f"{QUESTION}\n\n{block}"] and chat.prompts[0].endswith("\n\n" + block)
+    assert worker.prompts == [f"{QUESTION}\n\n{checking.DELIVERABLE_LINE}\n\n{context.MEMORY_USE_LINE}\n\n{block}"] and chat.prompts[0].endswith("\n\n" + block)
     assert fake.health_calls == 0 and BACK not in out
 
 

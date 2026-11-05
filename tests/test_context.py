@@ -14,6 +14,7 @@ from tests.test_loop import Clock, Scripted, Webhook
 from tests.test_collab import LOADED
 from tests.test_relay import CONFIG, GOOD_NOTE, ROSTER, SECRET, Chat, RelayHook
 from tests.test_resume_run import WRITING, claude_limit
+from tests.helpers import less_next
 
 START, END = projects.START, projects.END
 TASK = "Write two lines about seed trays."
@@ -249,7 +250,8 @@ def test_a_routed_project_task_carries_the_block_on_the_doer_the_checker_and_the
     assert code == 0, out
     assert row["project"] == "demo" and row["status"] == "done" and row["check_state"] == "fixed"
     block = _block(HANDOFF_TEXT.rstrip("\n"))
-    assert worker.prompts[0] == f"{TASK}\n\n{context.HANDOFF_LINE}\n\n{block}"  # the doer: the task, the line, the block last
+    assert worker.prompts[0] == (f"{TASK}\n\n{checking.DELIVERABLE_LINE}\n\n{context.HANDOFF_LINE}\n\n{block}")  # the doer:
+    # the task, brief 29.1's deliverable line, the handoff line, the block last
     assert worker.prompts[1].endswith("\n\n" + block)                      # the fix round
     assert all(p.endswith("\n\n" + block) for p in chat.prompts)          # the check and the re-check
     assert chat.prompts[0].count("===== project handoff: demo =====") == 1
@@ -260,7 +262,7 @@ def test_a_routed_project_task_carries_the_block_on_the_doer_the_checker_and_the
 def test_the_doer_prompt_without_a_project_is_byte_for_byte_as_before(conn):
     worker = Scripted("two lines")
     _route(conn, worker=worker, chatgpt=Chat("PASS"))
-    assert worker.prompts[0] == TASK
+    assert less_next(worker.prompts[0]) == f"{TASK}\n\n{checking.DELIVERABLE_LINE}"  # brief 29.1 (decision 20): the one added line
     assert all(log.context_of(c) is None for c in log.calls_for(conn, log.recent_tasks(conn)[0]["task_id"]))
 
 
@@ -273,7 +275,7 @@ def test_jev_gets_the_same_text_with_and_without_a_project(project, conn):
 
 def test_the_handoff_is_read_again_before_every_call(project, conn):
     class Editing(Scripted):
-        def __call__(self, prompt):
+        def __call__(self, prompt, **kwargs):  # brief 33.3: the worker gets choice=
             (project / "HANDOFF.md").write_text(HANDOFF_TEXT.replace("note one", "note one, edited by the owner"))
             return super().__call__(prompt)
     chat = Chat("PASS")
@@ -309,7 +311,7 @@ def test_a_key_like_line_added_between_calls_returns_the_task_mid_chain(project,
 
 def test_a_handoff_file_deleted_between_calls_returns_the_task(project, conn):
     class Deleting(Scripted):
-        def __call__(self, prompt):
+        def __call__(self, prompt, **kwargs):  # brief 33.3: the worker gets choice=
             (project / "HANDOFF.md").unlink()
             return super().__call__(prompt)
     chat = Chat("PASS")
@@ -353,7 +355,7 @@ def test_a_second_project_task_is_refused_while_one_is_open_and_allowed_after_a_
     assert code == 0 and first["status"] == "sent", out  # a Grok task out: open
     code, out, row, label = _route(conn, project="demo")
     assert code == 2 and label.calls == [] and row["task_id"] == first["task_id"]
-    assert out == (f"Refused: project demo has task {first['n']} open (sent). Finish or cancel it first. "
+    assert out == (f"Refused: project demo has task {first['n']} open (waiting on Grok). Finish or cancel it first. "
                    "Nothing was logged or sent.")
     cli.cmd_cancel(conn=conn, words=[str(first["n"])], out=lambda *_: None)
     code, out, row, _ = _route(conn, project="demo", worker=Scripted("x" + SECTION))
@@ -370,16 +372,19 @@ def test_a_returned_project_task_does_not_block_the_next(project, conn):
 
 
 @pytest.mark.parametrize("preset", ["collab", "versus", "vote"])
-def test_project_is_refused_on_collab_versus_and_vote(project, conn, preset):
+def test_project_is_taken_on_collab_versus_and_vote(project, conn, preset):
+    """Brief 29.1 (decisions 8 to 10): every preset takes a project now (it was refused on these three before); each runs
+    its own way (tests/test_collab_project.py, test_versus_project.py, test_vote_project.py)."""
     code, out, row, hook = _relay(conn, preset, project="demo")
-    assert code == 2 and row is None and hook.sent == []
-    assert out == f"Refused: --project is not allowed on {preset} (research-build and redteam only). Nothing was logged or sent."
+    assert "--project is not allowed" not in out and row is not None and log.project_of(row) == "demo"
 
 
-def test_project_is_refused_on_sr_split(project, monkeypatch, tmp_path, capsys):
-    assert cli.main(["split", "--project", "demo", "plan this"], platform="darwin") == 2
-    assert capsys.readouterr().out == ("Refused: --project on sr split is refused in version 2; pieces carry no project. "
-                                       "Nothing was logged or sent.\n")
+def test_project_on_sr_split_is_taken_as_route_takes_it(project, monkeypatch, tmp_path, capsys):
+    """Brief 29 (decision 12) lifted the refusal: a split takes --project, with route's intake (an unknown name is
+    refused with the list, before any row)."""
+    assert cli.main(["split", "--project", "nope", "plan this"], platform="darwin") == 2
+    out = capsys.readouterr().out
+    assert out.startswith("Refused: no project nope. Projects: demo (sr project list).") and "Nothing was logged" in out
 
 
 def test_relay_keeps_project_out_of_the_slot_flags():
@@ -473,7 +478,8 @@ def test_the_substitute_on_a_resume_gets_the_block(project, conn):
     assert code == 0, "\n".join(lines)
     now = log.context_of(log.get_call(conn, f"{row['task_id']}-resume"))["text"]  # as sent: the stop line is in it (phase D)
     assert "stopped: plan limit on claude" in now
-    assert chat.prompts[0] == f"{TASK}\n\n{checking.SEARCH_LINE_GENERAL}\n\n{context.HANDOFF_LINE}\n\n" + _block(now)
+    assert chat.prompts[0] == (f"{TASK}\n\n{checking.DELIVERABLE_LINE}\n\n{checking.SEARCH_LINE_GENERAL}\n\n"  # 29.1
+                               f"{context.HANDOFF_LINE}\n\n" + _block(now))
     resumed = log.get_call(conn, f"{row['task_id']}-resume")
     assert log.context_of(resumed)["lines"] == 18  # the file plus the stop line and its blank line
 

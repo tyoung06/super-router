@@ -17,6 +17,7 @@ from tests.fake_hindsight import FakeHindsight
 from tests.helpers import roster_with, shipped_roster
 from tests.test_loop import Clock, Scripted
 from tests.test_relay import CONFIG, SECRET, Chat, RelayHook
+from tests.helpers import less_next
 
 ROSTER = roster_with(cursor=True)
 LOADED = presets.load_presets(ROSTER, tuple(cli.SENDERS), relay.CONTRACTS, roles=relay.ROLES, verdicts=relay.VERDICTS)
@@ -119,9 +120,9 @@ def test_the_cursor_prompts_are_the_opener_then_claudes_prompt_for_the_role_byte
     code, out, row, worker, cursor, *_ = _versus(conn)
     # Decision 8: never a search line (the router asks Cursor for no search), the task alone on the build, the one
     # candidate on the review; Claude's own prompts are untouched (the probe gate is shut here, so no search line).
-    assert cursor.prompts[0] == cursor_worker.wrap(relay.task_build_prompt(TASK))
+    assert less_next(cursor.prompts[0]) == cursor_worker.wrap(relay.task_build_prompt(TASK))
     assert cursor.prompts[1] == cursor_worker.wrap(relay.review_prompt(TASK, A_TEXT))
-    assert worker.prompts[0] == relay.task_build_prompt(TASK) and worker.prompts[1] == relay.review_prompt(TASK, B_TEXT)
+    assert less_next(worker.prompts[0]) == relay.task_build_prompt(TASK) and worker.prompts[1] == relay.review_prompt(TASK, B_TEXT)
     assert A_TEXT not in cursor.prompts[0] and B_TEXT not in cursor.prompts[1] and "web search" not in cursor.prompts[0]
     assert cursor.prompts[0].startswith(cursor_worker.opener() + "\n\n" + TASK)
 
@@ -206,6 +207,21 @@ def test_a_timed_out_cursor_call_is_stored_as_todays_timeouts_are(conn):
     failed = log.calls_for(conn, row["task_id"])[-1]
     assert failed["status"] == "failed" and failed["text"] == "cursor timed out after 600 s" and failed["reason_code"] is None
     assert log.served_of(failed) is None and "RELAY FAILED at stage 2 (build by cursor): cursor timed out after 600 s" in out
+
+
+def test_a_timeout_holding_output_keeps_its_stream_and_the_row_says_partial(conn, media_root):
+    """Cleanup 1 (2.0a): the call still fails, and stored as a finished call's stream is."""
+    served = {**SERVED, "tool_events": 0, "tools": [], "partial": True}
+    stopped = cursor_worker.WorkerError("cursor timed out after 600 s; its partial stream is kept", served=served,
+                                        stream='{"type":"thinking"}\n')
+    code, out, row, *_ = _versus(conn, cursor=Cursor(stopped))
+    failed = log.calls_for(conn, row["task_id"])[-1]
+    assert failed["status"] == "failed" and "partial stream is kept" in failed["text"] and failed["reason_code"] is None
+    record = log.served_of(failed)
+    assert record["partial"] is True and record["stream"] == f"media/cursor/{row['task_id']}/{failed['call_id']}.ndjson"
+    kept = media_root / "cursor" / row["task_id"] / f"{failed['call_id']}.ndjson"
+    assert kept.read_text() == '{"type":"thinking"}\n'
+    assert relay.served_text(record).endswith(", 0 tool events, partial stream kept")
 
 
 def test_a_tool_that_ran_fails_the_stage_with_its_count_on_the_row(conn):
@@ -310,7 +326,7 @@ def test_sr_check_runs_the_cursor_stage_after_grok_returns(conn):
                          cursor=cursor, cursor_ready=ready, out=lines.append)
     assert _calls(conn, row)[:3] == [("stage", 1, "build", "grok", "done"), ("stage", 2, "build", "cursor", "done"),
                                      ("stage", 3, "review", "cursor", "done")]
-    assert cursor.prompts[0] == cursor_worker.wrap(relay.task_build_prompt(TASK))
+    assert less_next(cursor.prompts[0]) == cursor_worker.wrap(relay.task_build_prompt(TASK))
     assert cursor.prompts[1] == cursor_worker.wrap(relay.review_prompt(TASK, "CANDIDATE-A from grok"))
 
 

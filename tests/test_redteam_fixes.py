@@ -6,10 +6,12 @@ still missing, the round fails as a fix-round failure does today (ending 5). A s
 fix round (the owner's D8 shape). Every value here is fake."""
 import pytest
 
+from tests.helpers import today
 from router import __main__ as cli
 from router import checking, log, relay, resume
 from router.claude_worker import WorkerError
 from tests.test_redteam_chain import ATTACKS, BUILD, LOADED, REVISION, ROSTER, TASK, _relay, _rows
+from tests.helpers import less_next
 
 FIX_LIST = "FIX\n1. Attack 1 is neither fixed nor answered."
 BAD_FIX = "The fixed plan.\n\n## Answered\n7. Not relevant.\n8. Covered."
@@ -56,11 +58,12 @@ def test_a_fix_whose_answered_cites_numbers_not_in_the_list_is_re_asked_once(con
     assert [(c["call_id"].removeprefix(row["task_id"]), c["kind"], c["agent"]) for c in calls[-3:]] == [
         ("-f1", "fix", "claude"), ("-f1r", "fix", "claude"), ("-c2", "recheck", "chatgpt")]
     reask = worker.prompts[3]
-    assert reask == relay.reask_prompt("revise", TASK, BAD_FIX, (
+    assert less_next(reask) == relay.reask_prompt("revise", TASK, BAD_FIX, (
         "Answered: attack 7 is not in the attack list (1, 2, 3)", "Answered: attack 8 is not in the attack list (1, 2, 3)"))
     assert "re-asked once" in out and "fix round" in out
     assert chat.prompts[2] == checking.checker_prompt(TASK, GOOD_FIX, no_tools=False, can_browse=True, relay=True,
-                                                      search=True, attacks=ATTACKS)
+                                                      search=True, attacks=ATTACKS,  # brief 29.1: the re-check's list
+                                                      first=checking.read_check(FIX_LIST), sent_on=today())
     assert (row["check_state"], row["result"]) == ("fixed", "The fixed plan, now with a trigger.")
 
 
@@ -105,7 +108,8 @@ def test_a_stopped_fix_re_ask_resumes_as_a_fresh_fix_round(conn):
     view = {**dict(row), "status": "queued", "agent": plan.agent, "checker": plan.checker,
             "check_state": plan.check_state, "check_note": plan.check_note, "result": None, "failed_stage": None}
     prompt, *_ = cli._resume_call(view, calls, plan, preset)
-    assert prompt == checking.fix_prompt(TASK, REVISION, "1. Attack 1 is neither fixed nor answered.", prior=ATTACKS,
+    assert less_next(prompt) == checking.fix_prompt(TASK, REVISION, "1. Attack 1 is neither fixed nor answered.", prior=ATTACKS,
                                          prior_label=relay.ATTACK_LIST_LABEL, prior_lines=[relay.REDTEAM_FIX_LINE],
-                                         search=True, count=True)
+                                         search=True, count=True, could_search=True,  # brief 29.1 (decisions 15, 16)
+                                         reading=checking.read_check("FIX\n1. Attack 1 is neither fixed nor answered."))
     assert BAD_FIX not in prompt and "Not relevant" not in prompt

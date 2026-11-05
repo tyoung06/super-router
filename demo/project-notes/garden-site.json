@@ -1,0 +1,17 @@
+{
+ "api_version": 1,
+ "notes": {
+  "name": "garden-site",
+  "folder": "~/Projects/garden-site",
+  "notes": "### Pinned from #20 (2026-10-19)\nTake up to five packets a month; bring back seeds from what you grow.",
+  "block": "<!-- sr:start -->\n\n### 2026-10-19 · saved: docs/lending-rules.md (from #20)\n\n### #20 · 2026-10-19 · writing · claude\nProduced:\nnothing written: Lending rules, the seed library's two rules in a list.\nStatus:\nThe README has its lending section.\nNext:\nAdd the opening hours.\nAdd a map of the seed shelves.\n\n<!-- sr:end -->",
+  "hash": "2dc624c1afccee35",
+  "chars": 102,
+  "lines": 2,
+  "max": 20000,
+  "git": false,
+  "tracked": false,
+  "exists": true,
+  "has_block": true
+ }
+}

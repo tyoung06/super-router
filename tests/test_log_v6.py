@@ -27,12 +27,15 @@ def _columns(conn, table):
 
 def test_a_new_log_is_version_6_with_the_resume_columns(tmp_path):
     c = log.init_db(tmp_path / "router.db")
-    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 16
-    assert _columns(c, "calls")[-10:] == ["stage", "role", "reason_code", "resume_of", "search", "fallback_of", "context", "memory", "served", "round_file"]
+    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 21
+    assert _columns(c, "calls")[-14:] == ["stage", "role", "reason_code", "resume_of", "search", "fallback_of", "context", "memory", "served", "round_file", "tests", "model", "effort", "time_limit"]
     assert log.V5_CALL_COLUMNS == log.V4_CALL_COLUMNS + ("stage", "role")
     assert log.V5_COLUMNS == log.V4_COLUMNS + ("mode", "preset", "failed_stage")
     assert log.REASON_CODES == ("plan_limit", "process_ended",  # brief 22 added the process-ended stop
-                                "overdue", "late", "too_long", "internal_error")  # brief 24 (C5): the takeover's codes
+                                "overdue", "late", "too_long", "internal_error",  # brief 24 (C5): the takeover's codes
+                                "copy_problem",  # brief 28: a file-mode call whose copy or change broke a rule
+                                "skipped",  # brief 32: an optional stage skipped; the chain went on without it
+                                "credits")  # brief 33.3: a call billed to usage credits; the task stops, Fable turns off
     c.close()
 
 
@@ -96,12 +99,12 @@ def test_upgrade_adds_the_resume_columns_to_a_version_5_log_and_keeps_every_row(
     assert (done["job"], done["from"], done["rows"], done["highest"], done["calls"]) == ("upgrade", 5, 3, 3, 2)
     assert done["added"] == log.UPGRADES[5]["added"] == ("reason_code, resume_of, search and fallback_of columns added to calls; "
                                                   "parent and split_plan columns added to tasks; slots and web columns added to tasks"
-                                                  + "; project and handoff columns added to tasks; context column added to calls; chat and memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task")
+                                                  + "; project and handoff columns added to tasks; context column added to calls; chat and memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task; project_files column added to tasks; tests column added to calls; from_task and idea columns added to tasks; ideas table added; plan and plan_step columns added to tasks; models column added to tasks; model, effort and time_limit columns added to calls; auto column added to tasks")
     assert done["backup"] == backups / BACKUP_V5 and before_hash == done["sha256"] and done["backup_check"]["content"] == "same"  # brief 22: checked by content
     assert stat.S_IMODE((backups / BACKUP_V5).stat().st_mode) == 0o600
     c = sqlite3.connect(db)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 16
-    assert _columns(c, "calls")[-8:] == ["reason_code", "resume_of", "search", "fallback_of", "context", "memory", "served", "round_file"]
+    assert c.execute("PRAGMA user_version").fetchone()[0] == 21
+    assert _columns(c, "calls")[-12:] == ["reason_code", "resume_of", "search", "fallback_of", "context", "memory", "served", "round_file", "tests", "model", "effort", "time_limit"]
     assert c.execute("SELECT COUNT(*) FROM calls WHERE reason_code IS NOT NULL OR resume_of IS NOT NULL").fetchone()[0] == 0
     c.close()
     assert _snapshot_v5(db) == before, "rowids and every version 5 column, tasks and calls, are unchanged"
@@ -116,15 +119,15 @@ def test_a_version_4_log_lands_on_version_6_in_one_go(tmp_path):
     make_v4_log(db)
     log.migrate(db, backups, now=T0)
     c = sqlite3.connect(db)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 16
-    assert _columns(c, "calls")[-10:] == ["stage", "role", "reason_code", "resume_of", "search", "fallback_of", "context", "memory", "served", "round_file"]
+    assert c.execute("PRAGMA user_version").fetchone()[0] == 21
+    assert _columns(c, "calls")[-14:] == ["stage", "role", "reason_code", "resume_of", "search", "fallback_of", "context", "memory", "served", "round_file", "tests", "model", "effort", "time_limit"]
     c.close()
 
 
 def test_init_db_refuses_a_version_5_log_and_names_the_upgrade(tmp_path):
     db = tmp_path / "router.db"
     make_v5_log(db)
-    with pytest.raises(log.VersionError, match=r"version 5 log.*sr migrate.*version 16 \(reason_code, resume_of, search"):
+    with pytest.raises(log.VersionError, match=r"version 5 log.*sr migrate.*version 21 \(reason_code, resume_of, search"):
         log.init_db(db)
     assert sqlite3.connect(db).execute("PRAGMA user_version").fetchone()[0] == 5
 
@@ -144,5 +147,5 @@ def test_cmd_migrate_prints_the_version_5_upgrade(tmp_path):
     lines = []
     assert cli.cmd_migrate(db_path=db, backups_dir=backups, now=T0, out=lines.append) == 0
     out = "\n".join(lines)
-    assert "version 5, 3 rows (highest #3)" in out and "now version 16" in out and BACKUP_V5 in out
+    assert "version 5, 3 rows (highest #3)" in out and "now version 21" in out and BACKUP_V5 in out
     assert "2 calls" in out

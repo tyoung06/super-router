@@ -11,6 +11,7 @@ from router import safety, settings
 
 SETTINGS_PATH = safety.REPO_ROOT / "config" / "settings.json"
 SENT = "sent"
+REFUSED = "refused"  # brief 29.1 (decision 6): a refused project drop's files
 CONVERTED = ("heic", "heif")
 SIPS_TIMEOUT = 60
 YES = ("y", "yes")
@@ -59,6 +60,15 @@ def at_top_level(drop_folder, path):
         return path.is_file() and path.resolve().parent == Path(drop_folder).expanduser().resolve()
     except OSError:
         return False
+
+
+def move_refused(drop_folder, label, paths):
+    """Brief 29.1 (decision 6): move a refused project drop's files to refused/<label>/, beside sent/. Returns it."""
+    dest = Path(drop_folder) / REFUSED / label
+    dest.mkdir(parents=True, exist_ok=True)
+    for path in paths:
+        shutil.move(str(path), str(dest / Path(path).name))
+    return dest
 
 
 def move_sent(drop_folder, task_id, paths):

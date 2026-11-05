@@ -1,0 +1,36 @@
+{
+ "task_id": null,
+ "n": null,
+ "status": null,
+ "waiting_on": null,
+ "outcome": null,
+ "reason_code": null,
+ "exit": 0,
+ "message": "    4  Record a reading per bed, not one for the whole plot.  (Added, 2026-10-19) · sent as #59",
+ "ideas": [
+  {
+   "id": 4,
+   "text": "Record a reading per bed, not one for the whole plot.",
+   "source": {
+    "kind": "added",
+    "task_id": null,
+    "n": null,
+    "suggested": false
+   },
+   "created_at": "2026-10-19T11:27:09+00:00",
+   "state": "sent",
+   "sent_as": {
+    "task_id": "sr-20261019-112654-0040",
+    "n": 59
+   }
+  }
+ ],
+ "dismissed": 0,
+ "used": [],
+ "suggest": {
+  "running": null,
+  "open": 0,
+  "off": null,
+  "last": null
+ }
+}

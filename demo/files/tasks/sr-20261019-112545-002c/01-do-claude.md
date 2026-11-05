@@ -1,0 +1,1 @@
+Fixed bed_area().

@@ -12,7 +12,7 @@ import pytest
 
 from router import __main__ as cli
 from router import log, safety
-from tests.helpers import fake_label
+from tests.helpers import fake_label, teamed
 from tests.test_json_actions import FAKE_ENV, World, jev
 from tests.test_loop import Scripted
 from tests.test_relay import Chat
@@ -144,7 +144,7 @@ def test_the_task_text_reaches_jev_already_redacted(world):
 def test_a_relay_and_a_split_task_text_is_redacted_before_its_row(world):
     world.worker, world.chatgpt = Scripted("## Plan\n1. a\n2. b"), Chat("## Amended plan\n1. a")
     world.run("relay", "collab", f"plan around {FOURTH}", "--json")
-    world.worker = Scripted("## Pieces\n1. one\n2. two\n\n## Join\nput them together")
+    world.worker = Scripted(teamed("## Pieces\n1. one\n2. two\n\n## Join\nput them together"))
     world.run("split", f"split around {FOURTH}", "--json")
     for table, text in _rows(cli.DB_PATH):
         assert not _found(text), (table, text[:200])

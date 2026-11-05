@@ -30,7 +30,7 @@ def log_folder(conn):
 def _preset(row, loaded):
     if row["mode"] == "split":
         return split.PRESET
-    if row["mode"] == "relay" and loaded is not None:
+    if row["mode"] in log.CHAINED_MODES and loaded is not None:  # brief 33.1: a plan task's chain too
         return presets.for_task(row, loaded)[0]
     return None
 
@@ -64,6 +64,57 @@ def role_of(call, preset=None):
 
 def file_name(call, order, preset=None):
     return f"{order:02d}-{role_of(call, preset)}-{call['agent']}.md"
+
+
+# ---------- the kept prompts (brief 29.1, decision 22; Phase 0, call 7) ----------
+
+# Brief 29.1 kept every check, re-check and fix-round prompt; brief 30 (Phase 0's call 3) keeps every call's prompt, so the
+# router notes a doer, a plan, a stage, a resume or a fallback was sent can be read where they went
+PROMPT_KINDS = ("do", "check", "recheck", "fix", "stage", "reask")
+
+
+def prompt_name(call, order, preset=None):
+    """`<NN>-<role>-<agent>-prompt.md`: the round file's name with `-prompt`, so the call row names it by its place."""
+    return f"{order:02d}-{role_of(call, preset)}-{call['agent']}-prompt.md"
+
+
+def keep_prompt(conn, task_id, call_id, kind, agent, prompt, secrets, *, role=None, stage=None, preset=None):
+    """A call's prompt (brief 30: every kind), kept before the send beside its output: `tasks/<task_id>/<name>`, NN the
+    place its row will take (the task's calls so far, plus one), the stage's role and slot letter as its round file will
+    have them, redacted as round files are, owner-only. A file already there is replaced: it is from a send that stopped
+    before its row, so no row names it. A Cursor prompt is kept as the router built it; the sender puts the opener (the
+    scope paragraph and the no-tools sentence) before it. Returns the path relative to the log's folder, or None (a log
+    in memory)."""
+    folder = log_folder(conn)
+    if kind not in PROMPT_KINDS or folder is None:
+        return None
+    order = len(log.calls_for(conn, task_id)) + 1
+    name = prompt_name({"kind": kind, "call_id": call_id, "agent": agent, "reason_code": None, "role": role,
+                        "stage": stage}, order, preset)
+    target = folder / FOLDER / task_id
+    for d in (target.parent, target):
+        d.mkdir(mode=0o700, exist_ok=True)
+        os.chmod(d, 0o700)
+    temp = target / (name + ".tmp")
+    fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        os.fchmod(f.fileno(), 0o600)
+        f.write(safety.redact(prompt, [s for s in secrets if s]))
+    os.replace(temp, target / name)
+    return f"{FOLDER}/{task_id}/{name}"
+
+
+def prompt_file(folder, call, order, preset=None):
+    """The kept prompt a call row names by its place, when the file is there; None otherwise (a call from before brief
+    29.1, or before brief 30 for a kind other than check, re-check and fix; a log in memory). Brief 30: the round file's
+    own name with `-prompt` first, since it carries a stage's slot letter; then the name from the call's place."""
+    if folder is None or call["kind"] not in PROMPT_KINDS:
+        return None
+    keys = call.keys() if hasattr(call, "keys") else call
+    named = call["round_file"] if "round_file" in keys else None
+    candidates = [named[:-3] + "-prompt.md"] if isinstance(named, str) and named.endswith(".md") else []
+    candidates.append(f"{FOLDER}/{call['task_id']}/{prompt_name(call, order, preset)}")
+    return next((c for c in candidates if (folder / c).is_file()), None)
 
 
 def _create(folder, name, text):

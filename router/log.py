@@ -40,40 +40,60 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-VERSION = 16  # kept in PRAGMA user_version; a version 1 log has 0
+VERSION = 21  # kept in PRAGMA user_version; a version 1 log has 0
 BUSY_SECONDS = 15  # build brief 22, decision 6: every connection waits this long for another writer before `locked`
 
 STATUSES = ("queued", "sent", "done", "failed", "timed_out", "cancelled", "returned")
 # `not_asked` is a relay task's status: Jev is never called on one (rules v2.12).
 JEV_STATUSES = ("ok", "below_floor", "none_of_these", "error", "over_cap", "not_asked",
                 "not_set_up")  # build brief 24 (decision 13): no JEV_API_KEY, so Jev isn't called
-SKILL_SOURCES = ("jev", "owner")  # brief 25 (log version 16): a label the owner gave is `owner`
-CHECK_STATES = ("not_needed", "unchecked", "pending", "passed", "fixed", "failed")
-MODES = ("route", "relay", "split", "piece")
+# brief 25 (log version 16): a label the owner gave is `owner`; brief 29.1 (decision 24): the follow-up's is `router`
+SKILL_SOURCES = ("jev", "owner", "router")
+CHECK_STATES = ("not_needed", "unchecked", "pending", "passed", "fixed", "failed",
+                "blocked")  # brief 29.1 (decision 17): the doer lacked what it needed; no fix round
+MODES = ("route", "relay", "split", "piece", "plan", "auto",  # brief 33.1 (decision 1): a plan task; brief 34: a run
+         "suggest")  # brief 33.4 (decision 10): one Suggest ideas click
 # A split (rules v2.18) is never sent to Jev; a piece is labeled like any routed task and names its split in `parent`.
-NOT_ASKED_MODES = ("relay", "split")
+NOT_ASKED_MODES = ("relay", "split", "plan", "auto", "suggest")  # brief 33.1: Jev is never called on a plan; brief 34: nor on a
+# run; brief 33.4: nor on a suggest
 # `stage` and `reask` are the relay kinds: one `stage` row per stage, a `reask` row when the
 # stage's contract was missed and its agent was asked once more.
-CALL_KINDS = ("do", "check", "fix", "recheck", "stage", "reask")
+CALL_KINDS = ("do", "check", "fix", "recheck", "stage", "reask",
+              "questions")  # brief 33.4 (decision 3): a plan's stage-1 round that ended in `## Questions`: no longer the stage
 # Brief 21, C1 (rules v2.30, Round outputs): main sets this for one command (router/rounds.writer); add_call and
 # finish_call hand it each call that came back with text, after its row is written. None: no files (tests, reads).
 ROUND_WRITER = None
 STAGE_KINDS = ("stage", "reask")
 MAX_STAGES = 4  # rules v2.12, Money and Relay
 CALL_STATUSES = ("sent", "done", "failed", "timed_out")
-VERDICTS = ("PASS", "FIX", "unreadable")
+VERDICTS = ("PASS", "FIX", "BLOCKED", "unreadable")  # brief 29.1 (decision 17): BLOCKED
 # The only reason code: a call that stopped on Claude's or ChatGPT's plan limit (router/plan_limit.py).
 # Any other failure keeps its own text and no code.
 REASON_CODES = ("plan_limit", "process_ended",  # build brief 22: a call whose sr process ended while it ran
                 # build brief 24 (decision 6, C5): a Grok call out at 2N; its answer after the takeover; a call too long
                 # for Grok; a call that failed in the router's own code (never taken over)
-                "overdue", "late", "too_long", "internal_error")
+                "overdue", "late", "too_long", "internal_error",
+                # build brief 28 (decisions 7 and 8): the copy held a path it never carries or a link, or a change broke
+                # a limit; the task stops and nothing takes the call over
+                "copy_problem",
+                # build brief 32 (decision 11): an optional stage skipped (its call failed or its list missed its
+                # contract after the re-ask); the chain went on without it, and nothing takes it over or resumes it
+                "skipped",
+                # build brief 33.3 (decision 6): the call's stream marked it billed to usage credits; the task stops, Fable
+                # turns off, nothing takes it over and nothing is retried
+                "credits")
 # Build brief 21 (rules v2.30, Router for the interface): why a task came back to the owner, on the task row
 # (tasks.reason_code), written by the code that makes the return. A refusal writes no row; its code rides in the JSON only.
 RETURN_CODES = ("needs_label", "no_skill", "no_answer", "not_routed", "needs_tag", "not_live", "files_to_agent",
                 "handoff_key", "handoff_unreadable", "memory_down",
-                "unavailable")  # build brief 24 (decision 3): make_media without Grok Bot, or no agent for the skill
-HANDOFF_RETURN_CODES = ("handoff_key", "handoff_unreadable")
+                "unavailable",  # build brief 24 (decision 3): make_media without Grok Bot, or no agent for the skill
+                "notes_key",  # brief 30 (decision 4): the router notes kept with the task looked like a key on the send
+                "too_long",  # brief 33 (decision 11): Grok would do it, and the from-block would pass Grok's limit
+                "budget")  # brief 34 (decision 7): a run stopped at its budget (the run row's own code)
+HANDOFF_RETURN_CODES = ("handoff_key", "handoff_unreadable", "notes_key")  # what return_for_context takes
+# Brief 29.1 (decision 3): the returns `sr route --skill <key> --answers <n>` may answer: a Jev floor question, and a task Jev
+# labeled with a skill version 2 doesn't route ("Send as <skill>" on its card)
+ANSWERABLE_CODES = ("needs_label", "not_routed")
 SEARCH_STATES = ("allowed", "off (probe not passed)", "off (file without --web)",
                  "off (--web file probe not passed)")  # router/search.py
 # Build brief 9 (the owner's D2): a versus task whose reviews are in waits for the owner's pick as `returned`
@@ -84,6 +104,8 @@ AWAITING_PICK = "awaiting pick"
 # its plan for their y/N/e, or its pieces (`waiting: pieces #5, #6`) until each is delivered or skipped.
 AWAITING_APPROVAL = "awaiting approval"
 WAITING_PIECES = "waiting: pieces"
+# Brief 33.4 (decision 5): a plan that asked its questions waits with the owner, `returned` with this note, its copy kept
+AWAITING_ANSWERS = "awaiting answers"
 _ROLE = re.compile(r"[a-z][a-z0-9_-]*")
 PROJECT_NAME = re.compile(r"[a-z0-9-]+")  # rules v2.25: a project name is lower case letters, digits and -
 
@@ -131,7 +153,14 @@ CREATE TABLE tasks (
     reason_code     TEXT,
     pid             INTEGER,
     run_started_at  TEXT,
-    answered_by     TEXT
+    answered_by     TEXT,
+    project_files   TEXT,
+    from_task       TEXT,
+    idea            INTEGER,
+    plan            TEXT,
+    plan_step       TEXT,
+    models          TEXT,
+    auto            TEXT
 )
 """
 
@@ -157,7 +186,11 @@ CREATE TABLE calls (
     context     TEXT,
     memory      TEXT,
     served      TEXT,
-    round_file  TEXT
+    round_file  TEXT,
+    tests       TEXT,
+    model       TEXT,
+    effort      TEXT,
+    time_limit  INTEGER
 )
 """
 
@@ -230,6 +263,50 @@ _V15_ADDED = "pid, run_started_at and answered_by columns added to tasks"
 # never spelled: any skill_source that is neither of today's two values nor empty.
 OWNER_SOURCE = " UPDATE tasks SET skill_source = 'owner' WHERE skill_source IS NOT NULL AND skill_source NOT IN ('jev', 'owner');"
 V16_ADDED = "skill_source set to owner where it named the one who labeled the task"
+# Version 17 (build brief 28, decisions 8 and 19): a task's project files record (file mode: its state, base, change, diff,
+# commit, undo commit, or why it was off) and a call's tests record (exit, outcome, summary, output file).
+V16_COLUMNS = V14_COLUMNS + ("pid", "run_started_at", "answered_by")
+_FILES_TASK_COLUMN = " ALTER TABLE tasks ADD COLUMN project_files TEXT;"
+_TESTS_CALL_COLUMN = " ALTER TABLE calls ADD COLUMN tests TEXT;"
+V17_ADDED = "project_files column added to tasks; tests column added to calls"
+# Version 18 (build brief 33, decision 17): the earlier task a task builds from (`--from`) and the idea it was sent from
+# (`--idea`) on tasks, and the table of each project's Ideas list. An idea's state is derived, never stored.
+V17_COLUMNS = V16_COLUMNS + ("project_files",)
+V17_CALL_COLUMNS = V14_CALL_COLUMNS + ("tests",)
+IDEAS_SCHEMA = """
+CREATE TABLE ideas (
+    id           INTEGER PRIMARY KEY,
+    project      TEXT NOT NULL,
+    text         TEXT NOT NULL,
+    source_kind  TEXT NOT NULL CHECK (source_kind IN ('later', 'added')),
+    source_task  TEXT,
+    created_at   TEXT NOT NULL,
+    dismissed_at TEXT
+)
+"""
+_FROM_IDEA_COLUMNS = " ALTER TABLE tasks ADD COLUMN from_task TEXT; ALTER TABLE tasks ADD COLUMN idea INTEGER;"
+_IDEAS_TABLE = f" {IDEAS_SCHEMA.strip()};"
+V18_ADDED = "from_task and idea columns added to tasks; ideas table added"
+# Version 19 (build brief 33.1, decision 19): a plan task's plan (as the planner returned it, the owner's edits and the hash of
+# the docs/PLAN.md it rendered) and a step task's plan task and step.
+V18_COLUMNS = V17_COLUMNS + ("from_task", "idea")
+_PLAN_TASK_COLUMNS = " ALTER TABLE tasks ADD COLUMN plan TEXT; ALTER TABLE tasks ADD COLUMN plan_step TEXT;"
+V19_ADDED = "plan and plan_step columns added to tasks"
+# Version 20 (build brief 33.3, decision 7): a task's own model choices (`--model <agent>=<model>`, `--effort`) and each
+# call's model asked, effort and time limit; `calls.served` (version 13's column) takes every agent's served record.
+V19_COLUMNS = V18_COLUMNS + ("plan", "plan_step")
+V19_CALL_COLUMNS = V17_CALL_COLUMNS
+_MODELS_TASK_COLUMN = " ALTER TABLE tasks ADD COLUMN models TEXT;"
+_MODELS_CALL_COLUMNS = (" ALTER TABLE calls ADD COLUMN model TEXT; ALTER TABLE calls ADD COLUMN effort TEXT;"
+                        " ALTER TABLE calls ADD COLUMN time_limit INTEGER;")
+V20_ADDED = "models column added to tasks; model, effort and time_limit columns added to calls"
+# Version 21 (build brief 34, decision 14): a run row's record (`mode` `auto`): its plan, its steps, the budget, the calls
+# used, the stop and the passed marks; the stop-here marks live on the plan row's record, the step tasks name the run as
+# their parent.
+V20_COLUMNS = V19_COLUMNS + ("models",)
+V20_CALL_COLUMNS = V19_CALL_COLUMNS + ("model", "effort", "time_limit")
+_AUTO_TASK_COLUMN = " ALTER TABLE tasks ADD COLUMN auto TEXT;"
+V21_ADDED = "auto column added to tasks"
 # What each in-place upgrade adds, by the version it starts from. `call_columns` names the calls
 # table's columns when it already exists, so the check after the upgrade covers its rows too.
 UPGRADES = {
@@ -279,9 +356,24 @@ UPGRADES = {
     14: {"columns": V14_COLUMNS, "call_columns": V14_CALL_COLUMNS,
          "statements": _RUN_TASK_COLUMNS,
          "added": _V15_ADDED},
-    15: {"columns": V14_COLUMNS + ("pid", "run_started_at", "answered_by"), "call_columns": V14_CALL_COLUMNS,
+    15: {"columns": V16_COLUMNS, "call_columns": V14_CALL_COLUMNS,
          "statements": OWNER_SOURCE,
          "added": V16_ADDED},
+    16: {"columns": V16_COLUMNS, "call_columns": V14_CALL_COLUMNS,
+         "statements": _FILES_TASK_COLUMN + _TESTS_CALL_COLUMN,
+         "added": V17_ADDED},
+    17: {"columns": V17_COLUMNS, "call_columns": V17_CALL_COLUMNS,
+         "statements": _FROM_IDEA_COLUMNS + _IDEAS_TABLE,
+         "added": V18_ADDED},
+    18: {"columns": V18_COLUMNS, "call_columns": V17_CALL_COLUMNS,
+         "statements": _PLAN_TASK_COLUMNS,
+         "added": V19_ADDED},
+    19: {"columns": V19_COLUMNS, "call_columns": V19_CALL_COLUMNS,
+         "statements": _MODELS_TASK_COLUMN + _MODELS_CALL_COLUMNS,
+         "added": V20_ADDED},
+    20: {"columns": V20_COLUMNS, "call_columns": V20_CALL_COLUMNS,
+         "statements": _AUTO_TASK_COLUMN,
+         "added": V21_ADDED},
 }
 for _from in range(2, 9):  # every older log lands on version 10 with the slots and web columns too
     UPGRADES[_from]["added"] += _SLOTS_ADDED
@@ -308,6 +400,23 @@ for _from in range(2, 14):  # ...and on version 15 with the run columns and answ
 for _from in range(2, 15):  # ...and on version 16 with the owner's stored value renamed (brief 25)
     UPGRADES[_from]["statements"] += OWNER_SOURCE
     UPGRADES[_from]["added"] += "; " + V16_ADDED
+for _from in range(2, 16):  # ...and on version 17 with project_files and tests (brief 28)
+    # version 2 makes its calls table from CALLS_SCHEMA, which already has `tests`
+    UPGRADES[_from]["statements"] += _FILES_TASK_COLUMN + ("" if _from == 2 else _TESTS_CALL_COLUMN)
+    UPGRADES[_from]["added"] += "; " + V17_ADDED
+for _from in range(2, 17):  # ...and on version 18 with from_task, idea and the ideas table (brief 33)
+    UPGRADES[_from]["statements"] += _FROM_IDEA_COLUMNS + _IDEAS_TABLE
+    UPGRADES[_from]["added"] += "; " + V18_ADDED
+for _from in range(2, 18):  # ...and on version 19 with plan and plan_step (brief 33.1)
+    UPGRADES[_from]["statements"] += _PLAN_TASK_COLUMNS
+    UPGRADES[_from]["added"] += "; " + V19_ADDED
+for _from in range(2, 19):  # ...and on version 20 with models on tasks and model, effort, time_limit on calls (brief 33.3)
+    # version 2 makes its calls table from CALLS_SCHEMA, which already has the three call columns
+    UPGRADES[_from]["statements"] += _MODELS_TASK_COLUMN + ("" if _from == 2 else _MODELS_CALL_COLUMNS)
+    UPGRADES[_from]["added"] += "; " + V20_ADDED
+for _from in range(2, 20):  # ...and on version 21 with auto on tasks (brief 34)
+    UPGRADES[_from]["statements"] += _AUTO_TASK_COLUMN
+    UPGRADES[_from]["added"] += "; " + V21_ADDED
 
 
 class StateError(Exception):
@@ -379,7 +488,7 @@ def init_db(path):
             return conn
         if version == 0 and not columns:
             # One transaction, so a new log never exists without its version mark.
-            conn.executescript(f"BEGIN; {SCHEMA}; {CALLS_SCHEMA}; PRAGMA user_version = {VERSION}; COMMIT;")
+            conn.executescript(f"BEGIN; {SCHEMA}; {CALLS_SCHEMA}; {IDEAS_SCHEMA}; PRAGMA user_version = {VERSION}; COMMIT;")
             if not _in_memory(path):
                 conn.execute("PRAGMA journal_mode=WAL")  # set once, outside any transaction; it stays in the file
             return conn
@@ -430,9 +539,33 @@ def file_version(path):
         conn.close()
 
 
+def is_run_step(row):
+    """Brief 34 (decision 2): a step of an Auto run: a piece of the run (a row with the run as its parent) whose file-mode
+    record names the run (`run`). Its prompts, tests and checks are Build step k's; its entry, memory and land are the
+    run's, as a split's piece's are its split's."""
+    return bool((project_files_of(row) or {}).get("run")) if "project_files" in row.keys() else False
+
+
+def is_piece(row):
+    """Build brief 29 (decision 9): a piece of a split is a row with a parent, whatever its team: mode `piece` (a route
+    piece) or `relay` (a piece of another team). Every "is this a piece" reads this."""
+    return bool(row["parent"] if "parent" in row.keys() else None)
+
+
+CHAINED_MODES = ("relay", "plan")  # brief 33.1 (decision 1): a plan runs redteam's chain as a relay task does
+
+
+def runs_preset(row):
+    """Build brief 29 (decision 9): the row runs a preset's chain (a relay task, or a piece of a team other than route).
+    Brief 33.1: a plan task too. Every "does this run a preset" reads this."""
+    return (row["mode"] if "mode" in row.keys() else None) in CHAINED_MODES
+
+
 def add_task(conn, task_id, task, source, jev, now=None, files=None, mode="route", preset=None, parent=None,
-             slots=None, web=False, project=None, chat=None, run=None, owner_label=False, answers=None):
-    """Log a new task as queued, with Jev's answer. `jev` holds status, label, confidence,
+             slots=None, web=False, project=None, chat=None, run=None, owner_label=False, answers=None, from_task=None,
+             idea=None, plan=None, plan_step=None, models=None, auto=None):
+    """Log a new task as queued, with Jev's answer. Brief 33 (decision 17): `from_task`, the earlier task it builds from,
+    and `idea`, the project idea it was sent from (both checked at intake). `jev` holds status, label, confidence,
     needs_split, tokens and error (see router/jev.py). Who does the task is set by set_route.
     `files` is the list of file records (name, type, size, frames) from router/media.py, or None;
     `task` is the text the owner typed, never the copy with the file lines that Jev got.
@@ -448,47 +581,82 @@ def add_task(conn, task_id, task, source, jev, now=None, files=None, mode="route
     sees it unowned for even a moment. `owner_label` (build brief 22, decision 2): a routed task its owner labeled with
     `--skill`, so Jev was not asked (`not_asked` on a route task). `answers` is the Jev floor row it answers: that row
     gets `answered_by` in the same write, or nothing is written (StateError) when it is no longer an unanswered floor
-    question."""
+    question. Brief 33.1 (decision 19): a plan task (`mode` plan) names its preset (redteam) and slots as a relay task does,
+    always has a project, and starts with its `plan` record (the menu it is read against); a step task carries
+    `plan_step`, {plan, step}, and a project. Brief 33.3 (decision 4): `models` is the task's own model choices,
+    {agent: {"model", "effort"}}, checked at intake (router/models.py); None when none were given."""
     _allowed("jev_status", jev.get("status"), JEV_STATUSES, required=True)
     _allowed("mode", mode, MODES, required=True)
-    if mode == "relay":
+    if mode in CHAINED_MODES:
         if not isinstance(preset, str) or not preset:
-            raise ValueError("a relay task needs a preset name.")
+            raise ValueError(f"a {mode} task needs a preset name.")
     elif preset is not None:
-        raise ValueError("only a relay task has a preset.")
+        raise ValueError("only a relay task has a preset.")  # (a plan task has redteam's, brief 33.1)
+    if mode == "plan" and (project is None or parent is not None or chat is not None or files or web):
+        raise ValueError("a plan task has a project, and no parent, chat, file or --web.")
+    if (plan is not None) != (mode == "plan"):
+        raise ValueError("a plan task, and only one, starts with its plan record.")
+    if mode == "auto" and (project is None or parent is not None or chat is not None or files or web):  # brief 34
+        raise ValueError("a run has a project, and no parent, chat, file or --web.")
+    if (auto is not None) != (mode == "auto"):
+        raise ValueError("a run, and only one, starts with its auto record.")
+    owner = get_task(conn, parent) if parent is not None else None
+    run_step = owner is not None and owner["mode"] == "auto"  # brief 34 (decision 2): a step task of a run
+    if plan_step is not None and (mode not in ("route", "relay") or project is None or (parent is not None and not run_step)
+                                  or not isinstance(plan_step, dict)):
+        raise ValueError("a step of a plan is a routed or relay task on its project.")
     if mode in NOT_ASKED_MODES and jev.get("status") != "not_asked":
         raise ValueError(f"a {mode} task's jev_status is not_asked: Jev is never called on a {mode} task.")
     if mode not in NOT_ASKED_MODES and jev.get("status") == "not_asked" and not (owner_label and mode == "route"):
         raise ValueError("jev_status not_asked belongs to relay and split tasks, and a routed task you labeled.")
     if answers is not None and not owner_label:
         raise ValueError("only a task you labeled answers a floor question.")
-    if mode == "piece":
+    if models is not None:
+        if (not isinstance(models, dict) or not models
+                or not all(isinstance(a, str) and isinstance(e, dict) and set(e) <= {"model", "effort"}
+                           and all(v is None or isinstance(v, str) for v in e.values()) and any(e.values())
+                           for a, e in models.items())):
+            raise ValueError("a task's models map each agent to its model and effort, at least one of them.")
+    if mode == "piece" and (not isinstance(parent, str) or not parent):
+        raise ValueError("a piece needs its parent: the split task it belongs to.")
+    if parent is not None:  # brief 29 (decision 9): a route piece, or a relay row that is a piece of another team;
+        # brief 34 (decision 2): a run's step, a routed or relay task whose parent is the run
         if not isinstance(parent, str) or not parent:
-            raise ValueError("a piece needs its parent: the split task it belongs to.")
-        owner = get_task(conn, parent)
+            raise ValueError("a parent is the split task's id.")
         if owner is None:
             raise StateError(f"{parent}: no such task, so no piece can name it")
-        if owner["mode"] != "split":
-            raise StateError(f"{parent}: not a split task, so it has no pieces")
-    elif parent is not None:
-        raise ValueError("only a piece has a parent.")
+        if run_step:
+            if mode not in ("route", "relay") or plan_step is None:
+                raise ValueError("a run's step is a routed or relay task with its plan step.")
+        else:
+            if mode not in ("piece", "relay"):
+                raise ValueError("only a piece has a parent: a route piece or a relay task of a split.")
+            if owner["mode"] != "split":
+                raise StateError(f"{parent}: not a split task, so it has no pieces")
     if slots is not None:
-        if mode != "relay":
-            raise ValueError("only a relay task has slots.")
-        if not isinstance(slots, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in slots.items()):
-            raise ValueError("slots map slot names to agent names.")
+        if mode not in CHAINED_MODES:
+            raise ValueError("only a relay task has slots.")  # (and a plan task, brief 33.1)
+        # brief 32 (decision 16): an optional slot left out at intake is kept as null
+        if not isinstance(slots, dict) or not all(isinstance(k, str) and (isinstance(v, str) or v is None)
+                                                  for k, v in slots.items()):
+            raise ValueError("slots map slot names to agent names (or null for a slot left out).")
     if web and mode != "route":
         raise ValueError("only a routed task takes --web.")
-    if project is not None:
-        if mode not in ("route", "relay"):
-            raise ValueError("only a routed or relay task has a project.")
+    if project is not None:  # brief 29 (decision 12): a split on a project, and its pieces, carry the project too
+        if mode not in ("route", "relay", "split", "piece", "plan", "auto", "suggest"):  # brief 33.4: a suggest; brief 33.1: a plan task too; brief 34: a run
+            raise ValueError("only a routed, relay or split task, or a piece, has a project.")
         if not isinstance(project, str) or not PROJECT_NAME.fullmatch(project):
             raise ValueError("a project name is lower case letters, digits and -.")
+    # brief 33 (decision 8); brief 33.1 (decision 18): `--from` is allowed on `sr plan` too
+    if from_task is not None and (mode not in ("route", "relay", "plan") or parent is not None):
+        raise ValueError("only a routed or relay task builds from an earlier result; never a split or a piece.")
+    if idea is not None and (project is None or not isinstance(idea, int) or isinstance(idea, bool)):
+        raise ValueError("an idea is a project's idea id.")
     if chat is not None:
         if project is not None:
             raise ValueError("one tag per task: a task has a project or a chat, never both.")
-        if mode not in ("route", "relay"):
-            raise ValueError("only a routed or relay task has a chat.")
+        if mode not in ("route", "relay") or parent is not None:  # brief 29: a split and its pieces are never tagged so
+            raise ValueError("only a routed or relay task has a chat; never a split or a piece.")
         if not isinstance(chat, str) or not PROJECT_NAME.fullmatch(chat):
             raise ValueError("a chat name is lower case letters, digits and -.")
     tokens = jev.get("tokens") or 0
@@ -499,15 +667,20 @@ def add_task(conn, task_id, task, source, jev, now=None, files=None, mode="route
     conn.execute(
         "INSERT INTO tasks (task_id, created_at, updated_at, source, task, jev_status, jev_label,"
         " jev_confidence, jev_needs_split, jev_tokens, jev_error, status, files, mode, preset, parent, slots, web,"
-        " project, chat, pid, run_started_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " project, chat, pid, run_started_at, from_task, idea, plan, plan_step, models, auto)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (task_id, stamp, stamp, source, task, jev["status"], jev.get("label"), jev.get("confidence"),
          jev.get("needs_split"), tokens, jev.get("error"), json.dumps(list(files)) if files else None, mode, preset,
-         parent, json.dumps(slots) if slots is not None else None, 1 if web else None, project, chat, pid, started),
+         parent, json.dumps(slots) if slots is not None else None, 1 if web else None, project, chat, pid, started,
+         from_task, idea, json.dumps(plan, ensure_ascii=False) if plan is not None else None,
+         json.dumps(plan_step) if plan_step is not None else None,
+         json.dumps(models, sort_keys=True) if models is not None else None,
+         json.dumps(auto, ensure_ascii=False) if auto is not None else None),
     )
     if answers is not None:  # brief 22 (decision 2): one write, the new row and the floor row's answered_by
         cur = conn.execute("UPDATE tasks SET answered_by = ? WHERE task_id = ? AND status = 'returned'"
-                           " AND reason_code = 'needs_label' AND answered_by IS NULL", (task_id, answers))
+                           f" AND reason_code IN ({', '.join('?' for _ in ANSWERABLE_CODES)}) AND answered_by IS NULL",
+                           (task_id, answers, *ANSWERABLE_CODES))
         if cur.rowcount != 1:
             conn.rollback()
             raise StateError(f"{answers}: no longer an unanswered floor question")
@@ -587,6 +760,57 @@ def split_plan_of(row):
     """A split task's stored plan as a dict, or None (no plan yet, or not a split)."""
     raw = row["split_plan"] if "split_plan" in row.keys() else None
     return json.loads(raw) if raw else None
+
+
+def plan_of(row):
+    """Brief 33.1 (decision 19): a plan task's record (router/plan.py) as a dict, or None."""
+    raw = row["plan"] if "plan" in row.keys() else None
+    return json.loads(raw) if raw else None
+
+
+def auto_of(row):
+    """Brief 34 (decision 14): a run row's record (router/auto.py) as a dict, or None."""
+    raw = row["auto"] if "auto" in row.keys() else None
+    return json.loads(raw) if raw else None
+
+
+def set_auto(conn, task_id, record):
+    """Store a run row's record whole (its plan, its steps, the budget, the calls used, the stop, the passed marks)."""
+    row = get_task(conn, task_id)
+    if row is None or (row["mode"] if "mode" in row.keys() else None) != "auto":
+        raise StateError(f"{task_id}: not a run, so it has no auto record")
+    conn.execute("UPDATE tasks SET auto = ? WHERE task_id = ?", (json.dumps(record, ensure_ascii=False), task_id))
+    conn.commit()
+
+
+def reopen_run(conn, task_id, run=None):
+    """Brief 34 (decision 4): a stopped run (`returned`) goes on: queued again, its note and reason cleared, under the run
+    that continues it."""
+    pid, started = run if run is not None else (None, None)
+    _move(conn, task_id, ("returned",), "queued", check_note=None, reason_code=None, pid=pid, run_started_at=started)
+
+
+def set_plan(conn, task_id, record):
+    """Store a plan task's record whole (its menu, the plan as returned, the owner's edits, the hashes)."""
+    row = get_task(conn, task_id)
+    if row is None or (row["mode"] if "mode" in row.keys() else None) != "plan":
+        raise StateError(f"{task_id}: not a plan task, so it has no plan record")
+    conn.execute("UPDATE tasks SET plan = ? WHERE task_id = ?", (json.dumps(record, ensure_ascii=False), task_id))
+    conn.commit()
+
+
+def plan_step_of(row):
+    """Brief 33.1 (decision 19): a step task's {plan, step}, or None."""
+    raw = row["plan_step"] if "plan_step" in row.keys() else None
+    return json.loads(raw) if raw else None
+
+
+def models_of(row):
+    """Brief 33.3 (decision 4): a task's own model choices, {agent: {"model", "effort"}}, or {} (a row from before log
+    version 20 too)."""
+    raw = row["models"] if "models" in row.keys() else None
+    found = json.loads(raw) if raw else {}
+    return found if isinstance(found, dict) else {}
 
 
 def add_jev_tokens(conn, task_id, tokens):
@@ -710,6 +934,9 @@ def tag_of(row):
     return None
 
 
+FORGET_KEYS = frozenset({"forgotten", "remembered"})  # brief 30 (decision 15): the owner's Forget and Remember again
+
+
 def memory_of(row):
     """The retain records the router made for this task, oldest first (rules v2.27, "When"): each
     `{"document_id", "chars", "at", "state"}` or `{"skipped", "at", "state"}`. [] when none."""
@@ -724,15 +951,19 @@ def add_memory_write(conn, task_id, record, now=None):
     """Log one retain the router made (or skipped) for a tagged task, keyed on the ending it was made for (`state`).
     Appended, like the handoff writes; a fallback or a resume that delivers again gets its own record. It leaves
     `updated_at` alone (the owner, 20 Oct): that is the delivery's time, which the task's memory heading shows, so a
-    backfill or a rebuild long after the delivery never moves it."""
+    backfill or a rebuild long after the delivery never moves it. Brief 30 (decision 15): a `{"forgotten": <date>}` or
+    `{"remembered": <date>}` record is the owner's Forget or Remember again, appended the same way."""
     row = get_task(conn, task_id)
     if row is None:
         raise StateError(f"{task_id}: no such task")
     if not tag_of(row):
         raise StateError(f"{task_id}: not a tagged task, so no memory write belongs to it")
-    if "state" not in record:
+    if FORGET_KEYS & set(record):
+        if len(FORGET_KEYS & set(record)) != 1 or not isinstance(record.get("forgotten", record.get("remembered")), str):
+            raise ValueError("a Forget record is {forgotten: <date>} or {remembered: <date>}.")
+    elif "state" not in record:
         raise ValueError("a memory write record needs state.")
-    if not (("document_id" in record and "chars" in record) or "skipped" in record):
+    elif not (("document_id" in record and "chars" in record) or "skipped" in record):
         raise ValueError("a memory write record needs document_id and chars, or skipped.")
     writes = memory_of(row) + [{**record, "at": _iso(now)}]
     conn.execute("UPDATE tasks SET memory = ? WHERE task_id = ?", (json.dumps(writes), task_id))
@@ -750,16 +981,89 @@ def chat_exists(conn, name):
     return conn.execute("SELECT 1 FROM tasks WHERE chat = ? LIMIT 1", (name,)).fetchone() is not None
 
 
+def project_tasks(conn, project):
+    """Every task of a project, its pieces too, newest first (brief 33's What now?)."""
+    return conn.execute(f"SELECT {_COLUMNS} FROM tasks WHERE project = ? {_NEWEST_FIRST}", (project,)).fetchall()
+
+
 def recent_tasks_of_chat(conn, name, limit=20):
     return conn.execute(f"SELECT {_COLUMNS} FROM tasks WHERE chat = ? {_NEWEST_FIRST} LIMIT ?", (name, limit)).fetchall()
 
 
 def open_task_for(conn, project):
     """The newest open task (queued or sent) of a project, or None (rules v2.25: one open task per project).
-    A returned task is final here: nothing resumes it and `sr cancel` cannot touch it, so it never blocks."""
+    A returned task is final here: nothing resumes it and `sr cancel` cannot touch it, so it never blocks. Build brief 28
+    (decision 10): a delivered task whose change waits to land is open too, until it is landed or discarded. Build brief 29
+    (decision 12): a split is the project's one open task from intake until it ends, lands or is discarded, at its plan
+    and on its pieces too (then `returned`); its pieces are its own, never a second task, so a row with a parent is read
+    through its split. Build brief 33.4 (decision 5): a plan waiting for answers, and a versus or tied vote awaiting its
+    pick, hold the project too; (decision 10b) a running suggest doesn't: it goes beside any task of its project."""
     return conn.execute(
-        "SELECT rowid AS n, * FROM tasks WHERE project = ? AND status IN ('queued', 'sent') ORDER BY rowid DESC LIMIT 1",
-        (project,)).fetchone()
+        "SELECT rowid AS n, * FROM tasks WHERE project = ? AND parent IS NULL AND mode != 'suggest' AND (status IN ('queued', 'sent')"
+        " OR (mode = 'plan' AND status = 'returned' AND check_note = ?)"
+        " OR (mode = 'relay' AND status = 'returned' AND check_note = ?)"
+        " OR (status = 'done' AND json_extract(project_files, '$.state') = 'waiting')"
+        " OR (mode = 'split' AND status = 'returned' AND (check_note = ? OR check_note LIKE ?))"
+        " OR (mode = 'auto' AND status = 'returned'"  # brief 34 (decision 1): a stopped run holds the project while
+        " AND COALESCE(json_extract(project_files, '$.state'), 'none') = 'none'))"  # its copy is kept (not discarded)
+        " ORDER BY rowid DESC LIMIT 1", (project, AWAITING_ANSWERS, AWAITING_PICK, AWAITING_APPROVAL,
+                                         WAITING_PIECES + "%")).fetchone()
+
+
+def running_suggests(conn, project):
+    """Brief 33.4 (decision 10b): the project's open suggest rows, newest first."""
+    return conn.execute(f"SELECT {_COLUMNS} FROM tasks WHERE project = ? AND mode = 'suggest' AND status IN ('queued', 'sent') "
+                        f"{_NEWEST_FIRST}", (project,)).fetchall()
+
+
+# ---------- project files (build brief 28, decisions 8, 10 and 19) ----------
+
+FILE_STATES = ("none", "waiting", "landed", "discarded", "undone")
+TEST_OUTCOMES = ("passed", "failed", "timed_out", "not_run")
+
+
+def project_files_of(row):
+    """The task's project files record (router/filecalls.py), or None for a task with no --project or from before."""
+    raw = row["project_files"] if "project_files" in row.keys() else None
+    return json.loads(raw) if raw else None
+
+
+def set_project_files(conn, task_id, record, now=None):
+    """Write the task's project files record whole. Its `state` is one of FILE_STATES."""
+    if not isinstance(record, dict) or record.get("state") not in FILE_STATES:
+        raise ValueError(f"a project files record needs a state, one of {', '.join(FILE_STATES)}.")
+    cur = conn.execute("UPDATE tasks SET project_files = ?, updated_at = ? WHERE task_id = ?",
+                       (json.dumps(record, sort_keys=True), _iso(now), task_id))
+    if cur.rowcount != 1:
+        raise StateError(f"{task_id}: no such task")
+    conn.commit()
+
+
+def update_project_files(conn, task_id, now=None, **fields):
+    """Merge `fields` into the task's record (which must exist) and write it."""
+    row = get_task(conn, task_id)
+    record = project_files_of(row) if row is not None else None
+    if record is None:
+        raise StateError(f"{task_id}: no project files record")
+    record.update(fields)
+    set_project_files(conn, task_id, record, now)
+    return record
+
+
+def set_call_tests(conn, call_id, record):
+    """Write a call's tests record (build brief 28): the demo's invented runs; a live call writes it with its row."""
+    if not isinstance(record, dict) or record.get("outcome") not in TEST_OUTCOMES:
+        raise ValueError(f"a call's tests record needs an outcome, one of {', '.join(TEST_OUTCOMES)}.")
+    cur = conn.execute("UPDATE calls SET tests = ? WHERE call_id = ?", (json.dumps(record, sort_keys=True), call_id))
+    if cur.rowcount != 1:
+        raise StateError(f"{call_id}: no such call")
+    conn.commit()
+
+
+def tests_of(call):
+    """A call's tests record (build brief 28), or None."""
+    raw = call["tests"] if "tests" in call.keys() else None
+    return json.loads(raw) if raw else None
 
 
 def files_of(row):
@@ -815,6 +1119,29 @@ def set_awaiting_pick(conn, task_id):
     `sr pick` names them. `route_reason` stays `relay`."""
     _move(conn, task_id, ("queued", "sent"), "returned", check_note=AWAITING_PICK, check_state=None, agent=None,
           checker=None, result=None)
+
+
+def set_awaiting_answers(conn, task_id):
+    """Brief 33.4 (decisions 3 and 5): a plan asked: the stage-1 rows that led to it stop being the stage (kind `questions`,
+    so the call that carries the answers starts stage 1 with its own one re-ask; the rows stay), and the task comes back
+    to the owner as `returned`, in one write."""
+    fields = {"status": "returned", "check_note": AWAITING_ANSWERS, "updated_at": _iso(None)}
+    sets = ", ".join(f"{name} = ?" for name in fields)
+    cur = conn.execute(f"UPDATE tasks SET {sets} WHERE task_id = ? AND status IN ('queued', 'sent')",
+                       (*fields.values(), task_id))
+    if cur.rowcount != 1:
+        conn.rollback()
+        row = get_task(conn, task_id)
+        raise StateError(f"{task_id}: cannot wait for answers from {row['status'] if row else 'missing'}")
+    conn.execute("UPDATE calls SET kind = 'questions' WHERE task_id = ? AND stage = 1 AND kind IN ('stage', 'reask')",
+                 (task_id,))
+    conn.commit()
+
+
+def answers_given(conn, task_id, run=None):
+    """Brief 33.4 (decision 3): the owner answered: the plan goes on, queued again under the run that continues it."""
+    pid, started = run if run is not None else (None, None)
+    _move(conn, task_id, ("returned",), "queued", check_note=None, pid=pid, run_started_at=started)
 
 
 PICKS = ("a", "b", "none")
@@ -935,6 +1262,17 @@ def set_done(conn, task_id, result, result_url=None, *, check_state=None, check_
 def _check_stage(stage):
     if not isinstance(stage, int) or isinstance(stage, bool) or not 1 <= stage <= MAX_STAGES:
         raise ValueError(f"a stage number is a whole number from 1 to {MAX_STAGES}, not {stage!r}.")
+
+
+BLOCKED = "blocked"  # brief 29.1 (decision 17): a task's check_state and reason_code when its check said BLOCKED
+
+
+def set_blocked(conn, task_id, result, *, check_note):
+    """Brief 29.1 (decision 17): the check said BLOCKED (what the doer needed was not in what it was given, nor anything it
+    could find). The task fails with no fix round: status failed, check_state and reason_code blocked, the doer's result
+    kept, the note naming what it needed."""
+    _move(conn, task_id, ("queued", "sent"), "failed", result=result, check_state=BLOCKED, check_note=check_note,
+          reason_code=BLOCKED)
 
 
 def set_failed(conn, task_id, error, *, failed_stage=None):
@@ -1143,9 +1481,15 @@ def task_rows(conn, limit=20, *, project=None, chat=None, search=None, before=No
 
 # ---------- calls: one row per agent call ----------
 
+def stamp(now=None):
+    """Now, as the log writes times (brief 29.1, issue 8: a call's `sent_at` taken before it is sent)."""
+    return _iso(now)
+
+
 def add_call(conn, call_id, task_id, kind, agent, status="sent", *, text=None, verdict=None, url=None,
              run_uuid=None, now=None, stage=None, role=None, reason_code=None, resume_of=None, search=None,
-             fallback_of=None, context=None, memory=None, served=None):
+             fallback_of=None, context=None, memory=None, served=None, tests=None, sent_at=None, model=None, effort=None,
+             time_limit=None):
     """Log one agent call. A Grok call is `sent` and finished later (finish_call); a Claude call
     returns at once, so it is written already finished, in one go. A `stage` or `reask` call
     (relay) carries its stage number and role; no other kind does. A failed call may carry a
@@ -1157,7 +1501,11 @@ def add_call(conn, call_id, task_id, kind, agent, status="sent", *, text=None, v
     a dict naming its `tag` and the block as sent (`sent`, `found`, `text`), or `left_out`, or `unavailable`
     (router/memory.py). `served` (rules v2.28, Cursor) is a Cursor call's record: a dict naming the model the stream served
     (`model`, verbatim), the id asked for (`asked`), the tool events counted (`tool_events`) and named (`tools`), with
-    `duration_ms`, `permission_mode`, `usage` and `stream` when known (router/cursor_worker.py); None on every other call."""
+    `duration_ms`, `permission_mode`, `usage` and `stream` when known (router/cursor_worker.py); None on every other call.
+    `tests` (build brief 28, decision 5) is a file-mode build or fix call's tests record: `outcome` (passed, failed,
+    timed_out or not_run), `exit`, `summary`, `output` (the file beside the log), the `command`, and `why` when not run.
+    Brief 33.3 (decision 7): `model` is the model the call asked for, `effort` its level when one was set, `time_limit`
+    its seconds; `served` takes every agent's record (`asked` and `model`, the model that answered, or None) since then."""
     _allowed("call kind", kind, CALL_KINDS, required=True)
     _allowed("call status", status, CALL_STATUSES, required=True)
     _allowed("verdict", verdict, VERDICTS)
@@ -1168,9 +1516,11 @@ def add_call(conn, call_id, task_id, kind, agent, status="sent", *, text=None, v
         if not isinstance(search, dict) or search.get("state") not in SEARCH_STATES:
             raise ValueError(f"a call's search record needs a state, one of {', '.join(SEARCH_STATES)}.")
         search = json.dumps(search, sort_keys=True)
-    if context is not None:
-        if not isinstance(context, dict) or not context.get("project"):
-            raise ValueError("a call's context record names its project.")
+    if context is not None:  # brief 30 (decision 9): a call that carried router notes alone has `notes` and no project
+        # brief 33 (decision 9): and a call that carried a from-block alone has `from`
+        if not isinstance(context, dict) or not (context.get("project") or isinstance(context.get("notes"), dict)
+                                                 or isinstance(context.get("from"), dict)):
+            raise ValueError("a call's context record names its project, or holds its router notes or from record.")
         context = json.dumps(context, sort_keys=True)
     if memory is not None:
         if not isinstance(memory, dict) or not memory.get("tag"):
@@ -1178,9 +1528,20 @@ def add_call(conn, call_id, task_id, kind, agent, status="sent", *, text=None, v
         memory = json.dumps(memory, sort_keys=True)
     if served is not None:
         if (not isinstance(served, dict) or not isinstance(served.get("asked"), str)
-                or isinstance(served.get("tool_events"), bool) or not isinstance(served.get("tool_events"), int)):
-            raise ValueError("a call's served record names the asked model and counts its tool events.")
+                or ("tool_events" in served and (isinstance(served.get("tool_events"), bool)
+                                                 or not isinstance(served.get("tool_events"), int)))):
+            raise ValueError("a call's served record names the asked model (and counts Cursor's tool events).")
         served = json.dumps(served, sort_keys=True)
+    if model is not None and (not isinstance(model, str) or not model.strip()):
+        raise ValueError("a call's model is the name it asked for.")
+    if effort is not None and (not isinstance(effort, str) or not effort.strip()):
+        raise ValueError("a call's effort is a level name.")
+    if time_limit is not None and (isinstance(time_limit, bool) or not isinstance(time_limit, int) or time_limit <= 0):
+        raise ValueError("a call's time limit is whole seconds above 0.")
+    if tests is not None:
+        if not isinstance(tests, dict) or tests.get("outcome") not in TEST_OUTCOMES:
+            raise ValueError(f"a call's tests record needs an outcome, one of {', '.join(TEST_OUTCOMES)}.")
+        tests = json.dumps(tests, sort_keys=True)
     if kind in STAGE_KINDS:
         _check_stage(stage)
         if not isinstance(role, str) or not _ROLE.fullmatch(role):
@@ -1198,12 +1559,14 @@ def add_call(conn, call_id, task_id, kind, agent, status="sent", *, text=None, v
         if replaced is None or replaced["task_id"] != task_id:
             raise StateError(f"{call_id}: fallback_of {fallback_of!r} is not a call of {task_id}")
     stamp = _iso(now)
-    conn.execute(
+    conn.execute(  # brief 29.1 (issue 8): a call written once it ended keeps the time it was sent (`sent_at`)
         "INSERT INTO calls (call_id, task_id, kind, agent, status, sent_at, finished_at, run_uuid, text, verdict, url,"
-        " stage, role, reason_code, resume_of, search, fallback_of, context, memory, served)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (call_id, task_id, kind, agent, status, stamp, None if status == "sent" else stamp, run_uuid,
-         text, verdict, url, stage, role, reason_code, resume_of, search, fallback_of, context, memory, served),
+        " stage, role, reason_code, resume_of, search, fallback_of, context, memory, served, tests, model, effort,"
+        " time_limit)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (call_id, task_id, kind, agent, status, sent_at or stamp, None if status == "sent" else stamp, run_uuid,
+         text, verdict, url, stage, role, reason_code, resume_of, search, fallback_of, context, memory, served, tests,
+         model, effort, time_limit),
     )
     conn.commit()
     if ROUND_WRITER is not None and status != "sent" and text is not None:
@@ -1258,7 +1621,10 @@ def fallback_base(task_id, calls):
     """The id the next call ids are built on: the fallback row's id once a fallback ran (so the redo's
     check is `<task>-fb1-c1`, never the original's `<task>-c1`), else the task id."""
     rows = [c for c in fallback_view(calls) if fallback_of(c)]
-    return rows[-1]["call_id"] if rows else task_id
+    if rows:
+        return rows[-1]["call_id"]
+    # brief 33.4 (decision 3): the call that carries the answers is stage 1 again, under ids of its own
+    return f"{task_id}-a" if any(c["kind"] == "questions" for c in calls) else task_id
 
 
 def context_of(call):
@@ -1280,7 +1646,8 @@ def call_memory_of(call):
 
 
 def served_of(call):
-    """A Cursor call's served record (rules v2.28), or None; every other call, and a row from before log version 13, reads None."""
+    """A call's served record (rules v2.28 for Cursor; brief 33.3 for Claude and ChatGPT), or None; a row from before log
+    version 13, or before version 20 on Claude and ChatGPT, reads None."""
     try:
         raw = call["served"]
     except (KeyError, IndexError):
@@ -1327,6 +1694,15 @@ def mark_overdue(conn, call_id, now=None):
     `overdue`, guarded on `sent`, so an answer collected a moment ago wins. True when the row changed."""
     cur = conn.execute("UPDATE calls SET status = 'failed', reason_code = 'overdue', finished_at = ?"
                        " WHERE call_id = ? AND status = 'sent'", (_iso(now), call_id))
+    conn.commit()
+    return cur.rowcount == 1
+
+
+def mark_skipped(conn, call_id):
+    """Build brief 32 (decision 11): an optional stage is skipped, said by its row's reason code; the row's status and
+    text (its own words: the failure, or the list that missed its contract) are kept. True when the row changed."""
+    cur = conn.execute("UPDATE calls SET reason_code = 'skipped' WHERE call_id = ? AND (reason_code IS NULL OR "
+                       "reason_code != 'skipped')", (call_id,))
     conn.commit()
     return cur.rowcount == 1
 
@@ -1621,6 +1997,16 @@ def upgrade_v12_to_v13(db_path, backups_dir, now=None):
 def upgrade_v15_to_v16(db_path, backups_dir, now=None):
     """A version 15 log, upgraded in place: the owner's stored value renamed (build brief 25)."""
     return _upgrade_in_place(db_path, backups_dir, now, 15)
+
+
+def upgrade_v17_to_v18(db_path, backups_dir, now=None):
+    """A version 17 log, upgraded in place: from_task and idea on tasks, the ideas table (build brief 33)."""
+    return _upgrade_in_place(db_path, backups_dir, now, 17)
+
+
+def upgrade_v16_to_v17(db_path, backups_dir, now=None):
+    """A version 16 log, upgraded in place: project_files on tasks, tests on calls (build brief 28)."""
+    return _upgrade_in_place(db_path, backups_dir, now, 16)
 
 
 def upgrade_v13_to_v14(db_path, backups_dir, now=None):

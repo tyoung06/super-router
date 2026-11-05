@@ -79,6 +79,22 @@ def never_register(doc=None):
     return [Path(v.strip()).expanduser() for v in value], None
 
 
+# Build brief 31 (decision 10): the parts of a `.env` name Run refuses, in this Mac's local file only (never a tracked
+# file, so the code and the public copy name none). A missing key is an empty list; anything but a list of words refuses
+# every Run until it is fixed (a typo never quietly drops the protection).
+NEVER_RUN_KEY = "never_run_env"
+
+
+def never_run_env():
+    """(the name parts, None), or (None, why) when the setting isn't a list of words."""
+    value = _load(LOCAL_PATH).get(NEVER_RUN_KEY)
+    if value is None:
+        return [], None
+    if not isinstance(value, list) or not all(isinstance(v, str) and v.strip() for v in value):
+        return None, f"{NEVER_RUN_KEY} in this Mac's local settings isn't a list of words"
+    return [v.strip() for v in value], None
+
+
 # Build brief 26 (decision 8): where `sr project new` makes a project's folder. Optional; the default lives here, so the
 # tracked settings file needs no key. A value that is not absolute once `~` is expanded refuses every `new`.
 PROJECTS_ROOT_KEY = "projects_root"
@@ -98,6 +114,20 @@ def projects_root(doc=None):
         return Path(DEFAULT_PROJECTS_ROOT).expanduser(), None
     if not isinstance(value, str) or not value.strip() or not Path(value.strip()).expanduser().is_absolute():
         return None, f"{PROJECTS_ROOT_KEY} in settings isn't an absolute or ~ path"
+    return Path(value.strip()).expanduser(), None
+
+
+COPIES_ROOT_KEY = "copies_root"  # brief 29.1 (decision 6): in the local settings only; the default lives in router/copies.py
+
+
+def copies_root(doc=None):
+    """(the copies root with `~` expanded, None); (None, None) when the setting is absent (the default); (None, why) for a
+    value that isn't an absolute or ~ path."""
+    value = (_read() if doc is None else doc).get(COPIES_ROOT_KEY)
+    if value is None:
+        return None, None
+    if not isinstance(value, str) or not value.strip() or not Path(value.strip()).expanduser().is_absolute():
+        return None, f"{COPIES_ROOT_KEY} in settings isn't an absolute or ~ path"
     return Path(value.strip()).expanduser(), None
 
 
@@ -186,19 +216,57 @@ def grok_prompt_limit():
     return DEFAULT_GROK_PROMPT_LIMIT, f"default; grok_prompt_limit in {SOURCE} is not a positive whole number"
 
 
+# Brief 30 (decisions 7 and 12): the router notes' cap (the whole file) and a project's notes' cap, in characters. Phase 0
+# proposed both from the log: 6,000 keeps a full file under half of a typical Claude prompt; 20,000 sits well above the
+# largest project's notes today (2,308).
+NOTES_DEFAULTS = {"notes_max": 6000, "project_notes_max": 20000, "spec_max": 6000}  # brief 33.2: the spec's cap
+
+
+def notes_setting(name):
+    """(value, where it came from) for `notes_max`, `project_notes_max` or `spec_max`. KeyError on any other name."""
+    default = NOTES_DEFAULTS[name]
+    doc = _read()
+    if name not in doc:
+        return default, "default"
+    value = doc[name]
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value, SOURCE
+    return default, f"default; {name} in {SOURCE} is not a positive whole number"
+
+
+# Build brief 33 (decisions 9 and 14): the cut on a from-block (an earlier result a task builds from) and a project's cap
+# on open ideas, in characters and ideas.
+# Brief 33.4 (decisions 11 and 15): an idea's cap in the New project sheet; the ideas a suggest reads, in characters
+NEXT_STEPS_DEFAULTS = {"from_max": 20000, "ideas_max": 50, "idea_max": 2000, "suggest_ideas_chars": 6000}
+
+
+def next_steps_setting(name):
+    """(value, where it came from) for `from_max`, `ideas_max`, `idea_max` or `suggest_ideas_chars`. KeyError on any other
+    name."""
+    default = NEXT_STEPS_DEFAULTS[name]
+    doc = _read()
+    if name not in doc:
+        return default, "default"
+    value = doc[name]
+    if _positive_int(value):
+        return value, SOURCE
+    return default, f"default; {name} in {SOURCE} is not a positive whole number"
+
+
 # Build brief 19 (rules v2.27, Memory, "Caps, in code"; decision 9): where the store is and the caps on the block.
 # The owner's file is read on every use; a missing or bad key falls back to the default with the reason.
 MEMORY_DEFAULTS = {
     "memory_url": "http://127.0.0.1:8888",
     "memory_bank": "super-router",
-    "memory_max_items": 5,
+    "memory_newest": 3,   # brief 29.1 (decision 25): the tag's newest delivered tasks, first, never ranked
+    "memory_matches": 5,  # ...then up to five search matches not among them (in place of memory_max_items 5)
     "memory_max_chars": 2000,
     "memory_query_chars": 1500,
 }
 
 
 def memory_setting(name):
-    """(value, where it came from) for one of the five memory keys. KeyError on any other name."""
+    """(value, where it came from) for one of the six memory keys. KeyError on any other name."""
     default = MEMORY_DEFAULTS[name]
     doc = _read()
     if name not in doc:

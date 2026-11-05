@@ -79,3 +79,30 @@ def test_every_binary_in_the_public_tree_is_a_known_one(monkeypatch):
             if publish.is_binary(data):
                 found[name] = hashlib.sha256(data).hexdigest()
     assert found == publish.KNOWN_BINARIES
+
+
+# ---------- brief 30 (decision 1): the router notes' blank default goes; the notes never do ----------
+
+def test_the_router_notes_default_goes_public_and_the_local_file_never_does():
+    assert publish.classify("config/router-notes.default.md") == "allow"
+    assert publish.classify("config/router-notes.md") == "neither"  # gitignored, so never at HEAD; a stop if it were
+
+
+def test_the_local_router_notes_are_never_tracked(real_git):
+    tracked = subprocess.run(["git", "-C", str(ROOT), "ls-files", "--", "config/router-notes.md"], capture_output=True,
+                             text=True, check=True).stdout
+    ignored = subprocess.run(["git", "-C", str(ROOT), "check-ignore", "-q", "config/router-notes.md"]).returncode
+    assert tracked == "" and ignored == 0
+
+
+# ---------- brief 31 (decision 3): the run commands are the router's own, never tracked, never published ----------
+
+def test_the_run_commands_are_never_published():
+    assert publish.classify("config/project_runs.json") == "neither"  # gitignored, so never at HEAD; a stop if it were
+
+
+def test_the_run_commands_are_never_tracked(real_git):
+    tracked = subprocess.run(["git", "-C", str(ROOT), "ls-files", "--", "config/project_runs.json"], capture_output=True,
+                             text=True, check=True).stdout
+    ignored = subprocess.run(["git", "-C", str(ROOT), "check-ignore", "-q", "config/project_runs.json"]).returncode
+    assert tracked == "" and ignored == 0

@@ -1,0 +1,19 @@
+{
+ "task_id": null,
+ "n": null,
+ "status": null,
+ "waiting_on": null,
+ "outcome": null,
+ "reason_code": null,
+ "exit": 0,
+ "message": "No ideas for herb-labels yet. Later on a project card's chip adds one, or sr ideas herb-labels --add -- '<text>'.",
+ "ideas": [],
+ "dismissed": 0,
+ "used": [],
+ "suggest": {
+  "running": null,
+  "open": 0,
+  "off": null,
+  "last": null
+ }
+}

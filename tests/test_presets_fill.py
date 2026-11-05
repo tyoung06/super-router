@@ -36,7 +36,8 @@ REFUSED = {
 }
 TABLE = {
     (): {name: {} for name in LOADED.presets},
-    ("cursor",): {name: {} for name in LOADED.presets},
+    # brief 32 (decision 11): without Cursor, redteam's second attack is left out (its fill names no agent), never filled
+    ("cursor",): {**{name: {} for name in LOADED.presets}, "redteam": {"attack2": None}},
     ("grok",): {"research-build": {"research": "chatgpt"}, "collab": {}, "versus": {}, "redteam": {},
                 "vote": "vote can't run now: slot c (Grok Bot): {grok}; no other agent can vote there (ChatGPT is in slot "
                         "b; Claude is in slot a)"},

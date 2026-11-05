@@ -9,11 +9,13 @@ import json
 
 import pytest
 
+from tests.helpers import today
 from router import __main__ as cli
 from router import checking, fallback, log, presets, relay, resume, settings
 from router.claude_worker import WorkerError
 from tests.test_redteam_chain import ATTACKS, BUILD, LOADED, REVISION, ROSTER, TASK, _relay, _rows
 from tests.test_relay import CONFIG, Chat, Clock, RelayHook, Scripted
+from tests.helpers import less_next
 
 LIMIT = WorkerError("plan limit on claude: You've hit your session limit", code="plan_limit")
 
@@ -81,7 +83,7 @@ def test_the_trap_after_a_stage_1_resume_stage_3_goes_to_the_agent_that_built_st
     assert [(r[1], r[3]) for r in _rows(conn, after)] == [(1, "claude"), (1, "chatgpt"), (2, "grok"), (3, "chatgpt"),
                                                           (None, "claude")]
     assert (after["agent"], after["checker"], after["check_state"]) == ("chatgpt", "claude", "passed")
-    assert chat.prompts[1] == relay.revise_prompt(TASK, BUILD, against=ATTACKS, search=True)
+    assert less_next(chat.prompts[1]) == relay.revise_prompt(TASK, BUILD, against=ATTACKS, search=True)
 
 
 def test_a_stopped_check_round_follows_the_existing_rule(conn):
@@ -98,7 +100,7 @@ def test_a_stopped_check_round_follows_the_existing_rule(conn):
 def _double_fail(conn, slots=()):
     fixed = REVISION.replace("Change the budget", "Change it")
     code, out, row, worker, chat = _relay(conn, claude=[BUILD, REVISION, fixed], slots=slots,
-                                          chat=[ATTACKS, "FIX\n1. Attack 1 is unanswered.", "FIX\n1. Attack 1 still open."])
+                                          chat=[ATTACKS, "FIX\n1. Attack 1 is unanswered.", "FIX\n1. not fixed: Attack 1 still open."])
     assert (row["status"], row["check_state"]) == ("done", "failed"), out
     return code, out, row
 
@@ -121,15 +123,17 @@ def test_the_fallback_check_agent_builds_from_the_task_and_the_attack_list_never
     code, out, after, worker, chat = _fallback(conn, row, chat=[REDO], claude=["PASS"])
     assert code == 0, out
     redo = chat.prompts[0]
-    assert redo == fallback.prompt(relay.redo_prompt(TASK, ATTACKS, search=True), "1. Attack 1 still open.")
+    assert less_next(redo) == fallback.prompt(relay.redo_prompt(TASK, ATTACKS, search=True),  # brief 29.1: the open must, by number
+                                   "1. Attack 1 is unanswered. (not fixed: Attack 1 still open.)")
     assert ATTACKS in redo and BUILD not in redo and "Review on Sundays" not in redo
-    assert worker.prompts[0] == checking.checker_prompt(TASK, REDO, no_tools=True, relay=True, attacks=ATTACKS)
+    assert worker.prompts[0] == checking.checker_prompt(TASK, REDO, no_tools=True, relay=True, attacks=ATTACKS,
+                                                        could_search=True, sent_on=today())  # brief 29.1: ChatGPT's redo searched
     assert (after["agent"], after["checker"], after["check_state"], after["result"]) == (
         "chatgpt", "claude", "passed", "A plan written from the task and the attacks.")
     assert after["check_note"] == "fallback of claude"
 
 
-def test_no_fallback_when_grok_holds_the_check_slot(conn):
+def test_no_fallback_when_grok_holds_the_check_slot(conn, grok_room):
     fixed = REVISION.replace("Change the budget", "Change it")
     code, out, row, worker, chat = _relay(conn, claude=[BUILD, REVISION, fixed], slots=[("check", "grok")],
                                           chat=[ATTACKS],

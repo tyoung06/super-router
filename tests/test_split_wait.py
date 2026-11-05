@@ -6,6 +6,7 @@ cancelled or came back blocks the split until the owner resolves it with its own
 waiting splits and prints each one's pieces (the owner's D3 and their addition). Fake agents and Jev only."""
 import pytest
 
+from router import checking
 from router import __main__ as cli
 from router import log, split
 from tests.test_loop import Clock, Scripted, Webhook
@@ -84,7 +85,8 @@ def _pieces(conn):
 def test_after_yes_each_piece_runs_its_own_loop_in_plan_order_then_the_split_integrates(conn):
     env = Env(claude=(PLAN, R1, R2, JOINED), chatgpt=("PASS", "PASS", "PASS"))
     assert env.split(conn) == 0, env.out
-    assert env.worker.prompts[1:3] == [P1, P2], "each doer gets its piece text as the task, nothing more"
+    assert env.worker.prompts[1:3] == [f"{p}\n\n{checking.DELIVERABLE_LINE}" for p in (P1, P2)], \
+        "each doer gets its piece text as the task, with brief 29.1's deliverable line and nothing more"
     first, second = _pieces(conn)
     assert [(c["kind"], c["agent"]) for c in log.calls_for(conn, first["task_id"])] == [("do", "claude"), ("check", "chatgpt")]
     assert (first["status"], first["check_state"], first["result"]) == ("done", "passed", R1)

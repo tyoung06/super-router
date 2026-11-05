@@ -131,7 +131,7 @@ def test_a_bad_file_and_a_file_for_grok(conn, tmp_path):
     ("versus", {"slots": [("zz", "claude")]}, "slot_refused"),
     ("versus", {"task": "@claude write"}, "override_refused"),
     ("versus", {"task": "   "}, "bad_task"),
-    ("versus", {"project": "demo"}, "tag_refused"),
+    ("versus", {"project": "demo", "slots": [("b", "cursor")]}, "tag_refused"),  # brief 29.1: versus takes a project
     ("vote", {"task": "x" * 4000}, "too_long"),
 ])
 def test_relay_refusals(conn, registry, preset, kwargs, want):

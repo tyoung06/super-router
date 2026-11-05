@@ -1,0 +1,40 @@
+diff --git a/mulch.py b/mulch.py
+new file mode 100644
+--- /dev/null
++++ b/mulch.py
+@@ -0,0 +1,22 @@
++"""Mulch notes: a note per bed, with its depth."""
++import json
++import sys
++
++NOTES = "mulch.json"
++
++
++def note(bed, depth):
++    found = json.load(open(NOTES)) if __import__("os").path.exists(NOTES) else []
++    found.append({"bed": bed, "depth": depth})
++    json.dump(found, open(NOTES, "w"))
++    return found
++
++
++if __name__ == "__main__":
++    if "--help" in sys.argv:
++        print("mulch.py: note(bed, depth) records a mulch note")
++    else:
++        print(note(sys.argv[1], int(sys.argv[2])))
+diff --git a/test_mulch.py b/test_mulch.py
+new file mode 100644
+--- /dev/null
++++ b/test_mulch.py
+@@ -0,0 +1,16 @@
++import unittest
++
++import mulch
++
++
++class Notes(unittest.TestCase):
++    def test_help(self):
++        self.assertTrue(mulch.__doc__.startswith("Mulch notes"))
++
++    def test_note(self):
++        self.assertEqual(mulch.note("north", 5)[-1], {"bed": "north", "depth": 5})

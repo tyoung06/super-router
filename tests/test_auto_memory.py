@@ -264,8 +264,8 @@ def test_a_backfilled_task_keeps_its_delivery_date_in_its_memory_heading():
     assert row["updated_at"] == delivered and log.memory_of(row)[0]["document_id"] == "task-sr-1"
     assert fake.retains[-1]["timestamp"] == delivered
     log.add_task(conn, "sr-2", "what did we say about trays", "cli", jev("writing"), chat="trays")
-    found = memory.gather(conn, log.get_task(conn, "sr-2"), fake.client, SECRETS, max_items=5, max_chars=2000,
-                          query_chars=500)
+    found = memory.gather(conn, log.get_task(conn, "sr-2"), fake.client, SECRETS, newest=3, matches=5, max_chars=2000,
+                          query_chars=500)  # brief 29.1 (decision 25): the newest three, then five matches
     assert found.entries[0].heading().startswith(f"### #1 · {memory.local_date(delivered)} · writing · claude")
     memory.rebuild(conn, fake.client, SECRETS, [].append)
     assert fake.retains[-1]["timestamp"] == delivered and log.get_task(conn, "sr-1")["updated_at"] == delivered

@@ -8,15 +8,16 @@
    "checked_at": "2026-10-19T11:39:48+00:00",
    "reason": null,
    "model": "sonnet",
-   "served_model": null,
+   "served_model": "claude-opus-5-5",
    "version": "2.1.306",
    "probe": {
     "passed_on": "2.1.306",
     "current": "2.1.306",
     "state": "passed",
-    "web_files": "passed"
+    "web_files": "passed",
+    "files": "missing"
    },
-   "calls_this_week": 31,
+   "calls_this_week": 90,
    "available": true,
    "why": null,
    "why_code": null
@@ -29,14 +30,14 @@
    "checked_at": "2026-10-19T11:39:48+00:00",
    "reason": "not signed in with ChatGPT (codex login)",
    "model": "gpt-6.1-sol",
-   "served_model": null,
+   "served_model": "gpt-6.1-sol",
    "version": "0.162.1",
    "probe": {
     "passed_on": null,
     "current": "0.162.1",
     "state": "missing"
    },
-   "calls_this_week": 24,
+   "calls_this_week": 77,
    "available": false,
    "why": "ChatGPT is signed out (codex login)",
    "why_code": "signed_out"
@@ -65,14 +66,14 @@
    "checked_at": "2026-10-19T11:39:48+00:00",
    "reason": null,
    "model": "grok-4.7-high",
-   "served_model": null,
+   "served_model": "Grok 4.7 256K High",
    "version": "2026.10.19-6bbf2c4",
    "probe": {
     "passed_on": "2026.10.12-a1b2c3d",
     "current": "2026.10.19-6bbf2c4",
     "state": "failed"
    },
-   "calls_this_week": 0,
+   "calls_this_week": 11,
    "available": false,
    "why": "Cursor is off: its safety check failed on agent 2026.10.19-6bbf2c4",
    "why_code": "probe_failed"
@@ -94,6 +95,9 @@
      "default": "grok",
      "allowed": [
       "claude"
+     ],
+     "project_refuses": [
+      "cursor"
      ]
     },
     {
@@ -101,6 +105,9 @@
      "default": "claude",
      "allowed": [
       "claude"
+     ],
+     "project_refuses": [
+      "cursor"
      ]
     },
     {
@@ -108,6 +115,9 @@
      "default": "chatgpt",
      "allowed": [
       "claude"
+     ],
+     "project_refuses": [
+      "cursor"
      ]
     }
    ],
@@ -115,6 +125,7 @@
    "project_refuses": [
     "cursor"
    ],
+   "file_mode_refuses": [],
    "ready": false,
    "why": "research-build can't run now: slot check (ChatGPT): ChatGPT is signed out (codex login); no other agent can check there (Claude is in slot build)",
    "filled": []
@@ -133,6 +144,9 @@
      "default": "claude",
      "allowed": [
       "claude"
+     ],
+     "project_refuses": [
+      "cursor"
      ]
     },
     {
@@ -140,13 +154,17 @@
      "default": "chatgpt",
      "allowed": [
       "claude"
+     ],
+     "project_refuses": [
+      "cursor"
      ]
     }
    ],
-   "project": false,
+   "project": true,
    "project_refuses": [
     "cursor"
    ],
+   "file_mode_refuses": [],
    "ready": false,
    "why": "collab can't run now: slot partner (ChatGPT): ChatGPT is signed out (codex login); no other agent can amend the plan there (Claude is in slot lead)",
    "filled": []
@@ -165,6 +183,9 @@
      "default": "claude",
      "allowed": [
       "claude"
+     ],
+     "project_refuses": [
+      "cursor"
      ]
     },
     {
@@ -172,45 +193,9 @@
      "default": "chatgpt",
      "allowed": [
       "claude"
-     ]
-    }
-   ],
-   "project": false,
-   "project_refuses": [
-    "cursor"
-   ],
-   "ready": false,
-   "why": "versus can't run now: slot b (ChatGPT): ChatGPT is signed out (codex login); no other agent can build there (Claude is in slot a)",
-   "filled": []
-  },
-  {
-   "name": "redteam",
-   "description": "One agent builds, a second attacks it to find the weak spots, the builder fixes them, and a checker confirms the fixes.",
-   "chain": "Claude build → ChatGPT attack → Claude revise → ChatGPT check",
-   "agents": [
-    "claude",
-    "chatgpt"
-   ],
-   "slots": [
-    {
-     "name": "build",
-     "default": "claude",
-     "allowed": [
-      "claude"
-     ]
-    },
-    {
-     "name": "attack",
-     "default": "chatgpt",
-     "allowed": [
-      "claude"
-     ]
-    },
-    {
-     "name": "check",
-     "default": "chatgpt",
-     "allowed": [
-      "claude"
+     ],
+     "project_refuses": [
+      "cursor"
      ]
     }
    ],
@@ -218,6 +203,65 @@
    "project_refuses": [
     "cursor"
    ],
+   "file_mode_refuses": [
+    "grok"
+   ],
+   "ready": false,
+   "why": "versus can't run now: slot b (ChatGPT): ChatGPT is signed out (codex login); no other agent can build there (Claude is in slot a)",
+   "filled": []
+  },
+  {
+   "name": "redteam",
+   "description": "One agent builds, two others attack it on their own, the builder fixes what they found, and a checker confirms the fixes.",
+   "chain": "Claude build → ChatGPT attack → Cursor attack → Claude revise → ChatGPT check",
+   "agents": [
+    "claude",
+    "chatgpt",
+    "cursor"
+   ],
+   "slots": [
+    {
+     "name": "build",
+     "default": "claude",
+     "allowed": [
+      "claude"
+     ],
+     "project_refuses": [
+      "cursor"
+     ]
+    },
+    {
+     "name": "attack",
+     "default": "chatgpt",
+     "allowed": [
+      "claude"
+     ],
+     "project_refuses": []
+    },
+    {
+     "name": "attack2",
+     "default": "cursor",
+     "allowed": [
+      "claude"
+     ],
+     "project_refuses": []
+    },
+    {
+     "name": "check",
+     "default": "chatgpt",
+     "allowed": [
+      "claude"
+     ],
+     "project_refuses": [
+      "cursor"
+     ]
+    }
+   ],
+   "project": true,
+   "project_refuses": [
+    "cursor"
+   ],
+   "file_mode_refuses": [],
    "ready": false,
    "why": "redteam can't run now: slot attack (ChatGPT): ChatGPT is signed out (codex login); no other agent can attack there (Claude is in slot build)",
    "filled": []
@@ -237,6 +281,9 @@
      "default": "claude",
      "allowed": [
       "claude"
+     ],
+     "project_refuses": [
+      "cursor"
      ]
     },
     {
@@ -244,6 +291,9 @@
      "default": "chatgpt",
      "allowed": [
       "claude"
+     ],
+     "project_refuses": [
+      "cursor"
      ]
     },
     {
@@ -251,18 +301,113 @@
      "default": "grok",
      "allowed": [
       "claude"
+     ],
+     "project_refuses": [
+      "cursor"
      ]
     }
    ],
-   "project": false,
+   "project": true,
    "project_refuses": [
     "cursor"
    ],
+   "file_mode_refuses": [],
    "ready": false,
    "why": "vote can't run now: slot b (ChatGPT): ChatGPT is signed out (codex login); no other agent can vote there (Claude is in slot a)",
    "filled": []
   }
  ],
+ "split": {
+  "ready": true,
+  "why": null,
+  "description": "Claude breaks the task into 2 to 4 pieces, each with its own team; you approve the plan; the pieces run one at a time; Claude joins the results and ChatGPT checks the whole.",
+  "chain": "Claude plan → your approval → the pieces, one at a time → Claude join → unchecked",
+  "checker": null,
+  "unchecked": "no other agent available to check (ChatGPT is signed out (codex login))",
+  "project": true,
+  "max_pieces": 4,
+  "teams": [
+   {
+    "name": "route",
+    "description": "Jev labels the task; the skill table picks who does it and who checks it.",
+    "chain": "Jev's label → the skill table's doer → its checker",
+    "ready": true,
+    "why": null,
+    "project": true,
+    "calls": 2,
+    "max_calls": 4,
+    "needs_you": null
+   },
+   {
+    "name": "research-build",
+    "description": "One agent researches the web and X, a second builds from what it found, and a third checks the result.",
+    "chain": "Grok research → Claude build → ChatGPT check",
+    "ready": false,
+    "why": "research-build can't run now: slot check (ChatGPT): ChatGPT is signed out (codex login); no other agent can check there (Claude is in slot build)",
+    "project": true,
+    "calls": 3,
+    "max_calls": 5,
+    "needs_you": null
+   },
+   {
+    "name": "collab",
+    "description": "Two agents work as a pair: one plans, the other improves the plan, the first does the work, and the second edits and checks it.",
+    "chain": "Claude plan → ChatGPT amend → Claude build → ChatGPT edit (check)",
+    "ready": false,
+    "why": "collab can't run now: slot partner (ChatGPT): ChatGPT is signed out (codex login); no other agent can amend the plan there (Claude is in slot lead)",
+    "project": true,
+    "calls": 4,
+    "max_calls": 4,
+    "needs_you": null
+   },
+   {
+    "name": "versus",
+    "description": "Two agents each build their own answer from the task alone and review each other's, then you pick the winner.",
+    "chain": "Claude build → ChatGPT build → ChatGPT review → Claude review → your pick",
+    "ready": false,
+    "why": "versus can't run now: slot b (ChatGPT): ChatGPT is signed out (codex login); no other agent can build there (Claude is in slot a)",
+    "project": false,
+    "calls": 4,
+    "max_calls": 4,
+    "needs_you": "pick"
+   },
+   {
+    "name": "redteam",
+    "description": "One agent builds, two others attack it on their own, the builder fixes what they found, and a checker confirms the fixes.",
+    "chain": "Claude build → ChatGPT attack → Cursor attack → Claude revise → ChatGPT check",
+    "ready": false,
+    "why": "redteam can't run now: slot attack (ChatGPT): ChatGPT is signed out (codex login); no other agent can attack there (Claude is in slot build)",
+    "project": true,
+    "calls": 5,
+    "max_calls": 7,
+    "needs_you": null
+   },
+   {
+    "name": "vote",
+    "description": "Three agents answer the same short question on their own; the majority wins, and a tie comes to you.",
+    "chain": "Claude vote → ChatGPT vote → Grok vote → tally",
+    "ready": false,
+    "why": "vote can't run now: slot b (ChatGPT): ChatGPT is signed out (codex login); no other agent can vote there (Claude is in slot a)",
+    "project": true,
+    "calls": 3,
+    "max_calls": 3,
+    "needs_you": "tie"
+   }
+  ]
+ },
+ "plan": {
+  "ready": false,
+  "why": "redteam can't run now: slot attack (ChatGPT): ChatGPT is signed out (codex login); no other agent can attack there (Claude is in slot build)",
+  "description": "Claude plans the project from its files, ChatGPT and Cursor attack the plan, Claude revises it and ChatGPT checks it; you approve it, and it lands as docs/PLAN.md. Then each step is one task, ticked when it lands.",
+  "chain": null,
+  "calls": null,
+  "max_calls": null,
+  "project": true
+ },
+ "auto": {
+  "ready": true,
+  "why": null
+ },
  "skills": [
   {
    "key": "x_social_pulse",
@@ -277,7 +422,8 @@
     "unchecked": null,
     "note": "needs Grok Bot",
     "comes_back": "x_social_pulse needs Grok Bot: Grok Bot isn't set up: no GROK_WEBHOOK_URL or GROK_WEBHOOK_KEY in .env; no inbox repo in settings"
-   }
+   },
+   "routed": true
   },
   {
    "key": "meta_social_trends",
@@ -295,7 +441,8 @@
     "unchecked": "no other agent available to check (ChatGPT is signed out (codex login))",
     "note": "done without Meta",
     "comes_back": null
-   }
+   },
+   "routed": true
   },
   {
    "key": "read_media",
@@ -310,7 +457,8 @@
     "unchecked": "no other agent available to check (ChatGPT is signed out (codex login))",
     "note": null,
     "comes_back": null
-   }
+   },
+   "routed": true
   },
   {
    "key": "web_research",
@@ -328,7 +476,8 @@
     "unchecked": "no other agent available to check (ChatGPT is signed out (codex login))",
     "note": null,
     "comes_back": null
-   }
+   },
+   "routed": true
   },
   {
    "key": "code",
@@ -343,7 +492,8 @@
     "unchecked": "no other agent available to check (ChatGPT is signed out (codex login))",
     "note": null,
     "comes_back": null
-   }
+   },
+   "routed": true
   },
   {
    "key": "writing",
@@ -358,7 +508,8 @@
     "unchecked": "no other agent available to check (ChatGPT is signed out (codex login))",
     "note": null,
     "comes_back": null
-   }
+   },
+   "routed": true
   },
   {
    "key": "planning",
@@ -373,7 +524,8 @@
     "unchecked": "no other agent available to check (ChatGPT is signed out (codex login))",
     "note": null,
     "comes_back": null
-   }
+   },
+   "routed": true
   },
   {
    "key": "computer_use",
@@ -388,7 +540,8 @@
     "unchecked": null,
     "note": null,
     "comes_back": "skill not routed in version 2"
-   }
+   },
+   "routed": false
   },
   {
    "key": "make_media",
@@ -403,7 +556,8 @@
     "unchecked": null,
     "note": "needs Grok Bot",
     "comes_back": "make_media needs Grok Bot: Grok Bot isn't set up: no GROK_WEBHOOK_URL or GROK_WEBHOOK_KEY in .env; no inbox repo in settings"
-   }
+   },
+   "routed": true
   },
   {
    "key": "bulk_text",
@@ -418,7 +572,8 @@
     "unchecked": "no other agent available to check (Grok Bot isn't set up: no GROK_WEBHOOK_URL or GROK_WEBHOOK_KEY in .env; no inbox repo in settings)",
     "note": null,
     "comes_back": null
-   }
+   },
+   "routed": true
   },
   {
    "key": "quick_answer",
@@ -433,7 +588,8 @@
     "unchecked": null,
     "note": null,
     "comes_back": null
-   }
+   },
+   "routed": true
   },
   {
    "key": "recall",
@@ -448,7 +604,8 @@
     "unchecked": "no other agent available to check (ChatGPT is signed out (codex login))",
     "note": null,
     "comes_back": null
-   }
+   },
+   "routed": true
   }
  ],
  "commands": [
@@ -503,6 +660,36 @@
      "help": "with --skill: the Jev floor row this answers (its # or task_id); the text must be that row's, its tag, --web and files come from it"
     },
     {
+     "name": "--from",
+     "kind": "option",
+     "help": "build from an earlier task's delivered result (its # or task_id; once): it goes to every call as data (brief 33)"
+    },
+    {
+     "name": "--no-files",
+     "kind": "flag",
+     "help": "with --project: run handoff only, no copy of the project; the doer answers in text (brief 33.2; the page's Draft it uses it)"
+    },
+    {
+     "name": "--idea",
+     "kind": "option",
+     "help": "with --project: the task is sent from that project's idea (sr ideas <project>; brief 33)"
+    },
+    {
+     "name": "--step",
+     "kind": "option",
+     "help": "with --project: the task is step K of the project's plan (its plan task's # or id, a colon, the step); brief 33.1"
+    },
+    {
+     "name": "--model",
+     "kind": "option",
+     "help": "the model that agent uses on this task (again for another agent; each at most once): an alias or full id on its allowlist in config/models.json (brief 33.3)"
+    },
+    {
+     "name": "--effort",
+     "kind": "option",
+     "help": "the effort level that agent uses on this task, from its own levels (brief 33.3)"
+    },
+    {
      "name": "--json",
      "kind": "flag",
      "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing"
@@ -551,6 +738,11 @@
      "help": "--web is for a routed task with files"
     },
     {
+     "name": "--no-files",
+     "kind": "flag",
+     "help": "--no-files is for sr route with --project"
+    },
+    {
      "name": "--project",
      "kind": "option",
      "help": "research-build and redteam only (rules v2.25)"
@@ -561,6 +753,31 @@
      "help": "tag the task chat:<name> for memory (rules v2.27), any preset; never with --project"
     },
     {
+     "name": "--from",
+     "kind": "option",
+     "help": "build from an earlier task's delivered result (its # or task_id; once; brief 33)"
+    },
+    {
+     "name": "--idea",
+     "kind": "option",
+     "help": "with --project: the task is sent from that project's idea (brief 33)"
+    },
+    {
+     "name": "--step",
+     "kind": "option",
+     "help": "with --project: the task is step K of the project's plan (brief 33.1)"
+    },
+    {
+     "name": "--model",
+     "kind": "option",
+     "help": "the model that agent uses on this task; only an agent the preset's slots hold (brief 33.3)"
+    },
+    {
+     "name": "--effort",
+     "kind": "option",
+     "help": "the effort level that agent uses on this task (brief 33.3)"
+    },
+    {
      "name": "--json",
      "kind": "flag",
      "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing"
@@ -569,7 +786,7 @@
   },
   {
    "name": "split",
-   "help": "split a task (rules v2.18): Claude plans 2 to 4 pieces, you approve them (y/N/e), each runs as its own routed task, Claude joins the results and ChatGPT checks: sr split \"task\"; sr split --go <n> approves a plan that waited",
+   "help": "split a task (rules 2.41): Claude plans 2 to 4 pieces, each with its team; you approve them (y/N/e), change a piece first (sr split --edit), they run one at a time, Claude joins the results and ChatGPT checks: sr split \"task\"; sr split --go <n> approves a plan that waited",
    "arguments": [
     {
      "name": "--no-wait",
@@ -613,9 +830,14 @@
      "help": "--web is for a routed task with files"
     },
     {
+     "name": "--no-files",
+     "kind": "flag",
+     "help": "--no-files is for sr route with --project"
+    },
+    {
      "name": "--project",
      "kind": "option",
-     "help": "not allowed on a split task (refused with the reason)"
+     "help": "run the split on a registered project (brief 29): its handoff, and in file mode one copy its pieces build in"
     },
     {
      "name": "--chat",
@@ -623,14 +845,196 @@
      "help": "not allowed on a split task (refused with the reason)"
     },
     {
+     "name": "--from",
+     "kind": "option",
+     "help": "not allowed on a split task (refused with the reason)"
+    },
+    {
+     "name": "--idea",
+     "kind": "option",
+     "help": "not allowed on a split task (refused with the reason)"
+    },
+    {
      "name": "--answer",
      "kind": "option",
-     "help": "with --go: approve (y) or reject (n) a plan that waits, without a terminal; editing a piece stays Terminal-only (build brief 22)"
+     "help": "with --go: approve (y) or reject (n) a plan that waits, without a terminal (build brief 22)"
+    },
+    {
+     "name": "--edit",
+     "kind": "option",
+     "help": "change a piece of a plan that waits (brief 29): sr split --edit N --piece K [--team TEAM] [-- 'new text']"
+    },
+    {
+     "name": "--piece",
+     "kind": "option",
+     "help": "with --edit: the piece's number in the plan"
+    },
+    {
+     "name": "--team",
+     "kind": "option",
+     "help": "with --edit: the piece's new team, one on this split's menu"
+    },
+    {
+     "name": "--slot",
+     "kind": "option",
+     "help": "with --edit: an agent in one of a preset piece's slots (again for each; SLOT=default puts the default back)"
     },
     {
      "name": "--skill",
      "kind": "option",
      "help": "with --go --answer y: the skill for piece K when Jev was under the floor on it"
+    },
+    {
+     "name": "--model",
+     "kind": "option",
+     "help": "the model Claude (the plan and the join) or ChatGPT (the join's check) uses; the pieces use their teams' defaults (brief 33.3)"
+    },
+    {
+     "name": "--effort",
+     "kind": "option",
+     "help": "the effort level, the same way (brief 33.3)"
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing"
+    }
+   ]
+  },
+  {
+   "name": "plan",
+   "help": "plan a project (rules 2.47): Claude plans from the project's files, ChatGPT and Cursor attack the plan, Claude revises it and ChatGPT checks it; you approve it and it lands as docs/PLAN.md: sr plan --project <name> -- 'Plan the first version.'; sr plan --edit <n> --step <k> changes one step before you approve",
+   "arguments": [
+    {
+     "name": "--no-wait",
+     "kind": "flag",
+     "help": "return as soon as a Grok stage is sent (also automatic when output isn't a terminal)"
+    },
+    {
+     "name": "task",
+     "kind": "positional",
+     "nargs": "*",
+     "help": "what to plan: a goal, a focus, or 'Plan the first version.'"
+    },
+    {
+     "name": "--project",
+     "kind": "option",
+     "help": "the registered project to plan (a plan is on a project only)"
+    },
+    {
+     "name": "--from",
+     "kind": "option",
+     "help": "plan from an earlier task's delivered result (its # or task_id; once)"
+    },
+    {
+     "name": "--source",
+     "kind": "option",
+     "help": null
+    },
+    {
+     "name": "--idea",
+     "kind": "option",
+     "help": "not allowed on a plan (refused with the reason)"
+    },
+    {
+     "name": "--chat",
+     "kind": "option",
+     "help": "not allowed on a plan (refused with the reason)"
+    },
+    {
+     "name": "--file",
+     "kind": "option",
+     "help": "not allowed on a plan (refused with the reason)"
+    },
+    {
+     "name": "--web",
+     "kind": "flag",
+     "help": "not allowed on a plan (refused with the reason)"
+    },
+    {
+     "name": "--no-files",
+     "kind": "flag",
+     "help": "--no-files is for sr route with --project"
+    },
+    {
+     "name": "--edit",
+     "kind": "option",
+     "help": "change one step of a plan that waits for your approval: sr plan --edit N --step K with one of --team, --up, --down, --drop, --text or --done-when (the words after --)"
+    },
+    {
+     "name": "--answer",
+     "kind": "option",
+     "help": "answer a plan waiting on its questions: sr plan --answer <task> [--pick <k>=<letter>]… [--other <k>=<your words>]…, or --best-guess; it never prompts"
+    },
+    {
+     "name": "--pick",
+     "kind": "option",
+     "help": "with --answer: question k's option"
+    },
+    {
+     "name": "--other",
+     "kind": "option",
+     "help": "with --answer: question k's typed answer"
+    },
+    {
+     "name": "--best-guess",
+     "kind": "flag",
+     "help": "with --answer: every question answered with the planner's own guess"
+    },
+    {
+     "name": "--step",
+     "kind": "option",
+     "help": "with --edit: the step's number in the plan"
+    },
+    {
+     "name": "--stop-here",
+     "kind": "option",
+     "help": "brief 34: mark (on) or unmark (off) step K of plan PLAN as a stop for Auto: sr plan --stop-here 12:2 on"
+    },
+    {
+     "name": "--team",
+     "kind": "option",
+     "help": "with --edit: the step's new team, one on the plan's menu"
+    },
+    {
+     "name": "--text",
+     "kind": "flag",
+     "help": "with --edit: the step's new text, after --"
+    },
+    {
+     "name": "--covers",
+     "kind": "flag",
+     "help": "with --edit: the SPEC.md examples the step covers, after -- (like 'E1, E3', or none; brief 33.2)"
+    },
+    {
+     "name": "--done-when",
+     "kind": "flag",
+     "help": "with --edit: the step's new finish line, after --"
+    },
+    {
+     "name": "--up",
+     "kind": "flag",
+     "help": "with --edit: move the step up one place"
+    },
+    {
+     "name": "--down",
+     "kind": "flag",
+     "help": "with --edit: move the step down one place"
+    },
+    {
+     "name": "--drop",
+     "kind": "flag",
+     "help": "with --edit: drop the step from the plan"
+    },
+    {
+     "name": "--model",
+     "kind": "option",
+     "help": "the model that agent uses on this plan; an agent of redteam's chain as filled now (brief 33.3)"
+    },
+    {
+     "name": "--effort",
+     "kind": "option",
+     "help": "the effort level that agent uses on this plan (brief 33.3)"
     },
     {
      "name": "--json",
@@ -788,6 +1192,11 @@
      "help": "on a split task, also print each piece's result"
     },
     {
+     "name": "--notes",
+     "kind": "flag",
+     "help": "the router notes kept with the task and what each of its calls was sent (brief 30)"
+    },
+    {
      "name": "--memory",
      "kind": "flag",
      "help": "on a tagged task, also print the memory block as it was sent to the build call (rules v2.27)"
@@ -807,6 +1216,62 @@
   {
    "name": "cancel",
    "help": "cancel a queued or sent task: sr cancel 5 (the # column in log)",
+   "arguments": [
+    {
+     "name": "words",
+     "kind": "positional",
+     "nargs": "*",
+     "help": null
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing"
+    }
+   ]
+  },
+  {
+   "name": "land",
+   "help": "put a change waiting to land into the project's folder as one commit: sr land 5 (brief 28)",
+   "arguments": [
+    {
+     "name": "words",
+     "kind": "positional",
+     "nargs": "*",
+     "help": null
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing"
+    },
+    {
+     "name": "--anyway",
+     "kind": "flag",
+     "help": "land a file-mode change whose check didn't pass, as it is (the entry says so)"
+    }
+   ]
+  },
+  {
+   "name": "undo",
+   "help": "take a landed change back out as one more commit: sr undo 5 (brief 28)",
+   "arguments": [
+    {
+     "name": "words",
+     "kind": "positional",
+     "nargs": "*",
+     "help": null
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing"
+    }
+   ]
+  },
+  {
+   "name": "discard",
+   "help": "drop a change that never landed (the copy goes; the folder is as it is): sr discard 5 (brief 28)",
    "arguments": [
     {
      "name": "words",
@@ -872,6 +1337,51 @@
      "name": "--dry-run",
      "kind": "flag",
      "help": "with new: say what it would do (create, register or refuse) and write nothing"
+    },
+    {
+     "name": "--clear",
+     "kind": "flag",
+     "help": "with tests: remove the project's test command (brief 28)"
+    },
+    {
+     "name": "--file",
+     "kind": "option",
+     "help": "with files: a file to copy into the project's top level (repeat for more; brief 28)"
+    },
+    {
+     "name": "--save",
+     "kind": "flag",
+     "help": "with notes: replace the notes with the text after -- (brief 30)"
+    },
+    {
+     "name": "--expect",
+     "kind": "option",
+     "help": "with notes --save: the hash `sr project notes` gave; notes changed since are refused (brief 30)"
+    },
+    {
+     "name": "--task",
+     "kind": "option",
+     "help": "with pin and save: the task whose result it is (brief 30)"
+    },
+    {
+     "name": "--path",
+     "kind": "option",
+     "help": "with save: the new file's path inside the project, .md or .txt (brief 30)"
+    },
+    {
+     "name": "--status",
+     "kind": "flag",
+     "help": "with test and run: whether one is running and its output so far, else the last one's (brief 31)"
+    },
+    {
+     "name": "--set",
+     "kind": "option",
+     "help": "with secrets: the name to set in the project's .env; the value comes on stdin, never here (brief 31)"
+    },
+    {
+     "name": "--remove",
+     "kind": "option",
+     "help": "with secrets: the name to take out of the project's .env (brief 31)"
     }
    ]
   },
@@ -910,17 +1420,202 @@
    ]
   },
   {
+   "name": "ideas",
+   "help": "a project's Ideas list (brief 33): one-line things to do later; sr ideas <project> lists them, --add -- '<text>' adds one, --dismiss <id> takes one off",
+   "arguments": [
+    {
+     "name": "words",
+     "kind": "positional",
+     "nargs": "*",
+     "help": "the project's name"
+    },
+    {
+     "name": "--add",
+     "kind": "flag",
+     "help": "add the one-line text after -- (in quotes)"
+    },
+    {
+     "name": "--source",
+     "kind": "option",
+     "help": "with --add: the card it came from (Later on a chip)"
+    },
+    {
+     "name": "--dismiss",
+     "kind": "option",
+     "help": "take an idea off the list; the log keeps it"
+    },
+    {
+     "name": "--suggest",
+     "kind": "flag",
+     "help": "one Claude call adds up to 3 ideas from what the project holds; never checked: you judge each idea"
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing"
+    }
+   ]
+  },
+  {
+   "name": "forget",
+   "help": "take a task out of memory (brief 30): no memory block carries it and no search finds it; the log keeps it; --undo remembers it again",
+   "arguments": [
+    {
+     "name": "words",
+     "kind": "positional",
+     "nargs": "*",
+     "help": "the task: #n, n, its id or a unique prefix"
+    },
+    {
+     "name": "--undo",
+     "kind": "flag",
+     "help": "Remember again: storable again by the usual rules"
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing"
+    }
+   ]
+  },
+  {
+   "name": "notes",
+   "help": "the router notes (brief 30): sr notes prints them (the default while there is no config/router-notes.md) with each section's characters, the cap and the hash; sr notes save [--expect <hash>] -- '<the whole file>' checks and writes them",
+   "arguments": [
+    {
+     "name": "words",
+     "kind": "positional",
+     "nargs": "*",
+     "help": "save"
+    },
+    {
+     "name": "--expect",
+     "kind": "option",
+     "help": "the hash `sr notes` gave: a file changed since is refused"
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing; `sr notes --json` prints the notes as JSON"
+    }
+   ]
+  },
+  {
+   "name": "auto",
+   "help": "Auto (brief 34): sr auto <project> --on runs the project's approved plan's open steps one after another in one copy, each as its team runs it, until the plan ends, a step you marked stop-here, the budget, or anything that needs you; --off stops it after the step in progress; --status shows the run; --on --dry-run says what a run would cover and writes nothing",
+   "arguments": [
+    {
+     "name": "words",
+     "kind": "positional",
+     "nargs": "*",
+     "help": "the project"
+    },
+    {
+     "name": "--on",
+     "kind": "flag",
+     "help": "start the run, or go on from where it stopped"
+    },
+    {
+     "name": "--off",
+     "kind": "flag",
+     "help": "stop the run after the step in progress"
+    },
+    {
+     "name": "--status",
+     "kind": "flag",
+     "help": "the run's state"
+    },
+    {
+     "name": "--dry-run",
+     "kind": "flag",
+     "help": "with --on: what the run would cover, nothing written"
+    },
+    {
+     "name": "--source",
+     "kind": "option",
+     "help": null
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing"
+    }
+   ]
+  },
+  {
+   "name": "models",
+   "help": "the model defaults (brief 33.3): sr models prints the defaults in effect (each with its layer and file); sr models set (--skill <key> | --team <team> --role <role> | --team <preset> --stage <n>) --agent <agent> [--model <model>] [--effort <level>] writes one of your own, sr models clear … takes it out, and sr models fable on|off is the Fable switch",
+   "arguments": [
+    {
+     "name": "words",
+     "kind": "positional",
+     "nargs": "*",
+     "help": "set | clear | fable on|off"
+    },
+    {
+     "name": "--skill",
+     "kind": "option",
+     "help": "a skill default (its doer's do and fix calls)"
+    },
+    {
+     "name": "--team",
+     "kind": "option",
+     "help": "route, split, plan, file or a preset name"
+    },
+    {
+     "name": "--role",
+     "kind": "option",
+     "help": "with --team: one of build, fix, check, plan, revise, execute, amend, edit, research, attack, review, vote, integrate"
+    },
+    {
+     "name": "--stage",
+     "kind": "option",
+     "help": "with --team <preset>: the stage's number"
+    },
+    {
+     "name": "--agent",
+     "kind": "option",
+     "help": "claude, chatgpt or cursor"
+    },
+    {
+     "name": "--model",
+     "kind": "option",
+     "help": "an alias or full id on the agent's allowlist"
+    },
+    {
+     "name": "--effort",
+     "kind": "option",
+     "help": "one of the agent's effort levels"
+    },
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing; `sr models --json` prints the defaults as JSON"
+    }
+   ]
+  },
+  {
    "name": "probe",
    "help": "one real Codex run that must fail to read .env, list your home folder or write a file; run it after every Codex update, before routing tasks to ChatGPT; then one real Claude run that must web-search and do nothing else (run it after every Claude Code update: Claude's search stays off until it passes)",
-   "arguments": []
+   "arguments": [
+    {
+     "name": "--json",
+     "kind": "flag",
+     "help": "answer with one JSON object (task_id, n, status, waiting_on, outcome, reason_code, exit, message): on stdout, or on stderr when refused or failed; asks nothing and waits for nothing; adds `probe`, what each probe found"
+    }
+   ]
   }
  ],
+ "limits": {
+  "idea_max": 2000,
+  "ideas_max": 50
+ },
  "open_tasks": [
   {
    "task_id": "sr-20261019-092100-0005",
    "n": 5,
    "created_at": "2026-10-19T09:21:03+00:00",
-   "updated_at": "2026-10-19T09:21:21+00:00",
+   "updated_at": "2026-10-19T09:21:33+00:00",
    "sent_at": null,
    "source": "cli",
    "text": "A 25-word blurb for a bakery's new rye loaf.",
@@ -959,6 +1654,31 @@
     "b": "chatgpt"
    },
    "working": null,
+   "steps": {
+    "chain": [
+     {
+      "stage": 1,
+      "role": "build",
+      "agent": "claude"
+     },
+     {
+      "stage": 2,
+      "role": "build",
+      "agent": "chatgpt"
+     },
+     {
+      "stage": 3,
+      "role": "review",
+      "agent": "chatgpt"
+     },
+     {
+      "stage": 4,
+      "role": "review",
+      "agent": "claude"
+     }
+    ],
+    "now": null
+   },
    "fallback": {
     "ok": false,
     "agent": null,
@@ -978,13 +1698,44 @@
    "filled": null,
    "card_line": null,
    "takeover": null,
-   "late": null
+   "late": null,
+   "project_files": null,
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": {
+    "hash": "8b61a57199701a87",
+    "chars": 330,
+    "file": "tasks/sr-20261019-092100-0005/router-notes.md"
+   },
+   "spec": null,
+   "forgotten": null,
+   "save_path": null,
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": false,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": null
   },
   {
    "task_id": "sr-20261019-093600-0008",
    "n": 8,
    "created_at": "2026-10-19T09:36:03+00:00",
-   "updated_at": "2026-10-19T09:36:30+00:00",
+   "updated_at": "2026-10-19T09:36:36+00:00",
    "sent_at": null,
    "source": "cli",
    "text": "Pick a one-word name for the garden's seed library.",
@@ -1024,6 +1775,26 @@
     "c": "grok"
    },
    "working": null,
+   "steps": {
+    "chain": [
+     {
+      "stage": 1,
+      "role": "vote",
+      "agent": "claude"
+     },
+     {
+      "stage": 2,
+      "role": "vote",
+      "agent": "chatgpt"
+     },
+     {
+      "stage": 3,
+      "role": "vote",
+      "agent": "grok"
+     }
+    ],
+    "now": null
+   },
    "fallback": {
     "ok": false,
     "agent": null,
@@ -1043,13 +1814,44 @@
    "filled": null,
    "card_line": null,
    "takeover": null,
-   "late": null
+   "late": null,
+   "project_files": null,
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": {
+    "hash": "8b61a57199701a87",
+    "chars": 330,
+    "file": "tasks/sr-20261019-093600-0008/router-notes.md"
+   },
+   "spec": null,
+   "forgotten": null,
+   "save_path": null,
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": false,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": null
   },
   {
    "task_id": "sr-20261019-101100-000d",
    "n": 13,
    "created_at": "2026-10-19T10:11:03+00:00",
-   "updated_at": "2026-10-19T10:11:33+00:00",
+   "updated_at": "2026-10-19T10:11:36+00:00",
    "sent_at": null,
    "source": "cli",
    "text": "Build a one-page FAQ for the seed library and a short email announcing it.",
@@ -1085,6 +1887,26 @@
    },
    "slots": null,
    "working": null,
+   "steps": {
+    "chain": [
+     {
+      "stage": 1,
+      "role": "split_plan",
+      "agent": "claude"
+     },
+     {
+      "stage": 2,
+      "role": "integrate",
+      "agent": "claude"
+     },
+     {
+      "stage": null,
+      "role": "check",
+      "agent": "chatgpt"
+     }
+    ],
+    "now": null
+   },
    "fallback": {
     "ok": false,
     "agent": null,
@@ -1104,7 +1926,38 @@
    "filled": null,
    "card_line": null,
    "takeover": null,
-   "late": null
+   "late": null,
+   "project_files": null,
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": {
+    "hash": "8b61a57199701a87",
+    "chars": 330,
+    "file": "tasks/sr-20261019-101100-000d/router-notes.md"
+   },
+   "spec": null,
+   "forgotten": null,
+   "save_path": null,
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": false,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": null
   },
   {
    "task_id": "sr-20261019-101600-0010",
@@ -1146,6 +1999,26 @@
    },
    "slots": null,
    "working": null,
+   "steps": {
+    "chain": [
+     {
+      "stage": 1,
+      "role": "split_plan",
+      "agent": "claude"
+     },
+     {
+      "stage": 2,
+      "role": "integrate",
+      "agent": "claude"
+     },
+     {
+      "stage": null,
+      "role": "check",
+      "agent": "chatgpt"
+     }
+    ],
+    "now": null
+   },
    "fallback": {
     "ok": false,
     "agent": null,
@@ -1165,7 +2038,38 @@
    "filled": null,
    "card_line": null,
    "takeover": null,
-   "late": null
+   "late": null,
+   "project_files": null,
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": {
+    "hash": "8b61a57199701a87",
+    "chars": 330,
+    "file": "tasks/sr-20261019-101600-0010/router-notes.md"
+   },
+   "spec": null,
+   "forgotten": null,
+   "save_path": null,
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": false,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": null
   },
   {
    "task_id": "sr-20261019-102100-0013",
@@ -1207,6 +2111,10 @@
    },
    "slots": null,
    "working": null,
+   "steps": {
+    "chain": null,
+    "now": null
+   },
    "fallback": {
     "ok": false,
     "agent": null,
@@ -1226,7 +2134,38 @@
    "filled": null,
    "card_line": null,
    "takeover": null,
-   "late": null
+   "late": null,
+   "project_files": null,
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": {
+    "hash": "8b61a57199701a87",
+    "chars": 330,
+    "file": "tasks/sr-20261019-102100-0013/router-notes.md"
+   },
+   "spec": null,
+   "forgotten": null,
+   "save_path": null,
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": false,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": null
   },
   {
    "task_id": "sr-20261019-112400-0020",
@@ -1268,6 +2207,10 @@
    },
    "slots": null,
    "working": null,
+   "steps": {
+    "chain": null,
+    "now": null
+   },
    "fallback": {
     "ok": false,
     "agent": null,
@@ -1287,11 +2230,2176 @@
    "filled": null,
    "card_line": null,
    "takeover": null,
-   "late": null
+   "late": null,
+   "project_files": null,
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": {
+    "hash": "8b61a57199701a87",
+    "chars": 330,
+    "file": "tasks/sr-20261019-112400-0020/router-notes.md"
+   },
+   "spec": null,
+   "forgotten": null,
+   "save_path": null,
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": false,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": null
   },
   {
-   "task_id": "sr-20261019-112700-0021",
-   "n": 31,
+   "task_id": "sr-20261019-112500-0023",
+   "n": 33,
+   "created_at": "2026-10-19T11:25:06+00:00",
+   "updated_at": "2026-10-19T11:25:36+00:00",
+   "sent_at": null,
+   "source": "cli",
+   "text": "Count how many times each seed packet is lent, with a test.",
+   "status": "done",
+   "waiting_on": "land",
+   "outcome": null,
+   "reason_code": null,
+   "mode": "route",
+   "preset": null,
+   "parent": null,
+   "project": "seed-library",
+   "chat": null,
+   "tag": "project:seed-library",
+   "skill": "code",
+   "skill_source": "jev",
+   "agent": "claude",
+   "checker": "chatgpt",
+   "check_state": "passed",
+   "check_note": null,
+   "route_reason": "best",
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": "Each packet counts its loans: lend() adds one, and a test checks it.",
+   "result_url": null,
+   "jev": {
+    "status": "ok",
+    "label": "code",
+    "confidence": 0.97,
+    "tokens": 640,
+    "needs_split": 0.08,
+    "error": null
+   },
+   "slots": null,
+   "working": null,
+   "steps": {
+    "chain": null,
+    "now": null
+   },
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not eligible: a file-mode task never falls back; discard it and run it again, or resume a stopped call"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is done; only a task stopped by a plan limit or by a process that ended can be resumed"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null,
+   "project_files": {
+    "base": "4f2a9c1e5b7d3a8f6c0e2b4d6f8a1c3e5b7d9f0a",
+    "branch": "main",
+    "changed": [
+     {
+      "minus": 1,
+      "path": "packets.py",
+      "plus": 4,
+      "status": "changed"
+     },
+     {
+      "minus": 0,
+      "path": "test_packets.py",
+      "plus": 9,
+      "status": "added"
+     }
+    ],
+    "commit": null,
+    "copy": true,
+    "diff": "tasks/sr-20261019-112500-0023/changes.diff",
+    "files": 12,
+    "latest": "after-sr-20261019-112500-0023",
+    "left_out": [],
+    "mode": "on",
+    "state": "waiting",
+    "tests": {
+     "command": [
+      "python3",
+      "-m",
+      "unittest"
+     ],
+     "exit": 0,
+     "outcome": "passed",
+     "output": "tasks/sr-20261019-112500-0023/tests-1.txt",
+     "summary": "OK"
+    },
+    "undo_commit": null,
+    "why": null
+   },
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": {
+    "hash": "8b61a57199701a87",
+    "chars": 330,
+    "file": "tasks/sr-20261019-112500-0023/router-notes.md"
+   },
+   "spec": null,
+   "forgotten": null,
+   "save_path": "docs/count-how-many-times-each-seed.md",
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": true,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": null
+  },
+  {
+   "task_id": "sr-20261019-112506-0024",
+   "n": 34,
+   "created_at": "2026-10-19T11:25:09+00:00",
+   "updated_at": "2026-10-19T11:25:12+00:00",
+   "sent_at": null,
+   "source": "cli",
+   "text": "Three separate things: a note on crop rotation for new members, how the seed library keeps its loan records, and what a rain barrel costs this year.",
+   "status": "returned",
+   "waiting_on": "split_plan",
+   "outcome": null,
+   "reason_code": null,
+   "mode": "split",
+   "preset": null,
+   "parent": null,
+   "project": null,
+   "chat": null,
+   "tag": null,
+   "skill": null,
+   "skill_source": null,
+   "agent": "claude",
+   "checker": "chatgpt",
+   "check_state": "pending",
+   "check_note": "awaiting approval",
+   "route_reason": "split",
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": null,
+   "result_url": null,
+   "jev": {
+    "status": "not_asked",
+    "label": null,
+    "confidence": null,
+    "tokens": 1920,
+    "needs_split": null,
+    "error": null
+   },
+   "slots": null,
+   "working": null,
+   "steps": {
+    "chain": [
+     {
+      "stage": 1,
+      "role": "split_plan",
+      "agent": "claude"
+     },
+     {
+      "stage": 2,
+      "role": "integrate",
+      "agent": "claude"
+     },
+     {
+      "stage": null,
+      "role": "check",
+      "agent": "chatgpt"
+     }
+    ],
+    "now": null
+   },
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not a double fail: it is returned"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is returned; only a task stopped by a plan limit or by a process that ended can be resumed"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null,
+   "project_files": null,
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": {
+    "hash": "8b61a57199701a87",
+    "chars": 330,
+    "file": "tasks/sr-20261019-112506-0024/router-notes.md"
+   },
+   "spec": null,
+   "forgotten": null,
+   "save_path": null,
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": false,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": null
+  },
+  {
+   "task_id": "sr-20261019-112512-0028",
+   "n": 35,
+   "created_at": "2026-10-19T11:25:15+00:00",
+   "updated_at": "2026-10-19T11:25:36+00:00",
+   "sent_at": null,
+   "source": "cli",
+   "text": "Two things: a welcome sign for the tool shed, and when the seed library should open.",
+   "status": "returned",
+   "waiting_on": "piece",
+   "outcome": null,
+   "reason_code": null,
+   "mode": "split",
+   "preset": null,
+   "parent": null,
+   "project": null,
+   "chat": null,
+   "tag": null,
+   "skill": null,
+   "skill_source": null,
+   "agent": "claude",
+   "checker": "chatgpt",
+   "check_state": "pending",
+   "check_note": "waiting: pieces #36, #37",
+   "route_reason": "split",
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": null,
+   "result_url": null,
+   "jev": {
+    "status": "not_asked",
+    "label": null,
+    "confidence": null,
+    "tokens": 1280,
+    "needs_split": null,
+    "error": null
+   },
+   "slots": null,
+   "working": null,
+   "steps": {
+    "chain": [
+     {
+      "stage": 1,
+      "role": "split_plan",
+      "agent": "claude"
+     },
+     {
+      "stage": 2,
+      "role": "integrate",
+      "agent": "claude"
+     },
+     {
+      "stage": null,
+      "role": "check",
+      "agent": "chatgpt"
+     }
+    ],
+    "now": null
+   },
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not a double fail: it is returned"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is returned; only a task stopped by a plan limit or by a process that ended can be resumed"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null,
+   "project_files": null,
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": {
+    "hash": "8b61a57199701a87",
+    "chars": 330,
+    "file": "tasks/sr-20261019-112512-0028/router-notes.md"
+   },
+   "spec": null,
+   "forgotten": null,
+   "save_path": null,
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": false,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": null
+  },
+  {
+   "task_id": "sr-20261019-112524-002a",
+   "n": 37,
+   "created_at": "2026-10-19T11:25:27+00:00",
+   "updated_at": "2026-10-19T11:26:18+00:00",
+   "sent_at": null,
+   "source": "split",
+   "text": "Decide whether the seed library should open on Saturday mornings or Sunday afternoons, with one line why.",
+   "status": "returned",
+   "waiting_on": "pick",
+   "outcome": null,
+   "reason_code": null,
+   "mode": "relay",
+   "preset": "versus",
+   "parent": "sr-20261019-112512-0028",
+   "project": null,
+   "chat": null,
+   "tag": null,
+   "skill": null,
+   "skill_source": null,
+   "agent": null,
+   "checker": null,
+   "check_state": null,
+   "check_note": "awaiting pick",
+   "route_reason": "relay",
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": null,
+   "result_url": null,
+   "jev": {
+    "status": "not_asked",
+    "label": null,
+    "confidence": null,
+    "tokens": 0,
+    "needs_split": null,
+    "error": null
+   },
+   "slots": {
+    "a": "claude",
+    "b": "chatgpt"
+   },
+   "working": null,
+   "steps": {
+    "chain": [
+     {
+      "stage": 1,
+      "role": "build",
+      "agent": "claude"
+     },
+     {
+      "stage": 2,
+      "role": "build",
+      "agent": "chatgpt"
+     },
+     {
+      "stage": 3,
+      "role": "review",
+      "agent": "chatgpt"
+     },
+     {
+      "stage": 4,
+      "role": "review",
+      "agent": "claude"
+     }
+    ],
+    "now": null
+   },
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not eligible: a versus task; run it again"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is returned; only a task stopped by a plan limit or by a process that ended can be resumed"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null,
+   "project_files": null,
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": {
+    "split": "sr-20261019-112512-0028",
+    "n": 35,
+    "piece": 2,
+    "team": "versus"
+   },
+   "router_notes": {
+    "hash": "8b61a57199701a87",
+    "chars": 330,
+    "file": "tasks/sr-20261019-112512-0028/router-notes.md"
+   },
+   "spec": null,
+   "forgotten": null,
+   "save_path": null,
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": false,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": null
+  },
+  {
+   "task_id": "sr-20261019-112530-002b",
+   "n": 38,
+   "created_at": "2026-10-19T11:25:33+00:00",
+   "updated_at": "2026-10-19T11:26:54+00:00",
+   "sent_at": null,
+   "source": "cli",
+   "text": "In this project: fix the bug in bed_area() in beds.py so its test passes; separately, add rain_needed(beds) in a new file water.py with a unittest test in test_water.py.",
+   "status": "done",
+   "waiting_on": "land",
+   "outcome": null,
+   "reason_code": null,
+   "mode": "split",
+   "preset": null,
+   "parent": null,
+   "project": "plot-planner",
+   "chat": null,
+   "tag": "project:plot-planner",
+   "skill": null,
+   "skill_source": null,
+   "agent": "claude",
+   "checker": "chatgpt",
+   "check_state": "passed",
+   "check_note": null,
+   "route_reason": "split",
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": "`bed_area()` now multiplies length by width, and its test passes. `rain_needed(beds)` is in the new `water.py`, with three cases in `test_water.py`. All 4 tests pass.",
+   "result_url": null,
+   "jev": {
+    "status": "not_asked",
+    "label": null,
+    "confidence": null,
+    "tokens": 1280,
+    "needs_split": null,
+    "error": null
+   },
+   "slots": null,
+   "working": null,
+   "steps": {
+    "chain": [
+     {
+      "stage": 1,
+      "role": "split_plan",
+      "agent": "claude"
+     },
+     {
+      "stage": 2,
+      "role": "integrate",
+      "agent": "claude"
+     },
+     {
+      "stage": null,
+      "role": "check",
+      "agent": "chatgpt"
+     }
+    ],
+    "now": null
+   },
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not eligible: a file-mode task never falls back; discard it and run it again, or resume a stopped call"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is done; only a task stopped by a plan limit or by a process that ended can be resumed"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null,
+   "project_files": {
+    "base": "7d3e1a9c5b2f4d6e8a0c1e3f5b7d9a2c4e6f8b1d",
+    "branch": "main",
+    "changed": [
+     {
+      "minus": 1,
+      "path": "beds.py",
+      "plus": 3,
+      "status": "changed"
+     },
+     {
+      "minus": 0,
+      "path": "test_water.py",
+      "plus": 12,
+      "status": "added"
+     },
+     {
+      "minus": 0,
+      "path": "water.py",
+      "plus": 6,
+      "status": "added"
+     }
+    ],
+    "commit": null,
+    "copy": true,
+    "diff": "tasks/sr-20261019-112530-002b/changes.diff",
+    "files": 9,
+    "latest": "after-sr-20261019-112530-002b-s2",
+    "left_out": [],
+    "mode": "on",
+    "state": "waiting",
+    "tests": {
+     "command": [
+      "python3",
+      "-m",
+      "unittest"
+     ],
+     "exit": 0,
+     "outcome": "passed",
+     "output": "tasks/sr-20261019-112530-002b/tests-1.txt",
+     "summary": "OK"
+    },
+    "undo_commit": null,
+    "why": null
+   },
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": {
+    "hash": "8b61a57199701a87",
+    "chars": 330,
+    "file": "tasks/sr-20261019-112530-002b/router-notes.md"
+   },
+   "spec": null,
+   "forgotten": null,
+   "save_path": "docs/in-this-project-fix-the-bug.md",
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": true,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": null
+  },
+  {
+   "task_id": "sr-20261019-112552-0032",
+   "n": 45,
+   "created_at": "2026-10-19T11:25:55+00:00",
+   "updated_at": "2026-10-19T11:26:31+00:00",
+   "sent_at": null,
+   "source": "cli",
+   "text": "Make lend() refuse a packet that is out of stock, with a test.",
+   "status": "returned",
+   "waiting_on": "pick",
+   "outcome": null,
+   "reason_code": null,
+   "mode": "relay",
+   "preset": "versus",
+   "parent": null,
+   "project": "swap-shelf",
+   "chat": null,
+   "tag": "project:swap-shelf",
+   "skill": null,
+   "skill_source": null,
+   "agent": null,
+   "checker": null,
+   "check_state": null,
+   "check_note": "awaiting pick",
+   "route_reason": "relay",
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": null,
+   "result_url": null,
+   "jev": {
+    "status": "not_asked",
+    "label": null,
+    "confidence": null,
+    "tokens": 0,
+    "needs_split": null,
+    "error": null
+   },
+   "slots": {
+    "a": "claude",
+    "b": "chatgpt"
+   },
+   "working": null,
+   "steps": {
+    "chain": [
+     {
+      "stage": 1,
+      "role": "build",
+      "agent": "claude"
+     },
+     {
+      "stage": 2,
+      "role": "build",
+      "agent": "chatgpt"
+     },
+     {
+      "stage": 3,
+      "role": "review",
+      "agent": "chatgpt"
+     },
+     {
+      "stage": 4,
+      "role": "review",
+      "agent": "claude"
+     }
+    ],
+    "now": null
+   },
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not eligible: a file-mode task never falls back; discard it and run it again, or resume a stopped call"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is returned; only a task stopped by a plan limit or by a process that ended can be resumed"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null,
+   "project_files": {
+    "base": "4f2a9c1e5b7d3a8f6c0e2b4d6f8a1c3e5b7d9f0a",
+    "branch": "main",
+    "candidates": {
+     "a": {
+      "agent": "claude",
+      "changed": [
+       {
+        "minus": 0,
+        "path": "loans.py",
+        "plus": 7,
+        "status": "changed"
+       },
+       {
+        "minus": 0,
+        "path": "test_loans.py",
+        "plus": 6,
+        "status": "changed"
+       }
+      ],
+      "copy": true,
+      "copy_id": "sr-20261019-112552-0032-a",
+      "diff": "tasks/sr-20261019-112552-0032/changes-a.diff",
+      "files": 12,
+      "latest": null,
+      "left_out": [],
+      "tests": {
+       "command": [
+        "python3",
+        "-m",
+        "unittest"
+       ],
+       "exit": 0,
+       "outcome": "passed",
+       "output": "tasks/sr-20261019-112552-0032/tests-a.txt",
+       "summary": "OK"
+      }
+     },
+     "b": {
+      "agent": "chatgpt",
+      "changed": [
+       {
+        "minus": 0,
+        "path": "loans.py",
+        "plus": 2,
+        "status": "changed"
+       },
+       {
+        "minus": 0,
+        "path": "test_loans.py",
+        "plus": 6,
+        "status": "changed"
+       }
+      ],
+      "copy": true,
+      "copy_id": "sr-20261019-112552-0032-b",
+      "diff": "tasks/sr-20261019-112552-0032/changes-b.diff",
+      "files": 12,
+      "latest": null,
+      "left_out": [],
+      "tests": {
+       "command": [
+        "python3",
+        "-m",
+        "unittest"
+       ],
+       "exit": 0,
+       "outcome": "passed",
+       "output": "tasks/sr-20261019-112552-0032/tests-b.txt",
+       "summary": "OK"
+      }
+     }
+    },
+    "changed": [],
+    "commit": null,
+    "copy": true,
+    "diff": null,
+    "files": 12,
+    "latest": null,
+    "left_out": [],
+    "mode": "on",
+    "state": "none",
+    "tests": null,
+    "undo_commit": null,
+    "versus": true,
+    "why": null
+   },
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": {
+    "hash": "8b61a57199701a87",
+    "chars": 330,
+    "file": "tasks/sr-20261019-112552-0032/router-notes.md"
+   },
+   "spec": null,
+   "forgotten": null,
+   "save_path": null,
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": false,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": null
+  },
+  {
+   "task_id": "sr-20261019-112624-0039",
+   "n": 52,
+   "created_at": "2026-10-19T11:26:27+00:00",
+   "updated_at": "2026-10-19T11:26:51+00:00",
+   "sent_at": null,
+   "source": "ui",
+   "text": "Plan the first version.",
+   "status": "done",
+   "waiting_on": "land",
+   "outcome": null,
+   "reason_code": null,
+   "mode": "plan",
+   "preset": "redteam",
+   "parent": null,
+   "project": "bean-board",
+   "chat": null,
+   "tag": "project:bean-board",
+   "skill": null,
+   "skill_source": null,
+   "agent": "claude",
+   "checker": "chatgpt",
+   "check_state": "passed",
+   "check_note": null,
+   "route_reason": null,
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": "## Steps\n1. Make the skeleton: board.py printing an empty bean board, and test_board.py with one test that passes.\n   team: route\n   why: there is no code yet, so step 1 is the smallest thing that runs\n   done when: test_board.py's test_empty_board passes under python3 -m unittest\n2. Add plant(row, variety) and a test that a second planting in one row is refused.\n   team: redteam\n   why: the row rule is where a mistake would cost a season\n   done when: test_board.py's test_one_planting_per_row passes\n3. Research which bean varieties suit a north-facing bed, with sources.\n   team: research-build\n   why: a research step: it changes no code\n   done when: the result names three varieties, each with a source\n\n## Needs from you\n- decision: Bush beans or climbing beans first? (step 2)\n- test command: python3 -m unittest",
+   "result_url": null,
+   "jev": {
+    "status": "not_asked",
+    "label": null,
+    "confidence": null,
+    "tokens": 0,
+    "needs_split": null,
+    "error": null
+   },
+   "slots": {
+    "build": "claude",
+    "attack": "chatgpt",
+    "attack2": "cursor",
+    "check": "chatgpt"
+   },
+   "working": null,
+   "steps": {
+    "chain": [
+     {
+      "stage": 1,
+      "role": "plan",
+      "agent": "claude"
+     },
+     {
+      "stage": 2,
+      "role": "attack",
+      "agent": "chatgpt"
+     },
+     {
+      "stage": 3,
+      "role": "attack",
+      "agent": "cursor"
+     },
+     {
+      "stage": 4,
+      "role": "revise",
+      "agent": "claude"
+     },
+     {
+      "stage": null,
+      "role": "check",
+      "agent": "chatgpt"
+     }
+    ],
+    "now": null
+   },
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not eligible: a plan has no fallback; Reject it and plan again"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is done; only a task stopped by a plan limit or by a process that ended can be resumed"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null,
+   "project_files": {
+    "base": "9c4e2b7a1d3f5b8e0c2a4d6f8b1e3a5c7d9f0b2e",
+    "branch": "main",
+    "changed": [
+     {
+      "minus": 0,
+      "path": "docs/PLAN.md",
+      "plus": 25,
+      "status": "added"
+     }
+    ],
+    "commit": null,
+    "copy": true,
+    "diff": null,
+    "files": 3,
+    "latest": "after-plan-md-1",
+    "left_out": [],
+    "mode": "on",
+    "state": "waiting",
+    "tests": {
+     "command": null,
+     "exit": null,
+     "outcome": "not_run",
+     "output": null,
+     "summary": null,
+     "why": "a plan changes no code; each step's tests run after its build"
+    },
+    "undo_commit": null,
+    "why": null
+   },
+   "notes": [
+    {
+     "n": 1,
+     "text": "The decision could name who makes it."
+    }
+   ],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": null,
+   "spec": null,
+   "forgotten": null,
+   "save_path": "docs/steps.md",
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": true,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": {
+    "n": 52,
+    "steps": [
+     {
+      "k": 1,
+      "text": "Make the skeleton: board.py printing an empty bean board, and test_board.py with one test that passes.",
+      "team": "route",
+      "why": "there is no code yet, so step 1 is the smallest thing that runs",
+      "done_when": "test_board.py's test_empty_board passes under python3 -m unittest",
+      "covers": [],
+      "calls": null,
+      "max_calls": null,
+      "jev_label": false,
+      "state": "open",
+      "task": null
+     },
+     {
+      "k": 2,
+      "text": "Add plant(row, variety) and a test that a second planting in one row is refused.",
+      "team": "redteam",
+      "why": "the row rule is where a mistake would cost a season",
+      "done_when": "test_board.py's test_one_planting_per_row passes",
+      "covers": [],
+      "calls": null,
+      "max_calls": null,
+      "jev_label": false,
+      "state": "open",
+      "task": null
+     },
+     {
+      "k": 3,
+      "text": "Research which bean varieties suit a north-facing bed, with sources.",
+      "team": "research-build",
+      "why": "a research step: it changes no code",
+      "done_when": "the result names three varieties, each with a source",
+      "covers": [],
+      "calls": null,
+      "max_calls": null,
+      "jev_label": false,
+      "state": "open",
+      "task": null
+     }
+    ],
+    "needs": [
+     {
+      "kind": "decision",
+      "name": null,
+      "what": "Bush beans or climbing beans first?",
+      "step": 2,
+      "set": null
+     },
+     {
+      "kind": "test_command",
+      "name": null,
+      "what": "python3 -m unittest",
+      "step": null,
+      "set": false
+     }
+    ],
+    "test_command": {
+     "proposed": "python3 -m unittest",
+     "set": null
+    },
+    "estimate": null,
+    "edits": [],
+    "edited": false,
+    "planner_steps": [
+     {
+      "text": "Make the skeleton: board.py printing an empty bean board, and test_board.py with one test that passes.",
+      "team": "route",
+      "why": "there is no code yet, so step 1 is the smallest thing that runs",
+      "done_when": "test_board.py's test_empty_board passes under python3 -m unittest",
+      "covers": []
+     },
+     {
+      "text": "Add plant(row, variety) and a test that a second planting in one row is refused.",
+      "team": "redteam",
+      "why": "the row rule is where a mistake would cost a season",
+      "done_when": "test_board.py's test_one_planting_per_row passes",
+      "covers": []
+     },
+     {
+      "text": "Research which bean varieties suit a north-facing bed, with sources.",
+      "team": "research-build",
+      "why": "a research step: it changes no code",
+      "done_when": "the result names three varieties, each with a source",
+      "covers": []
+     }
+    ],
+    "current": false,
+    "done": 0,
+    "total": 3,
+    "hash": "a12ce8dbb48184b93d43b8253e39ec64523f516b09489a0abd00c312e9067b77",
+    "coverage": null,
+    "spec_hash": null,
+    "spec_changed": false,
+    "revises": null,
+    "inherited": 0,
+    "changed": null,
+    "decided": [],
+    "section_edited": false
+   },
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": null
+  },
+  {
+   "task_id": "sr-20261019-112654-0040",
+   "n": 59,
+   "created_at": "2026-10-19T11:26:57+00:00",
+   "updated_at": "2026-10-19T11:27:21+00:00",
+   "sent_at": null,
+   "source": "ui",
+   "text": "Record a reading per bed, not one for the whole plot.",
+   "status": "done",
+   "waiting_on": "land",
+   "outcome": null,
+   "reason_code": null,
+   "mode": "plan",
+   "preset": "redteam",
+   "parent": null,
+   "project": "rain-gauge",
+   "chat": null,
+   "tag": "project:rain-gauge",
+   "skill": null,
+   "skill_source": null,
+   "agent": "claude",
+   "checker": "chatgpt",
+   "check_state": "passed",
+   "check_note": null,
+   "route_reason": null,
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": "## Steps\n2. Add record(mm, date, bed) that stores a reading per bed in gauge.json, with a test.\n   team: route\n   why: the idea asks for a reading per bed, so the store takes the bed from here on\n   done when: test_gauge.py's test_record passes, checking a reading is read back for its bed\n3. Add a weekly total per bed, with a test.\n   team: route\n   why: the total follows the store\n   done when: test_gauge.py's test_weekly passes for two beds\n4. Write the README: how to record a reading and read the weekly totals.\n   team: route\n   why: what the allotment needs\n   done when: README.md names both commands and the test command\n\n## Needs from you\nnone\n\n## Changed\nstep 2: it now takes the bed, as the idea asks\nstep 3: the weekly total is per bed, and the README moved to its own step",
+   "result_url": null,
+   "jev": {
+    "status": "not_asked",
+    "label": null,
+    "confidence": null,
+    "tokens": 0,
+    "needs_split": null,
+    "error": null
+   },
+   "slots": {
+    "build": "claude",
+    "attack": "chatgpt",
+    "attack2": "cursor",
+    "check": "chatgpt"
+   },
+   "working": null,
+   "steps": {
+    "chain": [
+     {
+      "stage": 1,
+      "role": "plan",
+      "agent": "claude"
+     },
+     {
+      "stage": 2,
+      "role": "attack",
+      "agent": "chatgpt"
+     },
+     {
+      "stage": 3,
+      "role": "attack",
+      "agent": "cursor"
+     },
+     {
+      "stage": 4,
+      "role": "revise",
+      "agent": "claude"
+     },
+     {
+      "stage": null,
+      "role": "check",
+      "agent": "chatgpt"
+     }
+    ],
+    "now": null
+   },
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not eligible: a plan has no fallback; Reject it and plan again"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is done; only a task stopped by a plan limit or by a process that ended can be resumed"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null,
+   "project_files": {
+    "base": "7b1d3f5a9c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d",
+    "branch": "main",
+    "changed": [
+     {
+      "minus": 6,
+      "path": "docs/PLAN.md",
+      "plus": 9,
+      "status": "changed"
+     }
+    ],
+    "commit": null,
+    "copy": true,
+    "diff": null,
+    "files": 4,
+    "latest": "after-plan-md-1",
+    "left_out": [],
+    "mode": "on",
+    "state": "waiting",
+    "tests": {
+     "command": null,
+     "exit": null,
+     "outcome": "not_run",
+     "output": null,
+     "summary": null,
+     "why": "a plan changes no code; each step's tests run after its build"
+    },
+    "undo_commit": null,
+    "why": null
+   },
+   "notes": [
+    {
+     "n": 1,
+     "text": "Step 4 could name the README's sections."
+    }
+   ],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": null,
+   "spec": null,
+   "forgotten": null,
+   "save_path": "docs/steps.md",
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": true,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": {
+    "id": 4,
+    "text": "Record a reading per bed, not one for the whole plot.",
+    "state": "sent"
+   },
+   "plan": {
+    "n": 59,
+    "steps": [
+     {
+      "k": 1,
+      "text": "Make the skeleton: gauge.py that prints a help line, and test_gauge.py with one test that runs it.",
+      "team": "route",
+      "why": "the smallest thing that runs",
+      "done_when": "test_gauge.py's test_help passes under python3 -m unittest",
+      "covers": [],
+      "calls": null,
+      "max_calls": null,
+      "jev_label": false,
+      "state": "done",
+      "task": {
+       "task_id": "sr-20261019-112651-003f",
+       "n": 58,
+       "status": "done"
+      }
+     },
+     {
+      "k": 2,
+      "text": "Add record(mm, date, bed) that stores a reading per bed in gauge.json, with a test.",
+      "team": "route",
+      "why": "the idea asks for a reading per bed, so the store takes the bed from here on",
+      "done_when": "test_gauge.py's test_record passes, checking a reading is read back for its bed",
+      "covers": [],
+      "calls": null,
+      "max_calls": null,
+      "jev_label": false,
+      "state": "open",
+      "task": null
+     },
+     {
+      "k": 3,
+      "text": "Add a weekly total per bed, with a test.",
+      "team": "route",
+      "why": "the total follows the store",
+      "done_when": "test_gauge.py's test_weekly passes for two beds",
+      "covers": [],
+      "calls": null,
+      "max_calls": null,
+      "jev_label": false,
+      "state": "open",
+      "task": null
+     },
+     {
+      "k": 4,
+      "text": "Write the README: how to record a reading and read the weekly totals.",
+      "team": "route",
+      "why": "what the allotment needs",
+      "done_when": "README.md names both commands and the test command",
+      "covers": [],
+      "calls": null,
+      "max_calls": null,
+      "jev_label": false,
+      "state": "open",
+      "task": null
+     }
+    ],
+    "needs": [],
+    "test_command": {
+     "proposed": null,
+     "set": "python3 -m unittest"
+    },
+    "estimate": null,
+    "edits": [],
+    "edited": false,
+    "planner_steps": [
+     {
+      "text": "Make the skeleton: gauge.py that prints a help line, and test_gauge.py with one test that runs it.",
+      "team": "route",
+      "why": "the smallest thing that runs",
+      "done_when": "test_gauge.py's test_help passes under python3 -m unittest",
+      "covers": []
+     },
+     {
+      "text": "Add record(mm, date, bed) that stores a reading per bed in gauge.json, with a test.",
+      "team": "route",
+      "why": "the idea asks for a reading per bed, so the store takes the bed from here on",
+      "done_when": "test_gauge.py's test_record passes, checking a reading is read back for its bed",
+      "covers": []
+     },
+     {
+      "text": "Add a weekly total per bed, with a test.",
+      "team": "route",
+      "why": "the total follows the store",
+      "done_when": "test_gauge.py's test_weekly passes for two beds",
+      "covers": []
+     },
+     {
+      "text": "Write the README: how to record a reading and read the weekly totals.",
+      "team": "route",
+      "why": "what the allotment needs",
+      "done_when": "README.md names both commands and the test command",
+      "covers": []
+     }
+    ],
+    "current": false,
+    "done": 1,
+    "total": 4,
+    "hash": "e98a488a6efba28d67e7f2a9b694bd58ff80f179d2c558843146894181b83583",
+    "coverage": null,
+    "spec_hash": null,
+    "spec_changed": false,
+    "revises": {
+     "task_id": "sr-20261019-112648-003e",
+     "n": 57
+    },
+    "inherited": 1,
+    "changed": [
+     {
+      "step": 2,
+      "why": "it now takes the bed, as the idea asks"
+     },
+     {
+      "step": 3,
+      "why": "the weekly total is per bed, and the README moved to its own step"
+     }
+    ],
+    "decided": [],
+    "section_edited": false
+   },
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": null
+  },
+  {
+   "task_id": "sr-20261019-112706-0042",
+   "n": 61,
+   "created_at": "2026-10-19T11:27:09+00:00",
+   "updated_at": "2026-10-19T11:27:12+00:00",
+   "sent_at": null,
+   "source": "ui",
+   "text": "Auto: plan #60, steps 1 to 4",
+   "status": "queued",
+   "waiting_on": null,
+   "outcome": null,
+   "reason_code": null,
+   "mode": "auto",
+   "preset": null,
+   "parent": null,
+   "project": "seed-swap",
+   "chat": null,
+   "tag": "project:seed-swap",
+   "skill": null,
+   "skill_source": null,
+   "agent": null,
+   "checker": null,
+   "check_state": null,
+   "check_note": null,
+   "route_reason": null,
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": null,
+   "result_url": null,
+   "jev": {
+    "status": "not_asked",
+    "label": null,
+    "confidence": null,
+    "tokens": 0,
+    "needs_split": null,
+    "error": null
+   },
+   "slots": null,
+   "working": {
+    "agent": null,
+    "doing": null
+   },
+   "steps": null,
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not eligible: a file-mode task never falls back; discard it and run it again, or resume a stopped call"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is still open (queued); run `sr check` to finish it"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null,
+   "project_files": {
+    "base": "1a3c5e7000000000000000000000000000000000",
+    "branch": "main",
+    "changed": [
+     {
+      "minus": 0,
+      "path": "swap.py",
+      "plus": 24,
+      "status": "added"
+     },
+     {
+      "minus": 0,
+      "path": "test_swap.py",
+      "plus": 18,
+      "status": "added"
+     },
+     {
+      "minus": 0,
+      "path": "swaps.json",
+      "plus": 1,
+      "status": "added"
+     }
+    ],
+    "commit": null,
+    "copy": true,
+    "diff": null,
+    "files": 4,
+    "latest": null,
+    "left_out": [],
+    "mode": "on",
+    "state": "none",
+    "tests": null,
+    "undo_commit": null,
+    "why": null
+   },
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": null,
+   "spec": null,
+   "forgotten": null,
+   "save_path": null,
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": false,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": {
+    "plan": {
+     "task_id": "sr-20261019-112700-0041",
+     "n": 60
+    },
+    "from_step": 1,
+    "state": "running",
+    "steps": [
+     {
+      "k": 1,
+      "state": "done",
+      "attempt": 1,
+      "team": "route",
+      "task_id": "sr-20261019-112709-0043",
+      "n": 62,
+      "status": "done",
+      "outcome": "passed",
+      "waiting_on": null,
+      "verdict": "passed",
+      "calls": 2,
+      "covered": true
+     },
+     {
+      "k": 2,
+      "state": "done",
+      "attempt": 1,
+      "team": "route",
+      "task_id": "sr-20261019-112712-0044",
+      "n": 63,
+      "status": "done",
+      "outcome": "passed",
+      "waiting_on": null,
+      "verdict": "passed",
+      "calls": 2,
+      "covered": true
+     },
+     {
+      "k": 3,
+      "state": "running",
+      "attempt": 1,
+      "team": "redteam",
+      "task_id": "sr-20261019-112715-0045",
+      "n": 64,
+      "status": "queued",
+      "outcome": null,
+      "waiting_on": null,
+      "verdict": "pending",
+      "calls": 0,
+      "covered": true
+     },
+     {
+      "k": 4,
+      "state": "open",
+      "attempt": 0,
+      "team": "route",
+      "task_id": null,
+      "n": null,
+      "status": null,
+      "outcome": null,
+      "waiting_on": null,
+      "verdict": null,
+      "calls": 0,
+      "covered": true
+     }
+    ],
+    "budget": 29,
+    "used": 4,
+    "estimate": {
+     "calls": 11,
+     "max_calls": 19,
+     "jev_labels": 3
+    },
+    "stop": null,
+    "passed_marks": [],
+    "off_requested": false,
+    "hook": false,
+    "copy": true,
+    "next": 4,
+    "words": "Auto · step 3 of 4 · 4 of 29 calls",
+    "tests": "No tests ran: no test command",
+    "spec_hash": null,
+    "ways": null
+   }
+  },
+  {
+   "task_id": "sr-20261019-112715-0045",
+   "n": 64,
+   "created_at": "2026-10-19T11:27:18+00:00",
+   "updated_at": "2026-10-19T11:27:24+00:00",
+   "sent_at": null,
+   "source": "ui",
+   "text": "Match offers to wants and print the swaps, with a test that fakes two growers.",
+   "status": "queued",
+   "waiting_on": null,
+   "outcome": null,
+   "reason_code": null,
+   "mode": "relay",
+   "preset": "redteam",
+   "parent": "sr-20261019-112706-0042",
+   "project": "seed-swap",
+   "chat": null,
+   "tag": "project:seed-swap",
+   "skill": null,
+   "skill_source": null,
+   "agent": "claude",
+   "checker": "chatgpt",
+   "check_state": "pending",
+   "check_note": null,
+   "route_reason": null,
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": null,
+   "result_url": null,
+   "jev": {
+    "status": "not_asked",
+    "label": null,
+    "confidence": null,
+    "tokens": 0,
+    "needs_split": null,
+    "error": null
+   },
+   "slots": {
+    "build": "claude",
+    "attack": "chatgpt",
+    "attack2": "cursor",
+    "check": "chatgpt"
+   },
+   "working": {
+    "agent": "claude",
+    "doing": "stage 1 of 4 (build)"
+   },
+   "steps": {
+    "chain": [
+     {
+      "stage": 1,
+      "role": "build",
+      "agent": "claude"
+     },
+     {
+      "stage": 2,
+      "role": "attack",
+      "agent": "chatgpt"
+     },
+     {
+      "stage": 3,
+      "role": "attack",
+      "agent": "cursor"
+     },
+     {
+      "stage": 4,
+      "role": "revise",
+      "agent": "claude"
+     },
+     {
+      "stage": null,
+      "role": "check",
+      "agent": "chatgpt"
+     }
+    ],
+    "now": {
+     "kind": "stage",
+     "stage": 1,
+     "role": "build",
+     "agent": "claude"
+    }
+   },
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not eligible: a piece of a project split never falls back; resume a stopped call, skip it, or cancel the split"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is still open (queued); run `sr check` to finish it"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null,
+   "project_files": {
+    "base": "1a3c5e7000000000000000000000000000000000",
+    "branch": "main",
+    "changed": [],
+    "commit": null,
+    "copy": true,
+    "diff": null,
+    "latest": null,
+    "mode": "on",
+    "owner": "sr-20261019-112706-0042",
+    "run": "sr-20261019-112706-0042",
+    "start": "step-3-1-start",
+    "state": "none",
+    "tests": null,
+    "undo_commit": null,
+    "why": null
+   },
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": {
+    "split": null,
+    "run": "sr-20261019-112706-0042",
+    "n": 61,
+    "piece": null,
+    "step": 3,
+    "team": "redteam"
+   },
+   "router_notes": null,
+   "spec": null,
+   "forgotten": null,
+   "save_path": null,
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": false,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": {
+    "plan": "sr-20261019-112700-0041",
+    "n": 60,
+    "step": 3,
+    "text": "Match offers to wants and print the swaps, with a test that fakes two growers.",
+    "done_when": "test_match.py's test_two_growers passes with faked offers",
+    "team": "redteam",
+    "covers": [],
+    "plan_md": null,
+    "restored": false
+   },
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": null
+  },
+  {
+   "task_id": "sr-20261019-112724-0048",
+   "n": 67,
+   "created_at": "2026-10-19T11:27:27+00:00",
+   "updated_at": "2026-10-19T11:28:09+00:00",
+   "sent_at": null,
+   "source": "ui",
+   "text": "Auto: plan #65, steps 2 to 3",
+   "status": "returned",
+   "waiting_on": "auto",
+   "outcome": null,
+   "reason_code": "budget",
+   "mode": "auto",
+   "preset": null,
+   "parent": null,
+   "project": "trellis-plan",
+   "chat": null,
+   "tag": "project:trellis-plan",
+   "skill": null,
+   "skill_source": null,
+   "agent": null,
+   "checker": null,
+   "check_state": null,
+   "check_note": "auto stopped: the budget is reached: 17 of 17 calls used",
+   "route_reason": "returned: the budget is reached: 17 of 17 calls used",
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": null,
+   "result_url": null,
+   "jev": {
+    "status": "not_asked",
+    "label": null,
+    "confidence": null,
+    "tokens": 0,
+    "needs_split": null,
+    "error": null
+   },
+   "slots": null,
+   "working": null,
+   "steps": null,
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not eligible: a file-mode task never falls back; discard it and run it again, or resume a stopped call"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is returned; only a task stopped by a plan limit or by a process that ended can be resumed"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null,
+   "project_files": {
+    "base": "2b4d6f8000000000000000000000000000000000",
+    "branch": "main",
+    "changed": [
+     {
+      "minus": 2,
+      "path": "trellis.py",
+      "plus": 31,
+      "status": "changed"
+     },
+     {
+      "minus": 0,
+      "path": "test_trellis.py",
+      "plus": 14,
+      "status": "changed"
+     }
+    ],
+    "commit": null,
+    "copy": true,
+    "diff": null,
+    "files": 4,
+    "latest": null,
+    "left_out": [],
+    "mode": "on",
+    "state": "none",
+    "tests": null,
+    "undo_commit": null,
+    "why": null
+   },
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": null,
+   "spec": null,
+   "forgotten": null,
+   "save_path": null,
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": false,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": {
+    "plan": {
+     "task_id": "sr-20261019-112718-0046",
+     "n": 65
+    },
+    "from_step": 2,
+    "state": "stopped",
+    "steps": [
+     {
+      "k": 1,
+      "state": "done",
+      "attempt": 0,
+      "team": "route",
+      "task_id": null,
+      "n": null,
+      "status": null,
+      "outcome": null,
+      "waiting_on": null,
+      "verdict": null,
+      "calls": 0,
+      "covered": false
+     },
+     {
+      "k": 2,
+      "state": "done",
+      "attempt": 2,
+      "team": "redteam",
+      "task_id": "sr-20261019-112730-004a",
+      "n": 69,
+      "status": "done",
+      "outcome": "passed",
+      "waiting_on": null,
+      "verdict": "passed",
+      "calls": 8,
+      "covered": true
+     },
+     {
+      "k": 3,
+      "state": "open",
+      "attempt": 0,
+      "team": "route",
+      "task_id": null,
+      "n": null,
+      "status": null,
+      "outcome": null,
+      "waiting_on": null,
+      "verdict": null,
+      "calls": 0,
+      "covered": true
+     }
+    ],
+    "budget": 17,
+    "used": 17,
+    "estimate": {
+     "calls": 7,
+     "max_calls": 11,
+     "jev_labels": 1
+    },
+    "stop": {
+     "code": "budget",
+     "why": "the budget is reached: 17 of 17 calls used",
+     "step": 3
+    },
+    "passed_marks": [],
+    "off_requested": false,
+    "hook": false,
+    "copy": true,
+    "next": 3,
+    "words": "Auto stopped: the budget is reached: 17 of 17 calls used",
+    "tests": "No tests ran: no test command",
+    "spec_hash": null,
+    "ways": null
+   }
+  },
+  {
+   "task_id": "sr-20261019-112739-004c",
+   "n": 71,
+   "created_at": "2026-10-19T11:27:42+00:00",
+   "updated_at": "2026-10-19T11:28:15+00:00",
+   "sent_at": null,
+   "source": "ui",
+   "text": "Auto: plan #70, steps 1 to 2",
+   "status": "done",
+   "waiting_on": "land",
+   "outcome": null,
+   "reason_code": null,
+   "mode": "auto",
+   "preset": null,
+   "parent": null,
+   "project": "mulch-notes",
+   "chat": null,
+   "tag": "project:mulch-notes",
+   "skill": null,
+   "skill_source": null,
+   "agent": null,
+   "checker": null,
+   "check_state": "passed",
+   "check_note": "auto finished",
+   "route_reason": null,
+   "failed_stage": null,
+   "web": false,
+   "files": [],
+   "result": "Auto finished: every step passed; the run waits to land.",
+   "result_url": null,
+   "jev": {
+    "status": "not_asked",
+    "label": null,
+    "confidence": null,
+    "tokens": 0,
+    "needs_split": null,
+    "error": null
+   },
+   "slots": null,
+   "working": null,
+   "steps": null,
+   "fallback": {
+    "ok": false,
+    "agent": null,
+    "reason": "not eligible: a file-mode task never falls back; discard it and run it again, or resume a stopped call"
+   },
+   "resume": {
+    "ok": false,
+    "substitute": null,
+    "agent": null,
+    "checker": null,
+    "reason": "it is done; only a task stopped by a plan limit or by a process that ended can be resumed"
+   },
+   "pid": null,
+   "run_started_at": null,
+   "answered_by": null,
+   "stand_in": null,
+   "filled": null,
+   "card_line": null,
+   "takeover": null,
+   "late": null,
+   "project_files": {
+    "base": "3c5e7a9000000000000000000000000000000000",
+    "branch": "main",
+    "changed": [
+     {
+      "minus": 0,
+      "path": "mulch.py",
+      "plus": 22,
+      "status": "added"
+     },
+     {
+      "minus": 0,
+      "path": "test_mulch.py",
+      "plus": 16,
+      "status": "added"
+     },
+     {
+      "minus": 0,
+      "path": "mulch.json",
+      "plus": 1,
+      "status": "added"
+     }
+    ],
+    "commit": null,
+    "copy": true,
+    "diff": "tasks/sr-20261019-112739-004c/changes.diff",
+    "files": 4,
+    "latest": "end",
+    "left_out": [],
+    "mode": "on",
+    "state": "waiting",
+    "tests": {
+     "command": [
+      "python3",
+      "-m",
+      "unittest"
+     ],
+     "exit": 0,
+     "outcome": "passed",
+     "output": "tasks/sr-20261019-112739-004c/tests-1.txt",
+     "summary": "OK"
+    },
+    "undo_commit": null,
+    "why": null
+   },
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": null,
+   "spec": null,
+   "forgotten": null,
+   "save_path": "docs/auto-plan-70-steps-1-to.md",
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": true,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": {
+    "plan": {
+     "task_id": "sr-20261019-112736-004b",
+     "n": 70
+    },
+    "from_step": 1,
+    "state": "finished",
+    "steps": [
+     {
+      "k": 1,
+      "state": "done",
+      "attempt": 1,
+      "team": "route",
+      "task_id": "sr-20261019-112742-004d",
+      "n": 72,
+      "status": "done",
+      "outcome": "passed",
+      "waiting_on": null,
+      "verdict": "passed",
+      "calls": 2,
+      "covered": true
+     },
+     {
+      "k": 2,
+      "state": "done",
+      "attempt": 1,
+      "team": "route",
+      "task_id": "sr-20261019-112745-004e",
+      "n": 73,
+      "status": "done",
+      "outcome": "passed",
+      "waiting_on": null,
+      "verdict": "passed",
+      "calls": 4,
+      "covered": true
+     }
+    ],
+    "budget": 12,
+    "used": 6,
+    "estimate": {
+     "calls": 4,
+     "max_calls": 8,
+     "jev_labels": 2
+    },
+    "stop": null,
+    "passed_marks": [],
+    "off_requested": false,
+    "hook": false,
+    "copy": true,
+    "next": null,
+    "words": "Auto finished: land the run?",
+    "tests": "Tests: `python3 -m unittest` · 3 runs across 2 steps, all passing at the end (step 2 fixed once)",
+    "spec_hash": null,
+    "ways": null
+   }
+  },
+  {
+   "task_id": "sr-20261019-112700-004f",
+   "n": 74,
    "created_at": "2026-10-19T11:27:06+00:00",
    "updated_at": "2026-10-19T11:27:15+00:00",
    "sent_at": "2026-10-19T11:27:12+00:00",
@@ -1332,6 +4440,10 @@
     "agent": "grok",
     "doing": null
    },
+   "steps": {
+    "chain": null,
+    "now": null
+   },
    "fallback": {
     "ok": false,
     "agent": null,
@@ -1351,11 +4463,42 @@
    "filled": null,
    "card_line": null,
    "takeover": null,
-   "late": null
+   "late": null,
+   "project_files": null,
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": {
+    "hash": "8b61a57199701a87",
+    "chars": 330,
+    "file": "tasks/sr-20261019-112700-004f/router-notes.md"
+   },
+   "spec": null,
+   "forgotten": null,
+   "save_path": null,
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": false,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": null
   },
   {
-   "task_id": "sr-20261019-113300-0022",
-   "n": 32,
+   "task_id": "sr-20261019-113300-0050",
+   "n": 75,
    "created_at": "2026-10-19T11:33:06+00:00",
    "updated_at": "2026-10-19T11:33:15+00:00",
    "sent_at": "2026-10-19T11:33:12+00:00",
@@ -1396,6 +4539,10 @@
     "agent": "grok",
     "doing": null
    },
+   "steps": {
+    "chain": null,
+    "now": null
+   },
    "fallback": {
     "ok": false,
     "agent": null,
@@ -1415,16 +4562,48 @@
    "filled": null,
    "card_line": null,
    "takeover": null,
-   "late": null
+   "late": null,
+   "project_files": null,
+   "notes": [],
+   "open_musts": [],
+   "land_anyway": false,
+   "no_split": null,
+   "piece_of": null,
+   "router_notes": {
+    "hash": "8b61a57199701a87",
+    "chars": 330,
+    "file": "tasks/sr-20261019-113300-0050/router-notes.md"
+   },
+   "spec": null,
+   "forgotten": null,
+   "save_path": null,
+   "text_only": false,
+   "save_spec": null,
+   "card_actions": {
+    "pin": false,
+    "save": false,
+    "forget": false,
+    "remember": false
+   },
+   "next": [],
+   "from": null,
+   "idea": null,
+   "plan": null,
+   "plan_step": null,
+   "one_step": null,
+   "questions": null,
+   "models": null,
+   "auto": null
   }
  ],
  "running": [],
  "jev": {
   "configured": false,
-  "tokens_month": 16000,
+  "tokens_month": 32000,
   "cap": 1000000,
   "over_cap": false,
   "floor": 0.8,
+  "tagged_floor": 0.4,
   "available": false,
   "why": "Jev isn't set up: no JEV_API_KEY in .env"
  },
@@ -1433,21 +4612,2172 @@
   "online": false,
   "starting": true,
   "documents": null,
-  "installed": true
+  "installed": true,
+  "newest": 3,
+  "matches": 5
  },
  "projects": [
   {
+   "name": "bean-board",
+   "path": "~/Projects/bean-board",
+   "handoff_lines": 2,
+   "open_task": {
+    "task_id": "sr-20261019-112624-0039",
+    "n": 52,
+    "status": "done"
+   },
+   "tests": null,
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "ideas": 0,
+   "plan": null,
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "task #52 is open on bean-board: finish or cancel it first"
+   },
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   },
+   "git": true,
+   "branch": "main",
+   "head": "2b8d6f1",
+   "files_mode": "on",
+   "why": null
+  },
+  {
+   "name": "compost-log",
+   "path": "~/Projects/compost-log",
+   "handoff_lines": 2,
+   "open_task": null,
+   "tests": [
+    "python3",
+    "-m",
+    "unittest"
+   ],
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "ideas": 0,
+   "plan": {
+    "task_id": "sr-20261019-112636-003b",
+    "n": 54,
+    "done": 2,
+    "total": 2,
+    "next": null,
+    "plan_md": null,
+    "file": "docs/PLAN.md",
+    "steps": [
+     {
+      "k": 1,
+      "text": "Make the skeleton: compost.py that prints the bins, and test_compost.py with one test that passes.",
+      "team": "route",
+      "done": true,
+      "stop_here": false
+     },
+     {
+      "k": 2,
+      "text": "Add turn(bin) that records a turning date, with a test.",
+      "team": "route",
+      "done": true,
+      "stop_here": false
+     }
+    ],
+    "stop_here": []
+   },
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "every step of plan #54 is done"
+   },
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   },
+   "git": true,
+   "branch": "main",
+   "head": "8e5b1d3",
+   "files_mode": "on",
+   "why": null
+  },
+  {
    "name": "garden-site",
    "path": "~/Projects/garden-site",
+   "handoff_lines": 17,
+   "open_task": null,
+   "tests": null,
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "ideas": 3,
+   "plan": null,
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "garden-site has no current plan: approve one first"
+   },
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   },
+   "git": false,
+   "branch": null,
+   "head": null,
+   "files_mode": "off",
+   "why": "no git yet: Turn on undo"
+  },
+  {
+   "name": "herb-labels",
+   "path": "~/Projects/herb-labels",
+   "handoff_lines": 2,
+   "open_task": null,
+   "tests": null,
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "ideas": 0,
+   "plan": null,
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "herb-labels has no current plan: approve one first"
+   },
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   },
+   "git": true,
+   "branch": "main",
+   "head": "6a1c3e5",
+   "files_mode": "on",
+   "why": null
+  },
+  {
+   "name": "mulch-notes",
+   "path": "~/Projects/mulch-notes",
+   "handoff_lines": 2,
+   "open_task": {
+    "task_id": "sr-20261019-112739-004c",
+    "n": 71,
+    "status": "done"
+   },
+   "tests": [
+    "python3",
+    "-m",
+    "unittest"
+   ],
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "ideas": 0,
+   "plan": {
+    "task_id": "sr-20261019-112736-004b",
+    "n": 70,
+    "done": 0,
+    "total": 2,
+    "next": {
+     "k": 1,
+     "text": "Make the skeleton: mulch.py that prints a help line, and test_mulch.py with one test that runs it.",
+     "team": "route",
+     "done_when": "test_mulch.py's test_help passes under python3 -m unittest"
+    },
+    "plan_md": null,
+    "file": "docs/PLAN.md",
+    "steps": [
+     {
+      "k": 1,
+      "text": "Make the skeleton: mulch.py that prints a help line, and test_mulch.py with one test that runs it.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     },
+     {
+      "k": 2,
+      "text": "Add note(bed, depth) that records a mulch note in mulch.json, with a test.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     }
+    ],
+    "stop_here": []
+   },
+   "auto": {
+    "state": "finished",
+    "run": {
+     "task_id": "sr-20261019-112739-004c",
+     "n": 71,
+     "state": "finished",
+     "words": "Auto finished: land the run?",
+     "stop": null,
+     "used": 6,
+     "budget": 12,
+     "next": null
+    },
+    "switch": "hidden",
+    "why": "run #71 is finished and waits to land: Land run or Discard run first"
+   },
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   },
+   "git": true,
+   "branch": "main",
+   "head": "3c5e7a9",
+   "files_mode": "on",
+   "why": null
+  },
+  {
+   "name": "pea-trial",
+   "path": "~/Projects/pea-trial",
+   "handoff_lines": 2,
+   "open_task": null,
+   "tests": [
+    "python3",
+    "-m",
+    "unittest"
+   ],
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "ideas": 0,
+   "plan": {
+    "task_id": "sr-20261019-112612-0036",
+    "n": 49,
+    "done": 2,
+    "total": 4,
+    "next": {
+     "k": 3,
+     "text": "Fetch the week's frost forecast and warn when a sowing falls in a frost window, with a test that fakes the feed.",
+     "team": "redteam",
+     "done_when": "test_frost.py's test_warns_in_frost_window passes with a faked feed"
+    },
+    "plan_md": null,
+    "file": "docs/PLAN.md",
+    "steps": [
+     {
+      "k": 1,
+      "text": "Make the skeleton: trial.py that prints a help line, and test_trial.py with one test that runs it.",
+      "team": "route",
+      "done": true,
+      "stop_here": false
+     },
+     {
+      "k": 2,
+      "text": "Add record_sowing(bed, date) that stores a sowing in trial.json, with a test.",
+      "team": "route",
+      "done": true,
+      "stop_here": false
+     },
+     {
+      "k": 3,
+      "text": "Fetch the week's frost forecast and warn when a sowing falls in a frost window, with a test that fakes the feed.",
+      "team": "redteam",
+      "done": false,
+      "stop_here": false
+     },
+     {
+      "k": 4,
+      "text": "Write the README: how to record a sowing and read the frost warnings.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     }
+    ],
+    "stop_here": []
+   },
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "Before step 3: set FROST_FEED_KEY (Auto never starts a step with an unmet need)"
+   },
+   "spec": {
+    "present": true,
+    "hash": "18e8a9b81c51c761",
+    "chars": 398,
+    "examples": [
+     "E1",
+     "E2",
+     "E3"
+    ],
+    "done_when": [
+     "D1",
+     "D2"
+    ]
+   },
+   "git": true,
+   "branch": "main",
+   "head": "9c4e2b7",
+   "files_mode": "on",
+   "why": null
+  },
+  {
+   "name": "plot-planner",
+   "path": "~/Projects/plot-planner",
    "handoff_lines": 11,
-   "open_task": null
+   "open_task": {
+    "task_id": "sr-20261019-112530-002b",
+    "n": 38,
+    "status": "done"
+   },
+   "tests": [
+    "python3",
+    "-m",
+    "unittest"
+   ],
+   "last_test": {
+    "outcome": "passed",
+    "exit": 0,
+    "when": "2026-10-19T11:00:09+00:00",
+    "summary": "OK",
+    "head": "7d3e1a9"
+   },
+   "test_running": false,
+   "run_command": [
+    "python3",
+    "planner.py",
+    "--serve"
+   ],
+   "run": {
+    "state": "running",
+    "running": true,
+    "started": "2026-10-19T11:01:00+00:00",
+    "ended": null,
+    "exit": null
+   },
+   "secrets": 2,
+   "ideas": 0,
+   "plan": null,
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "task #38 is open on plot-planner: finish or cancel it first"
+   },
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   },
+   "git": true,
+   "branch": "main",
+   "head": "7d3e1a9",
+   "files_mode": "on",
+   "why": null
+  },
+  {
+   "name": "rain-gauge",
+   "path": "~/Projects/rain-gauge",
+   "handoff_lines": 2,
+   "open_task": {
+    "task_id": "sr-20261019-112654-0040",
+    "n": 59,
+    "status": "done"
+   },
+   "tests": [
+    "python3",
+    "-m",
+    "unittest"
+   ],
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "ideas": 0,
+   "plan": {
+    "task_id": "sr-20261019-112648-003e",
+    "n": 57,
+    "done": 1,
+    "total": 3,
+    "next": {
+     "k": 2,
+     "text": "Add record(mm, date) that stores a reading in gauge.json, with a test.",
+     "team": "route",
+     "done_when": "test_gauge.py's test_record passes, checking a reading is read back"
+    },
+    "plan_md": null,
+    "file": "docs/PLAN.md",
+    "steps": [
+     {
+      "k": 1,
+      "text": "Make the skeleton: gauge.py that prints a help line, and test_gauge.py with one test that runs it.",
+      "team": "route",
+      "done": true,
+      "stop_here": false
+     },
+     {
+      "k": 2,
+      "text": "Add record(mm, date) that stores a reading in gauge.json, with a test.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     },
+     {
+      "k": 3,
+      "text": "Add a weekly total and a README that says how to run the tests.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     }
+    ],
+    "stop_here": []
+   },
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "task #59 is open on rain-gauge: finish or cancel it first"
+   },
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   },
+   "git": true,
+   "branch": "main",
+   "head": "7b1d3f5",
+   "files_mode": "on",
+   "why": null
+  },
+  {
+   "name": "seed-library",
+   "path": "~/Projects/seed-library",
+   "handoff_lines": 21,
+   "open_task": {
+    "task_id": "sr-20261019-112500-0023",
+    "n": 33,
+    "status": "done"
+   },
+   "tests": [
+    "python3",
+    "-m",
+    "unittest"
+   ],
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "ideas": 0,
+   "plan": null,
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "task #33 is open on seed-library: finish or cancel it first"
+   },
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   },
+   "git": true,
+   "branch": "main",
+   "head": "4f2a9c1",
+   "files_mode": "on",
+   "why": null
+  },
+  {
+   "name": "seed-swap",
+   "path": "~/Projects/seed-swap",
+   "handoff_lines": 2,
+   "open_task": {
+    "task_id": "sr-20261019-112706-0042",
+    "n": 61,
+    "status": "queued"
+   },
+   "tests": [
+    "python3",
+    "-m",
+    "unittest"
+   ],
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "ideas": 0,
+   "plan": {
+    "task_id": "sr-20261019-112700-0041",
+    "n": 60,
+    "done": 0,
+    "total": 4,
+    "next": {
+     "k": 1,
+     "text": "Make the skeleton: swap.py that prints a help line, and test_swap.py with one test that runs it.",
+     "team": "route",
+     "done_when": "test_swap.py's test_help passes under python3 -m unittest"
+    },
+    "plan_md": null,
+    "file": "docs/PLAN.md",
+    "steps": [
+     {
+      "k": 1,
+      "text": "Make the skeleton: swap.py that prints a help line, and test_swap.py with one test that runs it.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     },
+     {
+      "k": 2,
+      "text": "Add offer(packet, grower) that records an offer in swaps.json, with a test.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     },
+     {
+      "k": 3,
+      "text": "Match offers to wants and print the swaps, with a test that fakes two growers.",
+      "team": "redteam",
+      "done": false,
+      "stop_here": false
+     },
+     {
+      "k": 4,
+      "text": "Write the README: how to offer a packet and read the matches.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     }
+    ],
+    "stop_here": []
+   },
+   "auto": {
+    "state": "on",
+    "run": {
+     "task_id": "sr-20261019-112706-0042",
+     "n": 61,
+     "state": "running",
+     "words": "Auto · step 3 of 4 · 4 of 29 calls",
+     "stop": null,
+     "used": 4,
+     "budget": 29,
+     "next": 4
+    },
+    "switch": "on",
+    "why": null
+   },
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   },
+   "git": true,
+   "branch": "main",
+   "head": "1a3c5e7",
+   "files_mode": "on",
+   "why": null
+  },
+  {
+   "name": "swap-shelf",
+   "path": "~/Projects/swap-shelf",
+   "handoff_lines": 2,
+   "open_task": {
+    "task_id": "sr-20261019-112552-0032",
+    "n": 45,
+    "status": "returned"
+   },
+   "tests": [
+    "python3",
+    "-m",
+    "unittest"
+   ],
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "ideas": 0,
+   "plan": null,
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "task #45 is open on swap-shelf: finish or cancel it first"
+   },
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   },
+   "git": true,
+   "branch": "main",
+   "head": "4f2a9c1",
+   "files_mode": "on",
+   "why": null
+  },
+  {
+   "name": "trellis-plan",
+   "path": "~/Projects/trellis-plan",
+   "handoff_lines": 2,
+   "open_task": {
+    "task_id": "sr-20261019-112724-0048",
+    "n": 67,
+    "status": "returned"
+   },
+   "tests": [
+    "python3",
+    "-m",
+    "unittest"
+   ],
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "ideas": 0,
+   "plan": {
+    "task_id": "sr-20261019-112718-0046",
+    "n": 65,
+    "done": 1,
+    "total": 3,
+    "next": {
+     "k": 2,
+     "text": "Add a bed's trellis plan from its climbers, with a test for beans and peas.",
+     "team": "redteam",
+     "done_when": "test_trellis.py's test_beans_and_peas passes"
+    },
+    "plan_md": null,
+    "file": "docs/PLAN.md",
+    "steps": [
+     {
+      "k": 1,
+      "text": "Make the skeleton: trellis.py that prints a help line, and test_trellis.py with one test that runs it.",
+      "team": "route",
+      "done": true,
+      "stop_here": false
+     },
+     {
+      "k": 2,
+      "text": "Add a bed's trellis plan from its climbers, with a test for beans and peas.",
+      "team": "redteam",
+      "done": false,
+      "stop_here": false
+     },
+     {
+      "k": 3,
+      "text": "Write the README: how to plan a bed's trellis.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     }
+    ],
+    "stop_here": []
+   },
+   "auto": {
+    "state": "stopped",
+    "run": {
+     "task_id": "sr-20261019-112724-0048",
+     "n": 67,
+     "state": "stopped",
+     "words": "Auto stopped: the budget is reached: 17 of 17 calls used",
+     "stop": {
+      "code": "budget",
+      "why": "the budget is reached: 17 of 17 calls used",
+      "step": 3
+     },
+     "used": 17,
+     "budget": 17,
+     "next": 3
+    },
+    "switch": "off",
+    "why": null
+   },
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   },
+   "git": true,
+   "branch": "main",
+   "head": "2b4d6f8",
+   "files_mode": "on",
+   "why": null
   }
  ],
+ "git": {
+  "installed": true,
+  "version": "2.50.1"
+ },
+ "test_sandbox": {
+  "available": true,
+  "why": null
+ },
+ "notes": {
+  "state": "set",
+  "why": null,
+  "line": null,
+  "reason_code": null,
+  "sections": {
+   "all_agents": 58,
+   "claude": 25,
+   "chatgpt": 49,
+   "grok": 50,
+   "cursor": 25,
+   "planner": 48
+  },
+  "total": 330,
+  "max": 6000,
+  "grok": {
+   "share": 108,
+   "limit": 3662,
+   "line": "Grok gets these only on a call they fit."
+  },
+  "hash": "8b61a57199701a87",
+  "default": false
+ },
+ "models": {
+  "agents": {
+   "claude": {
+    "default": "claude-sonnet-5-5",
+    "name": "Sonnet 5.5",
+    "file": "config/models.json",
+    "allowed": [
+     "claude-haiku-5-5",
+     "claude-sonnet-5-5",
+     "claude-opus-5-5",
+     "claude-fable-5-1"
+    ],
+    "aliases": {
+     "haiku": "claude-haiku-5-5",
+     "sonnet": "claude-sonnet-5-5",
+     "opus": "claude-opus-5-5",
+     "fable": "claude-fable-5-1"
+    },
+    "names": {
+     "claude-haiku-5-5": "Haiku 5.5",
+     "claude-sonnet-5-5": "Sonnet 5.5",
+     "claude-opus-5-5": "Opus 5.5",
+     "claude-fable-5-1": "Fable 5.1"
+    },
+    "gated": [
+     "claude-fable-5-1"
+    ],
+    "efforts": [
+     "low",
+     "medium",
+     "high",
+     "xhigh",
+     "max"
+    ],
+    "timeouts": {
+     "claude-haiku-5-5": 600,
+     "claude-sonnet-5-5": 600,
+     "claude-opus-5-5": 1200,
+     "claude-fable-5-1": 1200
+    }
+   },
+   "chatgpt": {
+    "default": "gpt-6.1-sol",
+    "name": "GPT-6.1 Sol",
+    "file": "config/agents.json",
+    "allowed": [
+     "gpt-6.1-sol",
+     "gpt-6-astra",
+     "gpt-6.1-terra"
+    ],
+    "aliases": {},
+    "names": {
+     "gpt-6.1-sol": "GPT-6.1 Sol",
+     "gpt-6-astra": "GPT-6 Astra",
+     "gpt-6.1-terra": "GPT-6.1 Terra"
+    },
+    "gated": [],
+    "efforts": [
+     "low",
+     "medium",
+     "high",
+     "xhigh",
+     "max",
+     "ultra"
+    ],
+    "timeouts": {
+     "gpt-6.1-sol": 600,
+     "gpt-6-astra": 600,
+     "gpt-6.1-terra": 600
+    }
+   },
+   "cursor": {
+    "default": "grok-4.7-high",
+    "name": "grok-4.7-high",
+    "file": "config/agents.json",
+    "allowed": [
+     "grok-4.7-high",
+     "grok-4.7-low",
+     "grok-4.7-medium",
+     "grok-4.7-xhigh",
+     "grok-4.7-high-fast",
+     "grok-4.7-low-fast",
+     "grok-4.7-medium-fast",
+     "grok-4.7-xhigh-fast",
+     "cursor-grok-4.6-low",
+     "cursor-grok-4.6-medium",
+     "cursor-grok-4.6-high",
+     "cursor-grok-4.6-xhigh",
+     "cursor-grok-4.6-low-fast",
+     "cursor-grok-4.6-medium-fast",
+     "cursor-grok-4.6-high-fast",
+     "cursor-grok-4.6-xhigh-fast",
+     "cursor-grok-4.5-high",
+     "cursor-grok-4.5-high-fast"
+    ],
+    "aliases": {},
+    "names": {},
+    "gated": [],
+    "efforts": [],
+    "timeouts": {
+     "grok-4.7-high": 600,
+     "grok-4.7-low": 600,
+     "grok-4.7-medium": 600,
+     "grok-4.7-xhigh": 600,
+     "grok-4.7-high-fast": 600,
+     "grok-4.7-low-fast": 600,
+     "grok-4.7-medium-fast": 600,
+     "grok-4.7-xhigh-fast": 600,
+     "cursor-grok-4.6-low": 600,
+     "cursor-grok-4.6-medium": 600,
+     "cursor-grok-4.6-high": 600,
+     "cursor-grok-4.6-xhigh": 600,
+     "cursor-grok-4.6-low-fast": 600,
+     "cursor-grok-4.6-medium-fast": 600,
+     "cursor-grok-4.6-high-fast": 600,
+     "cursor-grok-4.6-xhigh-fast": 600,
+     "cursor-grok-4.5-high": 600,
+     "cursor-grok-4.5-high-fast": 600
+    }
+   }
+  },
+  "fable": {
+   "on": false,
+   "changed_at": "2026-10-19T11:27:00+00:00",
+   "off_by": null,
+   "words": "Fable 5.1 can charge usage credits once you've used half your weekly limit on it, and the router's Claude calls pay them without asking. Turn this on only if usage credits are off on your account.",
+   "fallback": "claude-opus-5-5",
+   "fallback_name": "Opus 5.5"
+  },
+  "layers": [
+   {
+    "layer": "skill",
+    "key": "code",
+    "agent": "claude",
+    "model": "claude-opus-5-5",
+    "name": "Opus 5.5",
+    "effort": null,
+    "file": "config/models.local.json"
+   },
+   {
+    "layer": "skill",
+    "key": "quick_answer",
+    "agent": "claude",
+    "model": "claude-sonnet-5-5",
+    "name": "Sonnet 5.5",
+    "effort": null,
+    "file": "config/models.local.json"
+   },
+   {
+    "layer": "role",
+    "key": "file.build",
+    "agent": "claude",
+    "model": "claude-opus-5-5",
+    "name": "Opus 5.5",
+    "effort": null,
+    "file": "config/models.local.json"
+   },
+   {
+    "layer": "role",
+    "key": "file.revise",
+    "agent": "claude",
+    "model": "claude-opus-5-5",
+    "name": "Opus 5.5",
+    "effort": null,
+    "file": "config/models.local.json"
+   },
+   {
+    "layer": "role",
+    "key": "file.execute",
+    "agent": "claude",
+    "model": "claude-opus-5-5",
+    "name": "Opus 5.5",
+    "effort": null,
+    "file": "config/models.local.json"
+   },
+   {
+    "layer": "role",
+    "key": "file.fix",
+    "agent": "claude",
+    "model": "claude-opus-5-5",
+    "name": "Opus 5.5",
+    "effort": null,
+    "file": "config/models.local.json"
+   },
+   {
+    "layer": "role",
+    "key": "file.integrate",
+    "agent": "claude",
+    "model": "claude-opus-5-5",
+    "name": "Opus 5.5",
+    "effort": null,
+    "file": "config/models.local.json"
+   },
+   {
+    "layer": "role",
+    "key": "plan.plan",
+    "agent": "claude",
+    "model": "claude-fable-5-1",
+    "name": "Fable 5.1",
+    "effort": null,
+    "file": "config/models.local.json"
+   },
+   {
+    "layer": "role",
+    "key": "plan.revise",
+    "agent": "claude",
+    "model": "claude-fable-5-1",
+    "name": "Fable 5.1",
+    "effort": null,
+    "file": "config/models.local.json"
+   },
+   {
+    "layer": "role",
+    "key": "plan.fix",
+    "agent": "claude",
+    "model": "claude-fable-5-1",
+    "name": "Fable 5.1",
+    "effort": null,
+    "file": "config/models.local.json"
+   }
+  ],
+  "problems": [],
+  "files": {
+   "tracked": "config/models.json",
+   "local": "config/models.local.json",
+   "local_present": true
+  },
+  "claude": {
+   "opus_calls_this_week": 9,
+   "fable_calls_this_week": 0
+  },
+  "now": {
+   "teams": {
+    "research-build": [
+     {
+      "agent": "grok",
+      "model": null,
+      "name": null,
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": "Grok Bot has no model choice: its service picks",
+      "stage": 1,
+      "role": "research"
+     },
+     {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 2,
+      "role": "build"
+     },
+     {
+      "agent": "chatgpt",
+      "model": "gpt-6.1-sol",
+      "name": "GPT-6.1 Sol",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": null,
+      "role": "check"
+     }
+    ],
+    "collab": [
+     {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 1,
+      "role": "plan"
+     },
+     {
+      "agent": "chatgpt",
+      "model": "gpt-6.1-sol",
+      "name": "GPT-6.1 Sol",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 2,
+      "role": "amend"
+     },
+     {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 3,
+      "role": "execute"
+     },
+     {
+      "agent": "chatgpt",
+      "model": "gpt-6.1-sol",
+      "name": "GPT-6.1 Sol",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 4,
+      "role": "edit"
+     }
+    ],
+    "versus": [
+     {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 1,
+      "role": "build"
+     },
+     {
+      "agent": "chatgpt",
+      "model": "gpt-6.1-sol",
+      "name": "GPT-6.1 Sol",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 2,
+      "role": "build"
+     },
+     {
+      "agent": "chatgpt",
+      "model": "gpt-6.1-sol",
+      "name": "GPT-6.1 Sol",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 3,
+      "role": "review"
+     },
+     {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 4,
+      "role": "review"
+     }
+    ],
+    "redteam": [
+     {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 1,
+      "role": "build"
+     },
+     {
+      "agent": "chatgpt",
+      "model": "gpt-6.1-sol",
+      "name": "GPT-6.1 Sol",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 2,
+      "role": "attack"
+     },
+     {
+      "agent": "cursor",
+      "model": "grok-4.7-high",
+      "name": "grok-4.7-high",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 3,
+      "role": "attack"
+     },
+     {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 4,
+      "role": "revise"
+     },
+     {
+      "agent": "chatgpt",
+      "model": "gpt-6.1-sol",
+      "name": "GPT-6.1 Sol",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": null,
+      "role": "check"
+     }
+    ],
+    "vote": [
+     {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 1,
+      "role": "vote"
+     },
+     {
+      "agent": "chatgpt",
+      "model": "gpt-6.1-sol",
+      "name": "GPT-6.1 Sol",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 2,
+      "role": "vote"
+     },
+     {
+      "agent": "grok",
+      "model": null,
+      "name": null,
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": "Grok Bot has no model choice: its service picks",
+      "stage": 3,
+      "role": "vote"
+     }
+    ],
+    "plan": [
+     {
+      "agent": "claude",
+      "model": "claude-opus-5-5",
+      "name": "Opus 5.5",
+      "layer": "role",
+      "key": "plan.plan",
+      "effort": null,
+      "note": "Fable is off: Opus 5.5 instead",
+      "stage": 1,
+      "role": "plan"
+     },
+     {
+      "agent": "chatgpt",
+      "model": "gpt-6.1-sol",
+      "name": "GPT-6.1 Sol",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 2,
+      "role": "attack"
+     },
+     {
+      "agent": "cursor",
+      "model": "grok-4.7-high",
+      "name": "grok-4.7-high",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 3,
+      "role": "attack"
+     },
+     {
+      "agent": "claude",
+      "model": "claude-opus-5-5",
+      "name": "Opus 5.5",
+      "layer": "role",
+      "key": "plan.revise",
+      "effort": null,
+      "note": "Fable is off: Opus 5.5 instead",
+      "stage": 4,
+      "role": "revise"
+     },
+     {
+      "agent": "chatgpt",
+      "model": "gpt-6.1-sol",
+      "name": "GPT-6.1 Sol",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": null,
+      "role": "check"
+     }
+    ],
+    "split": [
+     {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 1,
+      "role": "plan"
+     },
+     {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": 2,
+      "role": "integrate"
+     },
+     {
+      "agent": "chatgpt",
+      "model": "gpt-6.1-sol",
+      "name": "GPT-6.1 Sol",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null,
+      "stage": null,
+      "role": "check"
+     }
+    ]
+   },
+   "skills": {
+    "x_social_pulse": {},
+    "meta_social_trends": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null
+     }
+    },
+    "read_media": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null
+     }
+    },
+    "web_research": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null
+     }
+    },
+    "code": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-opus-5-5",
+      "name": "Opus 5.5",
+      "layer": "skill",
+      "key": "code",
+      "effort": null,
+      "note": null
+     }
+    },
+    "writing": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null
+     }
+    },
+    "planning": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null
+     }
+    },
+    "computer_use": {},
+    "make_media": {},
+    "bulk_text": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null
+     }
+    },
+    "quick_answer": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "skill",
+      "key": "quick_answer",
+      "effort": null,
+      "note": null
+     }
+    },
+    "recall": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null
+     }
+    }
+   },
+   "file": {
+    "build": {
+     "agent": "claude",
+     "model": "claude-opus-5-5",
+     "name": "Opus 5.5",
+     "layer": "file",
+     "key": "file.build",
+     "effort": null,
+     "note": null
+    },
+    "revise": {
+     "agent": "claude",
+     "model": "claude-opus-5-5",
+     "name": "Opus 5.5",
+     "layer": "file",
+     "key": "file.revise",
+     "effort": null,
+     "note": null
+    },
+    "execute": {
+     "agent": "claude",
+     "model": "claude-opus-5-5",
+     "name": "Opus 5.5",
+     "layer": "file",
+     "key": "file.execute",
+     "effort": null,
+     "note": null
+    },
+    "fix": {
+     "agent": "claude",
+     "model": "claude-opus-5-5",
+     "name": "Opus 5.5",
+     "layer": "file",
+     "key": "file.fix",
+     "effort": null,
+     "note": null
+    },
+    "integrate": {
+     "agent": "claude",
+     "model": "claude-opus-5-5",
+     "name": "Opus 5.5",
+     "layer": "file",
+     "key": "file.integrate",
+     "effort": null,
+     "note": null
+    }
+   },
+   "project_skills": {
+    "x_social_pulse": {},
+    "meta_social_trends": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null
+     }
+    },
+    "read_media": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-opus-5-5",
+      "name": "Opus 5.5",
+      "layer": "file",
+      "key": "file.build",
+      "effort": null,
+      "note": null
+     }
+    },
+    "web_research": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null
+     }
+    },
+    "code": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-opus-5-5",
+      "name": "Opus 5.5",
+      "layer": "file",
+      "key": "file.build",
+      "effort": null,
+      "note": null
+     }
+    },
+    "writing": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-opus-5-5",
+      "name": "Opus 5.5",
+      "layer": "file",
+      "key": "file.build",
+      "effort": null,
+      "note": null
+     }
+    },
+    "planning": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-opus-5-5",
+      "name": "Opus 5.5",
+      "layer": "file",
+      "key": "file.build",
+      "effort": null,
+      "note": null
+     }
+    },
+    "computer_use": {},
+    "make_media": {},
+    "bulk_text": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-opus-5-5",
+      "name": "Opus 5.5",
+      "layer": "file",
+      "key": "file.build",
+      "effort": null,
+      "note": null
+     }
+    },
+    "quick_answer": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "skill",
+      "key": "quick_answer",
+      "effort": null,
+      "note": null
+     }
+    },
+    "recall": {
+     "do": {
+      "agent": "claude",
+      "model": "claude-sonnet-5-5",
+      "name": "Sonnet 5.5",
+      "layer": "agent",
+      "key": null,
+      "effort": null,
+      "note": null
+     }
+    }
+   }
+  },
+  "setup": {
+   "skills": [
+    {
+     "key": "x_social_pulse",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "key": "meta_social_trends",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "key": "read_media",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "key": "web_research",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "key": "code",
+     "agent": "claude",
+     "model": "claude-opus-5-5",
+     "effort": null,
+     "name": "Opus 5.5"
+    },
+    {
+     "key": "writing",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "key": "planning",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "key": "computer_use",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "key": "make_media",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "key": "bulk_text",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "key": "quick_answer",
+     "agent": "claude",
+     "model": "claude-sonnet-5-5",
+     "effort": null,
+     "name": "Sonnet 5.5"
+    },
+    {
+     "key": "recall",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    }
+   ],
+   "roles": [
+    {
+     "team": "route",
+     "role": "build",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "route",
+     "role": "build",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "route",
+     "role": "fix",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "route",
+     "role": "fix",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "route",
+     "role": "check",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "route",
+     "role": "check",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "research-build",
+     "role": "build",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "research-build",
+     "role": "fix",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "research-build",
+     "role": "check",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "collab",
+     "role": "fix",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "collab",
+     "role": "plan",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "collab",
+     "role": "execute",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "collab",
+     "role": "amend",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "collab",
+     "role": "edit",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "versus",
+     "role": "build",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "versus",
+     "role": "build",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "versus",
+     "role": "fix",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "versus",
+     "role": "fix",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "versus",
+     "role": "review",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "versus",
+     "role": "review",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "redteam",
+     "role": "build",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "redteam",
+     "role": "fix",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "redteam",
+     "role": "check",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "redteam",
+     "role": "revise",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "redteam",
+     "role": "attack",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "redteam",
+     "role": "attack",
+     "agent": "cursor",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "vote",
+     "role": "vote",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "vote",
+     "role": "vote",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "split",
+     "role": "fix",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "split",
+     "role": "check",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "split",
+     "role": "plan",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "split",
+     "role": "integrate",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "plan",
+     "role": "check",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "plan",
+     "role": "plan",
+     "agent": "claude",
+     "model": "claude-fable-5-1",
+     "effort": null,
+     "name": "Fable 5.1"
+    },
+    {
+     "team": "plan",
+     "role": "revise",
+     "agent": "claude",
+     "model": "claude-fable-5-1",
+     "effort": null,
+     "name": "Fable 5.1"
+    },
+    {
+     "team": "plan",
+     "role": "attack",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "plan",
+     "role": "attack",
+     "agent": "cursor",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "file",
+     "role": "build",
+     "agent": "claude",
+     "model": "claude-opus-5-5",
+     "effort": null,
+     "name": "Opus 5.5"
+    },
+    {
+     "team": "file",
+     "role": "fix",
+     "agent": "claude",
+     "model": "claude-opus-5-5",
+     "effort": null,
+     "name": "Opus 5.5"
+    },
+    {
+     "team": "file",
+     "role": "revise",
+     "agent": "claude",
+     "model": "claude-opus-5-5",
+     "effort": null,
+     "name": "Opus 5.5"
+    },
+    {
+     "team": "file",
+     "role": "execute",
+     "agent": "claude",
+     "model": "claude-opus-5-5",
+     "effort": null,
+     "name": "Opus 5.5"
+    },
+    {
+     "team": "file",
+     "role": "integrate",
+     "agent": "claude",
+     "model": "claude-opus-5-5",
+     "effort": null,
+     "name": "Opus 5.5"
+    }
+   ],
+   "stages": [
+    {
+     "team": "research-build",
+     "stage": 2,
+     "role": "build",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "collab",
+     "stage": 1,
+     "role": "plan",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "collab",
+     "stage": 2,
+     "role": "amend",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "collab",
+     "stage": 3,
+     "role": "execute",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "collab",
+     "stage": 4,
+     "role": "edit",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "versus",
+     "stage": 1,
+     "role": "build",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "versus",
+     "stage": 2,
+     "role": "build",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "versus",
+     "stage": 3,
+     "role": "review",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "versus",
+     "stage": 4,
+     "role": "review",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "redteam",
+     "stage": 1,
+     "role": "build",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "redteam",
+     "stage": 2,
+     "role": "attack",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "redteam",
+     "stage": 3,
+     "role": "attack",
+     "agent": "cursor",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "redteam",
+     "stage": 4,
+     "role": "revise",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "vote",
+     "stage": 1,
+     "role": "vote",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "vote",
+     "stage": 2,
+     "role": "vote",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "plan",
+     "stage": 1,
+     "role": "plan",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "plan",
+     "stage": 2,
+     "role": "attack",
+     "agent": "chatgpt",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "plan",
+     "stage": 3,
+     "role": "attack",
+     "agent": "cursor",
+     "model": null,
+     "effort": null,
+     "name": null
+    },
+    {
+     "team": "plan",
+     "stage": 4,
+     "role": "revise",
+     "agent": "claude",
+     "model": null,
+     "effort": null,
+     "name": null
+    }
+   ]
+  }
+ },
  "chats": [
   {
    "name": "garden",
-   "tasks": 4,
-   "newest": "2026-10-19T10:31:06+00:00"
+   "tasks": 6,
+   "newest": "2026-10-19T11:26:18+00:00"
   }
  ],
  "drop_folder": "~/Desktop/Router Drop",
@@ -1455,6 +6785,6 @@
  "projects_root": "~/Projects",
  "report_path": "~/Downloads/claude-code-report.md",
  "version": "2.32",
- "log_version": 16,
+ "log_version": 21,
  "api_version": 1
 }

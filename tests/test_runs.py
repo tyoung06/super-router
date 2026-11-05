@@ -15,7 +15,7 @@ from router import __main__ as cli
 from router import log, runs, status
 from tests.conftest import FAKE_START
 from tests.fixtures import json_shapes
-from tests.helpers import fake_label, shipped_roster
+from tests.helpers import fake_label, shipped_roster, teamed
 from tests.test_json_actions import FAKE_ENV, World, jev
 from tests.test_loop import Scripted
 from tests.test_relay import Chat
@@ -192,7 +192,7 @@ def test_relay_holds_its_run_during_every_stage(world):
 
 def test_a_split_holds_itself_and_each_piece_while_the_piece_runs(world, monkeypatch):
     monkeypatch.setattr("builtins.input", lambda prompt="": "y")  # the World has a terminal: it asks y/N/e
-    world.worker = Peek("## Pieces\n1. one\n2. two\n\n## Join\njoin them", "piece one", "piece two", "joined")
+    world.worker = Peek(teamed("## Pieces\n1. one\n2. two\n\n## Join\njoin them"), "piece one", "piece two", "joined")
     world.chatgpt = PeekChat("PASS", "PASS", "PASS")
     world.label = fake_label(jev("writing"))
     code, out, err = world.run("split", "two things")
@@ -251,7 +251,7 @@ def test_sr_check_holds_a_task_while_it_advances_it_and_clears_it_after():
     _task(conn)
     seen = []
 
-    def worker(prompt):
+    def worker(prompt, **kwargs):  # brief 33.3: the worker gets choice=
         seen.append(_run_of(conn))
         return "a draft"
 

@@ -46,6 +46,28 @@ def _calls(conn, row):
 
 # ---------- no flag: byte for byte as before slots ----------
 
+def _as_brief_291(name, before):
+    """Main's run as brief 29.1 sends it (tests/prompt_snapshot's named changes): each build that returns the deliverable
+    gains its line; on research-build ChatGPT's check and re-check and Claude's fix round take decisions 14 to 18's words
+    (Claude, search off here, could not search), the fix list in its MUST FIX block, and the fake's re-check reply its
+    line for must 1 (tests/helpers.as_recheck)."""
+    from router import checking
+    from tests import prompt_snapshot as snap
+    found = json.loads(json.dumps(before))
+    found["claude"] = [snap.as_build(p) for p in found["claude"]]
+    found["chatgpt"] = [snap.as_build(p) for p in found["chatgpt"]]
+    checks = [i for i, p in enumerate(found["chatgpt"]) if p.startswith("The person asked for the task below")]
+    for k, i in enumerate(checks):  # research-build's check and re-check (round 2: the research note line)
+        found["chatgpt"][i] = snap.as_check(found["chatgpt"][i], recheck=k == 1, first="1. [must] Name the source.",
+                                            research_note=found["task"]["preset"] == "research-build")
+    found["claude"] = [snap.as_fix(p, could=False, musts="1. Name the source.") if p.startswith(checking.FIX_LEAD) else p
+                       for p in found["claude"]]
+    for c in found["calls"]:
+        if c["kind"] == "recheck" and c["text"] == "PASS":
+            c["text"] = "PASS\n1. fixed"
+    return found
+
+
 @pytest.mark.parametrize("name", sorted(relay_snapshot.SCENARIOS))
 def test_a_relay_task_with_no_flag_is_byte_identical_to_before_slots(name):
     """Brief 15's phase C test, read with the addendum (rules v2.22): Claude's and Grok's prompts byte for byte
@@ -56,7 +78,18 @@ def test_a_relay_task_with_no_flag_is_byte_identical_to_before_slots(name):
     for agent in ("claude", "chatgpt", "grok"):  # brief 17, Phase W: the count lines out, the rest byte for byte
         now[agent] = [{**p, "task": count_lines_in(p["task"])[0]} if isinstance(p, dict) else count_lines_in(p)[0]
                       for p in now[agent]]
-    before = FIXTURE[name]
+    # Brief 33 (decision 5): the `## Next` line ends exactly the calls whose result can be delivered (research-build's
+    # build and its fix round, each versus build), each agent's prompts in its calls' order; the rest byte for byte
+    tail = "\n\n" + checking.NEXT_LINE
+    for agent in ("claude", "chatgpt", "grok"):
+        mine = [c for c in now["calls"] if c["agent"] == agent]
+        texts = [p["task"] if isinstance(p, dict) else p for p in now[agent]]
+        assert len(texts) == len(mine), (agent, len(texts), len(mine))
+        assert [p.endswith(tail) for p in texts] == [c["kind"] == "fix" or (c["kind"] in ("stage", "reask")
+                                                     and c["role"] == "build") for c in mine], agent
+        now[agent] = [{**p, "task": p["task"].removesuffix(tail)} if isinstance(p, dict) else p.removesuffix(tail)
+                      for p in now[agent]]
+    before = _as_brief_291(name, FIXTURE[name])
     assert now["claude"] == before["claude"] and now["grok"] == before["grok"]
     line = "\n\n" + checking.SEARCH_LINE_GENERAL
     assert all(p.count(line) == 1 for p in now["chatgpt"])
@@ -65,12 +98,20 @@ def test_a_relay_task_with_no_flag_is_byte_identical_to_before_slots(name):
     states = [(c["agent"], json.loads(c["search"])["state"] if c["search"] else None) for c in now["calls"]]
     assert all(state == {"claude": "off (probe not passed)", "chatgpt": "allowed", "grok": None}[agent]
                for agent, state in states)
-    assert [{k: v for k, v in c.items() if k not in ("search", "context", "memory", "served", "round_file")}
+    assert [{k: v for k, v in c.items() if k not in ("search", "context", "memory", "served", "round_file", "tests", "model", "effort", "time_limit", "auto")}
             for c in now["calls"]] == [{k: v for k, v in c.items() if k != "search"} for c in before["calls"]]
     assert all(c["context"] is None for c in now["calls"])  # brief 18: no --project, so no context record
     assert all(c["memory"] is None for c in now["calls"])  # brief 19: no tag, so no memory record
     assert all(c["served"] is None for c in now["calls"])  # brief 20: no Cursor call, so no served record
     assert all(c["round_file"] is None for c in now["calls"])  # brief 21: no round writer in a test, so no file
+    assert all(c["tests"] is None for c in now["calls"])  # brief 28: no project, so no tests record
+    # brief 33.3 (decision 7): every Claude and ChatGPT row names the model asked (the tracked default, the pin) and its
+    # time limit; no effort was set; a Grok row carries none
+    for c in now["calls"]:
+        if c["agent"] == "grok":
+            assert (c["model"], c["effort"], c["time_limit"]) == (None, None, None)
+        else:
+            assert (c["model"], c["effort"], c["time_limit"]) == ({"claude": "claude-sonnet-5-5", "chatgpt": "gpt-6.1-sol"}[c["agent"]], None, 600)
     assert now["out"] == before["out"] and now["code"] == before["code"]
     slots = now["task"].pop("slots")
     now["task"].pop("web")
@@ -78,6 +119,11 @@ def test_a_relay_task_with_no_flag_is_byte_identical_to_before_slots(name):
     assert now["task"].pop("chat") is None and now["task"].pop("memory") is None  # brief 19's columns
     assert now["task"].pop("reason_code") is None  # brief 21's column: the task was not returned
     assert [now["task"].pop(k) for k in ("pid", "run_started_at", "answered_by")] == [None] * 3  # brief 22's columns
+    assert now["task"].pop("project_files") is None  # brief 28's column: no project, so no file mode
+    assert [now["task"].pop(k) for k in ("from_task", "idea")] == [None, None]  # brief 33's columns: no --from, no idea
+    assert [now["task"].pop(k) for k in ("plan", "plan_step")] == [None, None]  # brief 33.1's columns: not a plan or step
+    assert now["task"].pop("models") is None  # brief 33.3's column: no --model on the task
+    assert now["task"].pop("auto") is None  # brief 34's column: not a run
     assert now["task"] == before["task"]  # every column the row had before; D1 adds the full slot map
     assert json.loads(slots) == presets.slot_map(LOADED.presets[relay_snapshot.SCENARIOS[name][0]])
 
@@ -108,7 +154,7 @@ def test_the_re_ask_goes_to_the_agent_in_the_slot(conn):
     assert "misses part of what was asked" in chatgpt.prompts[1]
 
 
-def test_the_check_loop_asks_the_agent_in_the_check_slot(conn):
+def test_the_check_loop_asks_the_agent_in_the_check_slot(conn, grok_room):
     code, out, row, hook, worker, chatgpt = _relay(conn, "research-build", [("check", "grok")],
                                                    bodies={"s1": GOOD_NOTE, "c1": "PASS"}, claude=["Built."])
     assert _calls(conn, row) == [("stage", 1, "research", "grok", "done"), ("stage", 2, "build", "claude", "done"),
@@ -171,7 +217,7 @@ def _fallback(conn, row, *, bodies=None, claude=(), chat=()):
     return code, "\n".join(lines), log.get_task(conn, row["task_id"]), hook, worker, chatgpt
 
 
-def test_fallback_with_grok_in_build_claude_redoes_and_grok_checks_the_redo(conn):
+def test_fallback_with_grok_in_build_claude_redoes_and_grok_checks_the_redo(conn, grok_room):
     code, out, row, *_ = _relay(conn, "research-build", [("build", "grok"), ("check", "claude")],
                                 bodies={"s1": GOOD_NOTE, "s2": "R1", "f1": "R2"},
                                 claude=["FIX\n1. Name the source.", "FIX\n1. Still no source."])

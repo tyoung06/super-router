@@ -7,8 +7,11 @@ import pytest
 
 from router import __main__ as cli
 from router import checking, log
-from tests.helpers import ALL_AGENTS, JEV_OK
+from tests.helpers import ALL_AGENTS, JEV_OK, today
 from tests.test_loop import CONFIG, FIXED, RESULT, TASK, WEB, Scripted, Webhook, _calls, _check, _route
+from tests.helpers import less_next
+
+pytestmark = pytest.mark.usefixtures("grok_room")  # brief 29.1: room for the new check words
 
 BULK = {"status": "ok", "label": "bulk_text", "confidence": 0.93, "needs_split": 0.1, "tokens": 764}
 BULK_TASK = "@claude tag these 40 posts"
@@ -37,7 +40,7 @@ def test_grok_checks_a_claude_task_by_sub_id(conn):
         "claude", "grok", "passed", "tagged list", "done")
     assert hook.sent[0]["task_id"] == f"{task_id}-c1"
     # Grok always browses (rules v2.9), so its check prompt says it may open links, whatever the skill.
-    assert hook.sent[0]["task"] == checking.checker_prompt("tag these 40 posts", "tagged list", no_tools=False, can_browse=True)
+    assert hook.sent[0]["task"] == checking.checker_prompt("tag these 40 posts", "tagged list", no_tools=False, can_browse=True, sent_on=today())
     assert _calls(conn, task_id) == [(task_id, "do", "claude", "done", None),
                                      (f"{task_id}-c1", "check", "grok", "done", "PASS")]
     assert "CHECKED: passed." in out and "sanity" not in out
@@ -50,7 +53,8 @@ def test_grok_fix_list_goes_to_claude_and_grok_rechecks_by_sub_id(conn):
     code, out, row, worker, hook = _route(conn, BULK_TASK, BULK, worker=worker, hook=hook)
     task_id = row["task_id"]
     assert code == 0 and (row["check_state"], row["result"]) == ("fixed", "fixed tagged list")
-    assert worker.prompts[1] == checking.fix_prompt("tag these 40 posts", "tagged list", "1. Post 7 is tagged wrong.", count=True)
+    assert less_next(worker.prompts[1]) == checking.fix_prompt("tag these 40 posts", "tagged list", "1. Post 7 is tagged wrong.", count=True,
+                                                    reading=checking.read_check("FIX\n1. Post 7 is tagged wrong."))
     assert [c[1:3] for c in _calls(conn, task_id)] == [
         ("do", "claude"), ("check", "grok"), ("fix", "claude"), ("recheck", "grok")]
     assert [p["task_id"] for p in hook.sent] == [f"{task_id}-c1", f"{task_id}-c2"]
@@ -71,7 +75,8 @@ def test_grok_fix_again_is_not_passed(conn):
     hook = Webhook(c1="FIX\n1. Post 7 is tagged wrong.", c2="FIX\n1. Post 7 is still wrong.")
     code, out, row, _, _ = _route(conn, BULK_TASK, BULK, worker=Scripted("tagged list", "fixed tagged list"), hook=hook)
     assert code == 5 and row["check_state"] == "failed" and row["result"] == "fixed tagged list"
-    assert "NOT PASSED: after one fix round." in out and "1. Post 7 is still wrong." in out
+    assert "NOT PASSED: after one fix round." in out  # brief 29.1 (decision 15): the open must, by its first number
+    assert "1. Post 7 is tagged wrong. (not fixed: Post 7 is still wrong.)" in out
 
 
 # ---------- timed-out calls land in the right endings ----------
@@ -214,3 +219,13 @@ def test_main_check_refuses_when_the_workspace_cannot_be_prepared(monkeypatch, c
     monkeypatch.setattr(cli, "cmd_check", lambda **kw: pytest.fail("check must not run"))
     assert cli.main(["check"], platform="darwin") == 2
     assert "git init" in capsys.readouterr().out
+
+
+def test_on_the_real_limit_a_grok_check_is_skipped_and_the_next_checker_checks(conn, monkeypatch):
+    """Brief 29.1 (decision 14): the new check words alone pass Grok's limit; the skip is accepted, not a stop."""
+    from router import settings
+    monkeypatch.undo()  # the module's raised limit off: config/settings.json's measured 3,662
+    assert settings.grok_prompt_limit()[0] < len(checking.checker_prompt("", "", no_tools=False, can_browse=True))
+    code, out, row, _, hook = _route(conn, BULK_TASK, BULK, worker=Scripted("tagged list"), hook=Webhook())
+    assert code == 0 and hook.sent == []
+    assert row["check_note"].startswith("Grok skipped: the check is too long for Grok (")

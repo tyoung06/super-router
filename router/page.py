@@ -131,7 +131,9 @@ class Reader:
         """Brief 23 (decision 7): under --json a command never waits for Grok, so once a minute while any open task waits
         on `grok` (a held piece included) the server runs `sr check --json`, one at a time, behind the dead-run check's
         guard. Brief 24 (decision 7): also while a late Grok answer may still come (`late.state` is `out`), so it is
-        collected. Reads `sr log --json`; True when it started a check."""
+        collected. Brief 29 (decision 11): also while a split waits on its pieces with none of its tasks running, so it
+        goes on when its last piece ended under another command's run. Reads `sr log --json`; True when it started a
+        check."""
         code, body = self.log()
         if code != 200:
             return False
@@ -140,7 +142,7 @@ class Reader:
         except (ValueError, AttributeError):
             return False
         if not any(isinstance(t, dict) and (t.get("waiting_on") == "grok" or (t.get("late") or {}).get("state") == "out")
-                   for t in tasks):
+                   for t in tasks) and not split_stalled(tasks):
             return False
         with self._lock:
             now = self.clock()
@@ -186,6 +188,46 @@ class Reader:
         caller has checked the name). Never kept: the folder can change between two looks."""
         return self._json(sr("project", "new", "--json", "--dry-run", name))
 
+    def project_git_check(self, name):
+        """Brief 28 (decision 15): Turn on undo's dry run, `sr project git --json --dry-run <name>`, shown before its
+        Confirm. Never kept; it writes nothing."""
+        return self._json(sr("project", "git", "--json", "--dry-run", name))
+
+    def auto_check(self, name):
+        """Brief 34 (decision 10): the Auto switch's confirm reads `sr auto --json <name> --on --dry-run`: the steps the run
+        would cover, the budget, the first stop-here and the overrun's words, or the refusal. Never kept; it writes nothing."""
+        return self._json(sr("auto", "--json", name, "--on", "--dry-run"))
+
+    def notes(self):
+        """Brief 30 (decision 10): the router notes for the Setup sheet's editor, `sr notes --json` (the text, each
+        section's characters, the cap, Grok's share and the hash). Never kept: an edit elsewhere must show."""
+        return self._json(sr("notes", "--json"))
+
+    def project_notes(self, name):
+        """Brief 30 (decision 17): a project's notes for its Notes editor, `sr project notes <name> --json` (the notes, the
+        router's block read-only, their counts, the cap and the hash). Never kept."""
+        return self._json(sr("project", "notes", "--json", name))
+
+    def project_output(self, name, kind):
+        """Brief 31 (decisions 2 and 6): a project's Test or Run, `sr project test|run --json <name> --status`: whether
+        one is running and its output so far (else the last one's), redacted by the router. Never kept."""
+        return self._json(sr("project", kind, "--json", name, "--status"))
+
+    def project_spec(self, name):
+        """Brief 33.2 (decision 4): a project's SPEC.md for the Spec section, `sr project spec <name> --json` (the text,
+        its hash, the labels as read, the cap). Never kept."""
+        return self._json(sr("project", "spec", "--json", name))
+
+    def project_secrets(self, name):
+        """Brief 31 (decision 8): the names in a project's secrets file, each set or empty, never a value
+        (`sr project secrets --json <name>`, which reads it). Never kept."""
+        return self._json(sr("project", "secrets", "--json", name))
+
+    def ideas(self, name):
+        """Brief 33 (decision 19): a project's Ideas list, `sr ideas --json <name>` (the envelope with `ideas` and
+        `dismissed` after its eight keys). Never kept."""
+        return self._json(sr("ideas", "--json", name))
+
 
 class DemoReader:
     """Brief 23 (decision 15): the demo's documents, read from the invented files in demo/ (made by
@@ -220,9 +262,17 @@ class DemoReader:
             tasks = [t for t in tasks if t.get("chat") == wanted["--chat"]]
         if wanted.get("--project"):
             tasks = [t for t in tasks if t.get("project") == wanted["--project"]]
+            doc["what_now"] = self._what_now(wanted["--project"])  # brief 33 (decision 13): the router's, made with the demo
         if wanted.get("--search"):
             tasks = [t for t in tasks if wanted["--search"].lower() in (t.get("text") or "").lower()]
         return 200, json.dumps({**doc, "tasks": tasks, "next_before": None}).encode()
+
+    def _what_now(self, name):
+        code, body = self._file("projects.json")
+        if code != 200:
+            return None
+        found = next((p for p in json.loads(body).get("projects") or [] if p.get("name") == name), None)
+        return found.get("what_now") if found else None
 
     def show(self, task_id):
         return self._file(f"tasks/{task_id}.json")
@@ -244,10 +294,60 @@ class DemoReader:
             words = f"Would create {root}/{name} and its HANDOFF.md, and register {name}. Nothing was changed."
             doc = {"would": "create", "folder": f"{root}/{name}", "handoff": state, "reason_code": None}
         return 200, json.dumps({"api_version": 1, "would": doc["would"], "name": name, "folder": doc["folder"],
-                                "handoff": doc["handoff"], "reason_code": doc["reason_code"], "message": words}).encode()
+                                "handoff": doc["handoff"], "reason_code": doc["reason_code"], "message": words,
+                                "git": doc["would"] == "create"}).encode()
+
+    def project_git_check(self, name):
+        """Brief 28: the demo's dry run for Turn on undo, from its own files (nothing run)."""
+        return self._file(f"git-check/{name}.json")
+
+    def project_output(self, name, kind):
+        """Brief 31 (decision 12): the demo's Test or Run output, from its own files (nothing run)."""
+        return self._file(f"project-output/{name}-{kind}.json")
+
+    def project_secrets(self, name):
+        """Brief 31 (decision 12): the demo's placeholder names (nothing run, no value anywhere)."""
+        return self._file(f"secrets/{name}.json")
+
+    def ideas(self, name):
+        """Brief 33 (decision 20): the demo's Ideas list, made by the router's own code (nothing run)."""
+        return self._file(f"ideas/{name}.json")
+
+    def auto_check(self, name):
+        """Brief 34 (decision 10): the demo's dry run for the Auto switch's confirm, from its own file (nothing run)."""
+        return self._file(f"auto-check/{name}.json")
+
+    def notes(self):
+        """Brief 30: the demo's router notes (placeholder lines), from its own file."""
+        return self._file("notes.json")
+
+    def project_notes(self, name):
+        """Brief 30: a demo project's notes, from its own file."""
+        return self._file(f"project-notes/{name}.json")
+
+    def project_spec(self, name):
+        """Brief 33.2: a demo project's spec, from its own file (a project without one: a `none` document)."""
+        code, body = self._file(f"project-spec/{name}.json")
+        if code == 200:
+            return code, body
+        doc = {"api_version": 1, "spec": {"name": name, "folder": f"~/Projects/{name}", "exists": False, "text": "",
+                                          "hash": "", "chars": 0, "lines": 0, "max": 6000, "examples": [], "done_when": [],
+                                          "labeled": False, "git": True, "commits": True, "tracked": False,
+                                          "commit_words": "Save makes one commit holding SPEC.md alone."}}
+        return 200, json.dumps(doc).encode()
 
     def tick(self):
         return False
+
+
+def split_stalled(tasks):
+    """Brief 29 (decision 11, "nothing stalls"): a split waits on its pieces (`waiting_on: piece`) and none of its tasks
+    is running (no run on the split or on any row whose parent it is), as `sr log --json` gives them: the server's minute
+    `sr check` then goes on with it, beside the Grok tick."""
+    rows = [t for t in tasks if isinstance(t, dict)]
+    running = {t.get("parent") for t in rows if t.get("pid")} | {t.get("task_id") for t in rows if t.get("pid")}
+    return any(t.get("mode") == "split" and t.get("waiting_on") == "piece" and t.get("task_id") not in running
+               for t in rows)
 
 
 def _query(path):
@@ -319,6 +419,53 @@ class _Handler(BaseHTTPRequestHandler):
             except page_commands.Refused as e:
                 return self._json(400, {"error": str(e)})
             return self._sr_json(reader.project_check(name))
+        if path == "/api/auto-check":  # brief 34 (decision 10): the Auto switch's confirm, the dry run; a bad name is a 400
+            try:
+                name = page_commands.project_name(query.get("name"))
+            except page_commands.Refused as e:
+                return self._json(400, {"error": str(e)})
+            return self._sr_json(reader.auto_check(name))
+        if path == "/api/project-git-check":  # brief 28 (decision 15): Turn on undo's dry run; a bad name is a 400
+            try:
+                name = page_commands.project_name(query.get("name"))
+            except page_commands.Refused as e:
+                return self._json(400, {"error": str(e)})
+            return self._sr_json(reader.project_git_check(name))
+        if path == "/api/notes":  # brief 30 (decision 10): the Router notes editor's read
+            return self._sr_json(reader.notes())
+        if path == "/api/project-notes":  # brief 30 (decision 17): a project's Notes editor; a bad name is a 400
+            try:
+                name = page_commands.project_name(query.get("name"))
+            except page_commands.Refused as e:
+                return self._json(400, {"error": str(e)})
+            return self._sr_json(reader.project_notes(name))
+        if path == "/api/project-spec":  # brief 33.2 (decision 4): the Spec section's read; a bad name is a 400
+            try:
+                name = page_commands.project_name(query.get("name"))
+            except page_commands.Refused as e:
+                return self._json(400, {"error": str(e)})
+            return self._sr_json(reader.project_spec(name))
+        if path == "/api/project-output":  # brief 31 (decisions 2 and 7): a Test's or a Run's output; a bad name is a 400
+            try:
+                name = page_commands.project_name(query.get("name"))
+            except page_commands.Refused as e:
+                return self._json(400, {"error": str(e)})
+            kind = query.get("kind")
+            if kind not in ("test", "run"):
+                return self._json(400, {"error": "the output is a project's test or run"})
+            return self._sr_json(reader.project_output(name, kind))
+        if path == "/api/project-secrets":  # brief 31 (decision 9): the Secrets sheet's names; a bad name is a 400
+            try:
+                name = page_commands.project_name(query.get("name"))
+            except page_commands.Refused as e:
+                return self._json(400, {"error": str(e)})
+            return self._sr_json(reader.project_secrets(name))
+        if path == "/api/ideas":  # brief 33 (decision 19): the Ideas sheet's list; a bad name is a 400
+            try:
+                name = page_commands.project_name(query.get("name"))
+            except page_commands.Refused as e:
+                return self._json(400, {"error": str(e)})
+            return self._sr_json(reader.ideas(name))
         if path == "/api/log":
             try:
                 flags = _log_flags(query)
@@ -342,6 +489,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._report()
         if path.startswith("/api/handoff/"):
             return self._handoff(unquote(path[len("/api/handoff/"):]))
+        if path.startswith("/api/plan/"):  # brief 33.1 (decision 20): a project's docs/PLAN.md, read only
+            return self._plan_file(unquote(path[len("/api/plan/"):]))
         if path == "/api/setup":
             return self._text_file(self.server.root / "docs" / "SETUP.md")
         if path == "/api/runs":
@@ -415,6 +564,23 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(404, {"error": str(e)})
         return self._text_file(real)
 
+    def _plan_file(self, name):
+        """Brief 33.1 (decision 20): a registered project's docs/PLAN.md, read only, as its HANDOFF.md is read: that file
+        exactly, never through a link (a link at docs or docs/PLAN.md is refused, as the land refuses one)."""
+        if self.server.demo:
+            if not name or "/" in name or name.startswith("."):
+                return self._json(404, {"error": "no such project"})
+            return self._text_file(self.server.demo_root / "plan" / f"{name}.md")
+        _, _, listed = self._allowed_extras()
+        folder = next((p["path"] for p in listed if isinstance(p, dict) and p.get("name") == name), None)
+        if folder is None:
+            return self._json(404, {"error": "no such project"})
+        try:
+            real = page_files.plan_file(self.server.root, folder)
+        except page_files.Refused as e:
+            return self._json(404, {"error": str(e)})
+        return self._text_file(real)
+
     # ---------- POST ----------
 
     def do_POST(self):
@@ -460,31 +626,38 @@ class _Handler(BaseHTTPRequestHandler):
         except page_commands.Refused as e:
             return self._json(400, {"error": str(e)})
         shown = {"argv": list(command.args), "display": command.display(), "copy": command.copy(),
-                 "parts": command.parts()}
+                 "parts": command.parts(), "note": command.note()}
         if not run:
             return self._json(200, shown)
+        kept = {k: v for k, v in doc.items() if k != "value"}  # brief 31 (decision 9): a secret's value is never kept
         try:
-            started = self.server.runs.start(list(command.args), command.display(), kind="action", request=doc)
+            started = self.server.runs.start(list(command.args), command.display(), kind="action", request=kept,
+                                             stdin=command.stdin)
         except OSError as e:
             return self._json(500, {"error": f"the command could not start ({type(e).__name__})"})
         return self._json(200, {**shown, "run_id": started["id"], "pid": started["pid"]})
 
     def _drop(self, doc):
+        purpose = doc.get("for")  # brief 28: "project" for the drop sheet on a project (any type, never renamed)
+        if purpose not in (None, "project"):
+            return self._json(400, {"error": "a drop is for a task, or \"for\": \"project\""})
         try:
             data = base64.b64decode(doc.get("data") or "", validate=True)
         except (binascii.Error, ValueError, TypeError):
             return self._json(400, {"error": "the file's data is not base64"})
         folder = (self.server.reader.status_doc() or {}).get("drop_folder")
         try:
-            written = page_files.drop_write(folder, doc.get("name"), data)
+            written = page_files.drop_write(folder, doc.get("name"), data, project=purpose == "project")
         except (page_files.Refused, OSError) as e:
             return self._json(400, {"error": str(e)})
         return self._json(200, {"path": str(written), "name": written.name, "size": len(data)})
 
     def _reveal(self, doc):
-        report, handoffs, _ = self._allowed_extras() if Path(str(doc.get("path") or "x")).is_absolute() else (None, (), ())
+        path = str(doc.get("path") or "x")
+        report, handoffs, listed = self._allowed_extras() if Path(path).is_absolute() or path.startswith("~") else (None, (), ())
+        folders = [p["path"] for p in listed if isinstance(p, dict) and p.get("path")]  # Cleanup 1 (2.6): for UI B's button
         try:
-            page_files.reveal(self.server.files_root(), doc.get("path"), report_path=report, handoffs=handoffs,
+            page_files.reveal(self.server.files_root(), doc.get("path"), report_path=report, handoffs=handoffs, projects=folders,
                               platform=self.server.platform, run=self.server.reveal_run)
         except page_files.Refused as e:
             return self._json(400, {"error": str(e)})
@@ -536,7 +709,15 @@ class PageServer(ThreadingHTTPServer):
                 return json.loads((self.demo_root / "runs.json").read_text(encoding="utf-8")).get("runs") or []
             except (OSError, ValueError):
                 return []
-        return [{k: v for k, v in run.items() if k != "request"} for run in self.runs.list()]
+        return [{**{k: v for k, v in run.items() if k != "request"}, "on": _run_on(run.get("request"))} for run in self.runs.list()]
+
+
+def _run_on(request):
+    """Brief 28 (`/break-ui`): what a run acts on, so a reloaded page finds a land still running: the action and task id
+    only, never the request's text."""
+    if not isinstance(request, dict) or not isinstance(request.get("task_id"), str):
+        return None
+    return {"action": request.get("action"), "task_id": request["task_id"]}
 
 
 def make_server(port, reader=None, *, runs=None, demo=False, demo_root=None, root=None, platform=None, token=None):
@@ -553,7 +734,17 @@ def make_server(port, reader=None, *, runs=None, demo=False, demo_root=None, roo
     return server
 
 
-DROPS_STATUS = ("project_new", "memory_switch")  # briefs 26 and 27: actions that change what status reads
+DROPS_STATUS = ("project_new", "memory_switch",  # briefs 26 and 27: actions that change what status reads
+                "land", "undo", "discard", "project_files", "project_git", "project_tests",  # brief 28: heads, tests, git
+                # brief 30: status carries the router notes' state; a project's head moves on a notes, pin or save commit
+                "notes_save", "project_notes_save", "project_pin", "project_save",
+                "project_test",  # brief 31 (decision 11): status carries the project's last Test, its run command
+                "project_run_command", "project_run", "project_stop",  # and its run,
+                "project_secret_set", "project_secret_remove",  # and how many secrets it holds
+                "ideas_add", "ideas_dismiss", "ideas_suggest",  # brief 33 (decision 18): and its open idea count
+                "models_set", "models_clear", "models_fable",  # brief 33.3 (decision 12): the model defaults, the Fable switch
+                "auto_on", "auto_off", "plan_stop_here",  # brief 34: the project's Auto state and the plan's marks
+                "project_spec_save")  # brief 33.2 fix 2: the project's spec and its labels in status
 
 
 def _after_run(reader, run, code):

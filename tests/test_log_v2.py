@@ -34,7 +34,7 @@ def _columns(conn):
 
 def test_a_new_log_is_the_current_version_with_the_version_2_columns_first(tmp_path):
     c = log.init_db(tmp_path / "router.db")
-    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 16
+    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 21
     assert _columns(c)[: len(V2_COLUMNS)] == V2_COLUMNS == list(log.V2_COLUMNS)
     c.close()
 
@@ -117,8 +117,8 @@ def test_check_state_and_skill_source_are_checked_in_code(conn, field, bad):
     log.add_task(conn, "sr-1", "t", "cli", JEV_OK)
     with pytest.raises(ValueError):
         log.set_route(conn, "sr-1", agents=ALL_AGENTS, agent="claude", route_reason="best", **{field: bad})
-    assert log.CHECK_STATES == ("not_needed", "unchecked", "pending", "passed", "fixed", "failed")
-    assert log.SKILL_SOURCES == ("jev", "owner")
+    assert log.CHECK_STATES == ("not_needed", "unchecked", "pending", "passed", "fixed", "failed", "blocked")  # 29.1
+    assert log.SKILL_SOURCES == ("jev", "owner", "router")  # brief 29.1 (decision 24): the follow-up's
 
 
 def test_an_agent_never_checks_its_own_work(conn):

@@ -235,7 +235,17 @@ def test_api_run_answers_before_a_three_second_command_ends_and_the_text_reaches
     resp, body = _call(world.srv, "GET", "/api/runs")
     run = json.loads(body)["runs"][0]
     assert run["display"] == found["display"] and run["exit"] == 0 and run["envelope"]["sid"] == run["pid"]
-    assert "request" not in run
+    assert "request" not in run and run["on"] is None  # a send is on no task yet: its text never leaves the server
+
+
+def test_a_run_on_a_task_names_its_action_and_task_only(world, monkeypatch):
+    # brief 28, C4 (`/break-ui`): after a reload the page finds a land still running, and keeps Land off
+    monkeypatch.setenv("FAKE_SR_OUT", str(world.tmp / "argv.jsonl"))
+    task = "sr-20261027-090000-ab12"
+    assert _call(world.srv, "POST", "/api/run", {"action": "land", "task_id": task})[0].status == 200
+    _wait(world.runs)
+    run = json.loads(_call(world.srv, "GET", "/api/runs")[1])["runs"][0]
+    assert run["on"] == {"action": "land", "task_id": task} and "request" not in run
 
 
 @pytest.mark.parametrize("request_", [
@@ -335,6 +345,30 @@ def test_a_drop_lands_in_the_drop_folder_and_never_overwrites(world):
     assert _call(world.srv, "POST", "/api/drop", {"name": "notes.txt", "data": "eA=="})[0].status == 400
     assert _call(world.srv, "POST", "/api/drop", {"name": "a.png", "data": "not base64!"})[0].status == 400
     assert sorted(p.name for p in drop.iterdir()) == ["shot (2).png", "shot.png"]
+
+
+def test_a_drop_for_a_project_takes_any_type_and_anything_else_for_for_is_refused(world):
+    # brief 28, C4 (`/break-ui`): the drop sheet on a project sends "for": "project"
+    body = {"name": "calc.py", "data": base64.b64encode(b"x = 1\n").decode(), "for": "project"}
+    resp, raw = _call(world.srv, "POST", "/api/drop", body)
+    assert resp.status == 200 and json.loads(raw)["name"] == "calc.py"
+    assert _call(world.srv, "POST", "/api/drop", {**body, "for": "task"})[0].status == 400
+    assert _call(world.srv, "POST", "/api/drop", {**body, "name": "b.py", "for": None})[0].status == 400  # a task's types
+
+
+def test_open_in_finder_takes_a_registered_projects_own_folder_and_nothing_inside_it(world, monkeypatch):
+    """Cleanup 1 (2.6): the server reads the project list and hands the folders on; no button until UI B."""
+    folder = world.tmp / "garden"
+    (folder / "src").mkdir(parents=True)
+    other = world.tmp / "other"
+    other.mkdir()
+    listed = json.dumps({"projects": [{"name": "garden", "path": str(folder)}]}).encode()
+    monkeypatch.setattr(world.srv.reader, "projects", lambda: (200, listed))
+    assert _call(world.srv, "POST", "/api/reveal", {"path": str(folder)})[0].status == 200
+    assert world.revealed[0][0] == ["open", "-R", str(folder.resolve())]
+    for path in (str(folder / "src"), str(other), f"{folder}/src/.."):
+        assert _call(world.srv, "POST", "/api/reveal", {"path": path})[0].status == 400, path
+    assert len(world.revealed) == 1
 
 
 def test_open_in_finder_runs_open_r_on_an_allowed_path_on_macos_only(world):

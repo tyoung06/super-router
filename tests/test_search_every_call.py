@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from router import __main__ as cli
-from router import checking, log, presets, relay, search
+from router import checking, log, presets, relay, search, split, teams
 from tests import prompt_snapshot
 from tests.helpers import count_lines_in, fake_label, shipped_roster
 from tests.test_loop import Clock, Scripted
@@ -24,11 +24,14 @@ FIXTURE = json.loads((Path(prompt_snapshot.__file__).parent / "fixtures" / "prom
 
 def _without_count(snapshot):
     """Build brief 17, Phase W: every prompt with the word-count lines taken out (and how many there were), so the
-    rest is still compared byte for byte with main's."""
-    found = {}
+    rest is still compared byte for byte with main's. Brief 33 (decision 5): and without the `## Next` line, which goes
+    last (and whether it was there)."""
+    found, tail = {}, "\n\n" + checking.NEXT_LINE
     for key, value in snapshot.items():
         prompt, removed = count_lines_in(value["prompt"])
-        found[key] = {**value, "prompt": prompt, "count_lines": removed}
+        has_next = prompt.endswith(tail)
+        found[key] = {**value, "prompt": prompt[:-len(tail)] if has_next else prompt, "count_lines": removed,
+                      "next_line": has_next}
     return found
 
 
@@ -63,12 +66,76 @@ def test_the_count_lines_are_on_checks_fixes_and_the_check_stage_only(key):
     assert NOW[key]["count_lines"] == OPEN[key]["count_lines"] == want, key
 
 
+# Brief 33 (decision 5): the `## Next` line, last, on exactly the prompts whose result can be delivered (off a project):
+# the routed doer and its fix rounds, research-build's build, each versus build, their re-asks, and a split's integration
+NEXT_KEYS = {key for key in FIXTURE if key.rsplit("/", 1)[-1] in ("do", "fix")} | {
+    key for key in FIXTURE if key.startswith(("research-build/2-build/", "versus/1-build/", "versus/2-build/"))} | {
+    "split/2-integrate"}
+
+
+@pytest.mark.parametrize("key", sorted(FIXTURE))
+def test_the_next_line_is_last_on_the_delivering_prompts_only(key):
+    assert NOW[key]["next_line"] == OPEN[key]["next_line"] == (key in NEXT_KEYS), key
+    assert checking.NEXT_LINE not in NOW[key]["prompt"] and checking.NEXT_LINE not in OPEN[key]["prompt"], key
+
+
+# Brief 29 (decision 16): the one prompt the snapshot sees change is the split planner's: its words (a team per piece,
+# with a why) and the router's TEAMS list after them. Every other prompt, the integration's included, is main's.
+PLANNER_KEY = "split/1-split_plan"
+MAINS_PLAN_WORDS = (
+    "Break this task into 2 to 4 pieces that can each be done on their own, by one agent, without any other piece's "
+    "result. Each piece is a complete task in one or two sentences, with everything it needs stated in it. No two pieces "
+    "may ask for the same search or the same work. Work that needs another part's result stays in one piece with that "
+    "part: a function and its tests are one piece. Then say in one line how the finished pieces join into one result. "
+    "Return exactly: `## Pieces` (a numbered list), `## Join` (one line). Do not do any piece. If the task is one chain, "
+    "where each part needs the one before it, do not split it: return only `## No split` with one line saying why.")
+
+
+def _as_brief_29(key, prompt, searching=None):
+    """Main's prompt as this branch sends it: brief 29's planner words and TEAMS list; brief 29.1's check, re-check and fix
+    words, and the deliverable line on the doer and every build that returns the deliverable (collab's execute in its
+    `## Unfinished` form). Every other prompt, each stage's re-ask included, is main's byte for byte."""
+    kind = key.rsplit("/", 1)[-1]
+    if key == PLANNER_KEY:
+        menu = teams.menu_block(teams.menu(LOADED, ROSTER, None, send_paths=tuple(cli.SENDERS)))
+        assert prompt.count(MAINS_PLAN_WORDS) == 1
+        return prompt.replace(MAINS_PLAN_WORDS, split.PLAN_INSTRUCTIONS + "\n\n" + menu, 1)
+    if kind in ("check", "recheck"):
+        return prompt_snapshot.as_check(prompt, recheck=kind == "recheck")
+    if kind == "fix":
+        return prompt_snapshot.as_fix(prompt, could=searching == search.ALLOWED, musts=prompt_snapshot.FIXES)
+    if kind == "do":
+        return f"{prompt}\n\n{checking.DELIVERABLE_LINE}"
+    if kind == "reask":
+        return prompt
+    return prompt_snapshot.as_build(prompt)
+
+
+CHANGED_291 = {key for key in FIXTURE if key.rsplit("/", 1)[-1] in ("check", "recheck", "fix", "do")} | {
+    key for key in FIXTURE if key.endswith("/stage") and (key.startswith("research-build/2-build/")
+                                                          or key.startswith("collab/3-execute/")
+                                                          or (key.startswith("versus/") and "-build/" in key))} | {
+    "split/2-integrate"}
+
+
+def test_only_the_planner_and_the_decided_prompts_changed_and_only_by_their_lines():
+    changed = {key for key in FIXTURE if NOW[key]["prompt"] != FIXTURE[key]["prompt"]
+               and not (NOW[key]["searching"] == search.ALLOWED)}
+    off = {key for key in CHANGED_291 if NOW[key]["searching"] != search.ALLOWED}
+    assert changed == {PLANNER_KEY} | off
+    assert NOW[PLANNER_KEY]["prompt"] == _as_brief_29(PLANNER_KEY, FIXTURE[PLANNER_KEY]["prompt"])
+    assert "\nTEAMS a piece may take" in NOW[PLANNER_KEY]["prompt"] and "by one team" in NOW[PLANNER_KEY]["prompt"]
+    for key in FIXTURE:  # the stages no decision names (research, plan, amend, edit, review, the re-asks) are main's
+        if key not in CHANGED_291 and key != PLANNER_KEY and NOW[key]["searching"] != search.ALLOWED:
+            assert NOW[key]["prompt"] == FIXTURE[key]["prompt"], key
+
+
 @pytest.mark.parametrize("key", sorted(FIXTURE))
 def test_a_prompt_sent_with_search_off_is_byte_for_byte_mains(key):
     now, before = NOW[key], FIXTURE[key]
     if now["searching"] == search.ALLOWED:
         pytest.skip("search on: see the next test")
-    assert now["prompt"] == before["prompt"]
+    assert now["prompt"] == _as_brief_29(key, before["prompt"], now["searching"])
     if now["agent"] == "chatgpt":
         assert now["web_search"] == before["web_search"] == "disabled"
 
@@ -79,6 +146,7 @@ def test_a_prompt_sent_with_search_on_is_mains_plus_the_search_line(key):
     if now["searching"] != search.ALLOWED:
         pytest.skip("search off: see the test above")
     prompt = now["prompt"]
+    before = {**before, "prompt": _as_brief_29(key, before["prompt"], now["searching"])}  # brief 29 and 29.1
     if checking.SEARCH_LINE in before["prompt"]:   # research-build's build by chatgpt searched on main already
         assert prompt == before["prompt"], key
         return

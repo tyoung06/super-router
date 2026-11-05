@@ -1,0 +1,35 @@
+{
+ "api_version": 1,
+ "spec": {
+  "name": "seed-swap",
+  "folder": "~/Projects/seed-swap",
+  "exists": false,
+  "text": "",
+  "hash": "e3b0c44298fc1c14",
+  "chars": 0,
+  "lines": 0,
+  "max": 6000,
+  "git": true,
+  "commits": true,
+  "tracked": false,
+  "examples": [],
+  "done_when": [],
+  "labeled": false,
+  "draft": {
+   "kind": "draft_spec",
+   "words": "Draft it",
+   "later": false,
+   "fill": {
+    "team": "route",
+    "project": "seed-swap",
+    "chat": null,
+    "text": "Write SPEC.md for this project: what it is and why, what is not in it, then `## Examples` and `## Done when`, each a numbered list, one line per item.",
+    "from": null,
+    "idea": null,
+    "step": null,
+    "no_files": true
+   }
+  },
+  "commit_words": "Save makes one commit holding SPEC.md alone."
+ }
+}

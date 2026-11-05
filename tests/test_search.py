@@ -133,9 +133,11 @@ def test_the_search_command_allows_websearch_only_and_denies_the_rest_by_name():
     assert "--dangerously-skip-permissions" not in argv and "--bare" not in argv
 
 
-def test_a_call_without_search_keeps_todays_command_byte_for_byte():
+def test_a_call_without_search_keeps_todays_command_plus_the_stream():
+    # brief 33.3 (decision 7): the plain call is today's, with stream-json (and --verbose) so the served model is read
     assert safety.claude_argv("sonnet") == ["claude", "-p", "--model", "sonnet", "--strict-mcp-config",
-                                            "--no-session-persistence", "--safe-mode", "--tools", ""]
+                                            "--no-session-persistence", "--safe-mode", "--tools", "",
+                                            "--output-format", "stream-json", "--verbose"]
 
 
 def test_a_search_call_returns_the_result_and_the_queries(fake_run, ws):
@@ -186,8 +188,8 @@ def test_more_than_five_searches_is_counted_not_refused(fake_run, ws):
 
 def test_a_new_log_is_version_7_with_the_search_column(tmp_path):
     c = log.init_db(tmp_path / "router.db")
-    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 16
-    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-6:] == ["search", "fallback_of", "context", "memory", "served", "round_file"]
+    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 21
+    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-10:] == ["search", "fallback_of", "context", "memory", "served", "round_file", "tests", "model", "effort", "time_limit"]
     assert log.V6_CALL_COLUMNS == log.V5_CALL_COLUMNS + ("reason_code", "resume_of")
     c.close()
 
@@ -219,10 +221,10 @@ def test_upgrade_from_version_6_adds_the_search_column_and_keeps_every_row(tmp_p
     before = sha256(db)
     done = log.migrate(db, backups, now=T0)
     assert (done["from"], done["rows"], done["calls"]) == (6, 1, 1)
-    assert done["added"] == "search and fallback_of columns added to calls; parent and split_plan columns added to tasks; slots and web columns added to tasks; project and handoff columns added to tasks; context column added to calls; chat and memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task"
+    assert done["added"] == "search and fallback_of columns added to calls; parent and split_plan columns added to tasks; slots and web columns added to tasks; project and handoff columns added to tasks; context column added to calls; chat and memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task; project_files column added to tasks; tests column added to calls; from_task and idea columns added to tasks; ideas table added; plan and plan_step columns added to tasks; models column added to tasks; model, effort and time_limit columns added to calls; auto column added to tasks"
     assert done["backup_check"]["content"] == "same"  # brief 22: the backup API copy is checked by its content, not its bytes
     c = sqlite3.connect(db)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert c.execute("PRAGMA user_version").fetchone()[0] == 21
     assert c.execute("SELECT reason_code, search FROM calls").fetchone() == ("plan_limit", None)
     c.close()
 
@@ -237,7 +239,7 @@ class SearchingClaude(Scripted):
         self.kwargs, self.queries = [], list(queries)
 
     def __call__(self, prompt, **kw):
-        self.kwargs.append(kw)
+        self.kwargs.append({k: v for k, v in kw.items() if k != "choice"})  # brief 33.3: choice= rides on every call
         text = super().__call__(prompt)
         return claude_worker.SearchAnswer(text, self.queries) if kw.get("search") else text
 

@@ -1,0 +1,17 @@
+{
+ "api_version": 1,
+ "notes": {
+  "name": "plot-planner",
+  "folder": "~/Projects/plot-planner",
+  "notes": "",
+  "block": "<!-- sr:start -->\n\n### #38 · 2026-10-19 · split · claude\nProduced:\nbeds.py changed; water.py and test_water.py added\nStatus:\nBeds have areas and a rain need.\nNext:\nShow each bed's rain need on the plot map.\n\n<!-- sr:end -->",
+  "hash": "e3b0c44298fc1c14",
+  "chars": 0,
+  "lines": 0,
+  "max": 20000,
+  "git": false,
+  "tracked": false,
+  "exists": true,
+  "has_block": true
+ }
+}

@@ -36,11 +36,14 @@ from scripts import rules_copy  # noqa: E402
 
 ALLOW_DIRS = ("router/", "static/", "scripts/", "docs/", "demo/", "tests/")
 ALLOW_FILES = frozenset({"config/agents.json", "config/presets.json", "config/settings.json", "config/skill_table.json",
+                         "config/router-notes.default.md",  # brief 30 (decision 1): the blank default; never the notes
+                         "config/models.json",  # brief 33.3 (decision 3): the public model defaults; never the local file
                          "requirements.txt", "pytest.ini", ".env.example", ".gitignore", ".gitleaksignore",
                          "README.md", "LICENSE"})
 # The label-test files need labeltest/, so they stay private with it (decision 2).
 LABEL_TESTS = ("tests/test_labeltest_claude.py", "tests/test_labeltest_jev.py", "tests/test_labeltest_report.py",
-               "tests/test_labeltest_round3.py", "tests/test_labeltest_round4.py", "tests/test_labeltest_score.py")
+               "tests/test_labeltest_round3.py", "tests/test_labeltest_round4.py", "tests/test_labeltest_score.py",
+               "tests/test_labeltest_proof4.py")  # brief 32, P: the Proof 4 harness lives in labeltest/ too
 NEVER_FILES = frozenset({"NOTES.md", "SUPER-ROUTER-HANDOFF.md", "SUPER-ROUTER.md", "CLAUDE.md", "AGENTS.md", *LABEL_TESTS})
 NEVER_DIRS = ("labeltest/", ".claude/", "publish/")  # publish/: the workflow's source, placed in the copy, never copied
 # Made at each publish, in the copy only: published path -> its source at HEAD.
@@ -57,7 +60,7 @@ KNOWN_BINARIES = {
     "demo/files/media/out/sr-20261019-105600-001a/tomato-badge.png": "5b6d018556c09b7c05953d2c8ea88ea30103fd3cd5cb4f4da127f970ec5291c1",
     "demo/files/media/pages/sr-20261019-104600-0018/menu/page-1.png": "c58e61bb5e37cee3954e4a1ddac9b26f49cd0dcb4c67fcaf18047989efec7397",
     "demo/files/media/pages/sr-20261019-104600-0018/menu/page-2.png": "d3df550903bd830d6509f57233475416170d618a8a22f37090e58f94ce8b569a",
-    "docs/demo.png": "1134666f63df877009e9ca2194492dee9986c9f804cc98cd7e8b5a1c5b1a10d6",
+    "docs/demo.png": "68914ce3655bf458249d208494b65f70aae2e027d880c6a01c75601a8fb5267d",
 }
 
 # The CI's gitleaks config, byte for byte (publish/ci.yml carries the same text): the default rules, and one allowlist on

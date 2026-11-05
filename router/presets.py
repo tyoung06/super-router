@@ -30,11 +30,12 @@ from dataclasses import dataclass, replace
 from router import log, safety
 
 PRESETS_PATH = safety.REPO_ROOT / "config" / "presets.json"
-FILE_VERSIONS = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6")  # 1.1 collab, 1.2 versus, 1.3 slots, 1.4 redteam, 1.5 vote, 1.6 descriptions
+FILE_VERSIONS = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7")  # 1.1 collab, 1.2 versus, 1.3 slots, 1.4 redteam,
+# 1.5 vote, 1.6 descriptions, 1.7 redteam's second attacker (brief 32)
 PRESET_NAME = re.compile(r"[a-z][a-z0-9-]*")   # typed on the command line, so plain lowercase words
 ROLE_NAME = re.compile(r"[a-z][a-z0-9_-]*")
 STAGE_FIELDS = {"n", "agent", "role", "contract", "is_check", "input", "review_of", "attack_of", "revise_of",
-                "against"}
+                "against", "optional"}  # brief 32: `optional`, an attack stage that is not the first attack
 PRESET_FIELDS = {"stages", "checker", "pick", "slots", "description"}  # brief 21: description, one line, optional
 CHECKER_PART = "checker"  # in a slot's list: the preset's named checker
 # A slot becomes a flag on `sr relay` (--<slot> <agent>), so it may not be one of relay's own words.
@@ -71,7 +72,16 @@ class Stage:
     review_of: int | None = None  # a review stage: the earlier stage it reviews (rules v2.16)
     attack_of: int | None = None  # an attack stage: the earlier stage it attacks (rules v2.23)
     revise_of: int | None = None  # a revise stage: the earlier stage it revises, by the same agent (rules v2.23)
-    against: int | None = None    # ...against this other earlier stage's result
+    against: object = None        # ...against this other earlier stage's result (an int), or since presets 1.7 (brief 32)
+    #                               a tuple of one or two attack stages of the build it revises
+    optional: bool = False        # brief 32 (decision 11): an attack stage that is left out or skipped, never stopping
+
+    @property
+    def against_stages(self):
+        """The stages a revise stage revises against, as a tuple: () for any other stage."""
+        if self.against is None:
+            return ()
+        return (self.against,) if isinstance(self.against, int) else tuple(self.against)
 
     @property
     def input_stage(self):
@@ -103,6 +113,9 @@ class Preset:
     pick: str | None = None  # "owner" on a preset with review stages (rules v2.16); "tally" on vote (rules v2.24)
     slots: tuple = ()        # Slot, in file order (rules v2.21); empty: the preset takes no slot flags
     description: str | None = None  # brief 21 (rules v2.30): one line the page shows; the owner writes it
+    lettered: bool = False   # brief 32 (decision 8): its attack lists are labeled A1…, B1…: a preset with a second attack
+    #                          (presets 1.7's redteam), never an old task's chain, which keeps its numbers
+    left_out: tuple = ()     # brief 32 (decision 11): the optional slots left out of this task's chain
 
     @property
     def review_stages(self):
@@ -120,7 +133,19 @@ class Preset:
 
     @property
     def attack_stage(self):
+        """The first attack stage, or None."""
         return next((s for s in self.stages if s.attack_of is not None), None)
+
+    @property
+    def attack_stages(self):
+        """Every attack stage, in stage order (brief 32: redteam has two)."""
+        return tuple(s for s in self.stages if s.attack_of is not None)
+
+    def letter_of(self, n):
+        """Stage n's attack list's letter (decision 8): A for the first attack stage, B for the second; None on an old
+        task's chain (no labels) or for a stage that is no attack."""
+        attacks = [s.n for s in self.attack_stages]
+        return chr(ord("A") + attacks.index(n)) if self.lettered and n in attacks else None
 
     @property
     def revise_stage(self):
@@ -340,6 +365,16 @@ def _kind_problems(name, stages, attack_contracts, revise_contracts):
                     found.append(f"{what} is an attack stage and also names {bad}.")
         if role == REVISE_ROLE and "revise_of" not in stage:
             found.append(f"{what} has the role revise but no revise_of; a revise stage names the stage it revises.")
+        if "optional" in stage:  # brief 32 (decision 7): only an attack stage that is not the first attack
+            first = next((j for j, s in enumerate(stages, 1) if isinstance(s, dict) and "attack_of" in s
+                          and s.get("attack_of") == stage.get("attack_of")), None)
+            if stage["optional"] is not True:
+                found.append(f"{what} has optional {stage['optional']!r}; it must be true when given.")
+            if role != ATTACK_ROLE or "attack_of" not in stage:
+                found.append(f"{what} is marked optional; only an attack stage that is not the first attack may be.")
+            elif first == i:
+                found.append(f"{what} is marked optional but is the first attack of stage {stage.get('attack_of')}; the "
+                             "first attack is never optional.")
         if "revise_of" in stage:
             revises += 1
             k, against = stage["revise_of"], stage.get("against")
@@ -352,7 +387,9 @@ def _kind_problems(name, stages, attack_contracts, revise_contracts):
             elif stage.get("agent") and stage.get("agent") != agents.get(k):
                 found.append(f"{what} by {stage.get('agent')} revises stage {k}, which is {agents.get(k)}'s; a revise "
                              "stage is by the agent that made the stage it revises.")
-            if "against" in stage and not _earlier(against, i):
+            if isinstance(against, list):  # brief 32 (decision 7): one or two attack stages of the build it revises
+                found += _against_list_problems(what, k, against, stages, i)
+            elif "against" in stage and not _earlier(against, i):
                 found.append(f"{what} has against {against!r}; it must be the number of an earlier stage.")
             elif "against" in stage and against == k:
                 found.append(f"{what} revises stage {k} against stage {against}; against must be another stage.")
@@ -369,6 +406,22 @@ def _kind_problems(name, stages, attack_contracts, revise_contracts):
                              f"names {' or '.join(revise_contracts)}.")
     if revises > 1:
         found.append(f"preset {name} has {revises} revise stages; at most one.")
+    return found
+
+
+def _against_list_problems(what, k, against, stages, i):
+    """Brief 32 (decision 7): `against` as a list names one or two attack stages of the build it revises (stage k), each
+    once and each earlier; anything else is refused."""
+    found = []
+    if not 1 <= len(against) <= 2:
+        return [f"{what} has against {against!r}; a revise stage revises against one or two attack stages."]
+    for n in against:
+        stage = stages[n - 1] if _earlier(n, i) and isinstance(stages[n - 1], dict) else {}
+        if not (_earlier(n, i) and stage.get("role") == ATTACK_ROLE and stage.get("attack_of") == k):
+            found.append(f"{what} names stage {n!r} in against; against names attack stages of the build it revises "
+                         f"(stage {k}).")
+    if len(set(map(str, against))) != len(against):
+        found.append(f"{what} names a stage twice in against.")
     return found
 
 
@@ -560,10 +613,11 @@ def load_presets(roster, send_paths, contracts, path=None, roles=None, verdicts=
             continue
         stages = tuple(Stage(s["n"], s["agent"], s["role"], s["contract"], s.get("is_check", False),
                              s.get("input"), s.get("review_of"), s.get("attack_of"), s.get("revise_of"),
-                             s.get("against"))
+                             tuple(s["against"]) if isinstance(s.get("against"), list) else s.get("against"),
+                             s.get("optional") is True)
                        for s in preset["stages"])
         good[name] = Preset(name, stages, preset.get("checker"), preset.get("pick"), _slots(preset, stages),
-                            preset.get("description"))
+                            preset.get("description"), lettered=any(s.optional for s in stages))
     return Presets(version, good, bad)
 
 
@@ -605,7 +659,7 @@ def fill(preset, chosen):
             checker = agent
         slots.append(replace(slot, agent=agent))
     stages = tuple(replace(s, agent=by_stage.get(s.n, s.agent)) for s in preset.stages)
-    return Preset(preset.name, stages, checker, preset.pick, tuple(slots), preset.description)
+    return replace(preset, stages=stages, checker=checker, slots=tuple(slots))
 
 
 def as_entry(preset):
@@ -622,9 +676,13 @@ def as_entry(preset):
             stage["input"] = s.input
         if s.review_of is not None:
             stage["review_of"] = s.review_of
-        for key in ("attack_of", "revise_of", "against"):  # brief 16
+        for key in ("attack_of", "revise_of"):  # brief 16
             if getattr(s, key) is not None:
                 stage[key] = getattr(s, key)
+        if s.against is not None:  # brief 32: a tuple is written as the list presets 1.7 has
+            stage["against"] = list(s.against) if isinstance(s.against, tuple) else s.against
+        if s.optional:
+            stage["optional"] = True
         entry["stages"].append(stage)
     return entry
 
@@ -647,18 +705,23 @@ def own_work(preset):
     if preset.checker is not None:
         judged(checker_slot, owner.get(last.n))
     if preset.check_stage is not None:
-        judged(owner.get(last.n), owner.get(last.n - 1))
+        judged(owner.get(last.n), owner.get(last.n - 1))  # (the attack pairs below: brief 32 adds the second attack)
     for review in preset.review_stages:
         judged(owner.get(review.n), owner.get(review.review_of))
-    if preset.attack_stage is not None:  # rules v2.23: an attacker never attacks its own build
-        judged(owner.get(preset.attack_stage.n), owner.get(preset.attack_stage.attack_of), how="attack")
+    for attack in preset.attack_stages:  # rules v2.23: an attacker never attacks its own build
+        judged(owner.get(attack.n), owner.get(attack.attack_of), how="attack")
+    for i, first in enumerate(preset.attack_stages):  # brief 32 (decision 12): two lists from one agent are not two
+        for second in preset.attack_stages[i + 1:]:  # attackers
+            if second.attack_of == first.attack_of:
+                judged(owner.get(second.n), owner.get(first.n), how="twice")
     return pairs
 
 
 # Rules v2.28 (Relay, slots; Cursor): until rule 12 is met, Cursor may fill `versus` a or b and nothing else (it
-# builds a candidate and reviews the other, and the owner picks). An agent not named here may fill any slot it is live
-# for. Read by slot_refusals; the shipped presets never place Cursor. Widened later by a rules edit, not by code.
-SLOTS_FOR = {"cursor": {"versus": ("a", "b")}}
+# builds a candidate and reviews the other, and the owner picks). Brief 32 (decision 12, the owner's D25): and redteam's
+# `attack` or `attack2`, never its `check`. An agent not named here may fill any slot it is live for. Read by
+# slot_refusals.
+SLOTS_FOR = {"cursor": {"versus": ("a", "b"), "redteam": ("attack", "attack2")}}
 
 
 def slot_allowed(agent, preset_name, slot):
@@ -666,15 +729,88 @@ def slot_allowed(agent, preset_name, slot):
     return allowed is None or slot in allowed.get(preset_name, ())
 
 
-# Rules v2.28, Cursor: a slot one of these agents fills is refused on a --project task (no handoff to Cursor).
+# Brief 29: the chain in plain words, read by status's presets, status's `split.teams` and the planner's menu (moved here
+# from router/status.py, which keeps `status.chain` as a name for it, so router/teams.py needs no import of status).
+CHAIN_NAMES = {"claude": "Claude", "chatgpt": "ChatGPT", "grok": "Grok", "cursor": "Cursor", "muse": "Muse"}
+ROLE_WORDS = {"execute": "build"}  # collab's third stage builds from the agreed plan
+
+
+def chain(preset):
+    """The chain in plain words, from the stages: `Grok research → Claude build → ChatGPT check`."""
+    parts = []
+    for stage in preset.stages:
+        words = f"{CHAIN_NAMES.get(stage.agent, stage.agent)} {ROLE_WORDS.get(stage.role, stage.role)}"
+        parts.append(f"{words} (check)" if stage.is_check else words)
+    if preset.has_reviews:
+        parts.append("your pick")
+    elif preset.tallies:
+        parts.append("tally")
+    elif preset.checker:
+        parts.append(f"{CHAIN_NAMES.get(preset.checker, preset.checker)} check")
+    return " → ".join(parts)
+
+
+# Rules v2.28, Cursor: a slot one of these agents fills is refused on a --project task (no handoff to Cursor). Brief 32
+# (decision 13, reopening D21 for the attack slots alone): but for the slots PROJECT_ALLOWS names, where it gets the
+# project as text, as every attack does.
 PROJECT_REFUSES = ("cursor",)
+PROJECT_ALLOWS = {"cursor": {"redteam": ("attack", "attack2")}}
+
+
+def project_refused(agent, preset_name, slot):
+    """Whether `agent` in `slot` of `preset_name` is refused on a --project task."""
+    return agent in PROJECT_REFUSES and slot not in PROJECT_ALLOWS.get(agent, {}).get(preset_name, ())
+
+
+def project_held(preset):
+    """The slots of a (filled) preset a --project task refuses for the agent in them, in file order."""
+    return [s.name for s in preset.slots if project_refused(s.agent, preset.name, s.name)]
+
+
+def project_refuses_in(preset_name, slot, agents=PROJECT_REFUSES):
+    """Status (decision 13): the agents a project refuses in this slot, so the page offers only the others there."""
+    return [a for a in agents if project_refused(a, preset_name, slot)]
 
 
 def takes_project(preset):
-    """Whether `--project` may run on the preset (rules v2.25, Relay): a named checker after a chain that ends in one
-    agent's build; never a check stage, review stages or a tally. Intake and `sr status` both read it (brief 23,
-    decision 14), so the page greys the project selector from the same rule intake applies."""
-    return bool(preset.checker) and not getattr(preset, "has_reviews", False) and not getattr(preset, "tallies", False)
+    """Whether `--project` may run on the preset (rules v2.25, Relay; brief 29.1, decisions 8 to 10). Intake and `sr status`
+    both read it (brief 23, decision 14), so the page greys the project selector from the same rule intake applies. Brief
+    29.1 (the owner's D18 and D21): every preset takes one: collab in its project shape (`project_shape`), versus with a
+    copy per candidate in file mode, vote with the handoff and memory and no copy."""
+    return True  # brief 29.1 (decisions 8 to 10): every preset; collab in its project shape, vote with no copy
+
+
+def project_shape(preset):
+    """Brief 29.1 (decision 8, the owner's D21): a preset whose last stage is the check (collab) runs on a project as the stages
+    before it, then that stage's agent as the named checker with the usual check loop: the plan, the amend, the build, then
+    the partner checks; the edit stage never runs, since only Claude changes files and one agent owns the handoff. The slot
+    that held the check stage holds the checker instead. Derived in code wherever the loaded preset is read for a task on
+    a project (`for_task`, intake, the split's menu); config/presets.json stays as it is. Any other preset is itself."""
+    check = preset.check_stage
+    if check is None:
+        return preset
+    slots = tuple(replace(s, stages=tuple(n for n in s.stages if n != check.n), checker=s.checker or check.n in s.stages)
+                  for s in preset.slots)
+    return replace(preset, stages=preset.stages[:-1], checker=check.agent, slots=slots)
+
+
+# Brief 33.1 (decision 1): a plan task (`mode` plan) runs redteam's chain as it is filled now, in its plan shape: stage 1
+# plans (role `plan`, read by the plan's contract), the revise stage revises the plan (`plan_revision`); the attack stages
+# and the checker are redteam's. Derived in code wherever a plan task's chain is read (`for_task`, the plan's intake).
+PLAN_MODE, PLAN_ROLE, PLAN_STEPS, PLAN_REVISION = "plan", "plan", "plan_steps", "plan_revision"
+
+
+def plan_shape(preset):
+    """The preset (redteam, filled) as a plan task runs it: stage 1's role and contract become the plan's, the revise
+    stage's contract the plan's revision. Any other stage is as it is."""
+    stages = []
+    for s in preset.stages:
+        if s.n == 1:
+            s = replace(s, role=PLAN_ROLE, contract=PLAN_STEPS)
+        elif s.revise_of is not None:
+            s = replace(s, contract=PLAN_REVISION)
+        stages.append(s)
+    return replace(preset, stages=tuple(stages))
 
 
 def _allowed_text(agent):
@@ -712,11 +848,13 @@ def slot_refusals(preset, flags, roster, available=None):
     filled = fill(preset, chosen)
     pairs = own_work(filled)
     if pairs:
-        return None, [f"slots {p[0]} and {p[1]} both hold {p[2]}; "
-                      + ("an attacker does not attack its own build." if len(p) > 3
-                         else "no agent checks or reviews its own work.")
+        return None, [f"slots {p[0]} and {p[1]} both hold {p[2]}; " + OWN_WORK_WORDS[p[3] if len(p) > 3 else "check"]
                       for p in pairs]
     return filled, []
+
+
+OWN_WORK_WORDS = {"check": "no agent checks or reviews its own work.", "attack": "an attacker does not attack its own build.",
+                  "twice": "two lists from one agent are not two attackers."}  # brief 32 (decision 12)
 
 
 def slot_names(path=None):
@@ -751,13 +889,63 @@ def for_task(row, loaded):
     if base is None:
         why = "; ".join(loaded.problems.get(name, [])) or "it is not in config/presets.json"
         return None, f"its preset {name} can't run: {why}"
+    if log.project_of(row):  # brief 29.1 (decision 8): a project task runs in the preset's project shape
+        base = project_shape(base)
     stored = slots_of(row)
+    for slot in optional_slots(base):  # brief 32 (decisions 11 and 18): a slot left out, or a row from before it
+        if not stored or slot.name not in stored:
+            base = replace(leave_out(base, slot.name), lettered=False, left_out=())  # an old task: read as it ran
+        elif stored[slot.name] is None:
+            base = leave_out(base, slot.name)
+    stored = {k: v for k, v in (stored or {}).items() if v is not None}
+    plan = (row["mode"] if "mode" in row.keys() else None) == PLAN_MODE  # brief 33.1: a plan runs its plan shape
     if not stored:
-        return base, None
+        return (plan_shape(base) if plan else base), None
     names = [s.name for s in base.slots]
     if set(stored) - set(names):
         return None, f"its slots ({', '.join(stored)}) don't match preset {name}'s ({', '.join(names) or 'none'})"
-    return fill(base, stored), None
+    filled = fill(base, stored)
+    return (plan_shape(filled) if plan else filled), None
+
+
+def optional_slots(preset):
+    """The slots that cover only optional stages (brief 32: redteam's attack2)."""
+    return tuple(s for s in preset.slots if s.stages and all(preset.stage(n).optional for n in s.stages)
+                 and not s.checker)
+
+
+def leave_out(preset, slot_name):
+    """The chain without an optional slot's stages (decision 11): the later stages renumbered, every stage reference
+    (input, attack_of, revise_of, against) moved with them, the slot gone, and its name kept in `left_out`."""
+    slot = next(s for s in preset.slots if s.name == slot_name)
+    gone = set(slot.stages)
+    keep = [s for s in preset.stages if s.n not in gone]
+    number = {s.n: i for i, s in enumerate(keep, 1)}
+
+    def moved(n):
+        return number.get(n) if n is not None else None
+
+    stages = []
+    for s in keep:
+        against = s.against
+        if isinstance(against, tuple):
+            against = tuple(number[k] for k in against if k in number)
+        elif isinstance(against, int):
+            against = number.get(against)
+        inp = s.input
+        if inp is not None and inp != TASK_INPUT:
+            inp = f"stage:{number[s.input_stage]}"
+        stages.append(replace(s, n=number[s.n], input=inp, review_of=moved(s.review_of), attack_of=moved(s.attack_of),
+                              revise_of=moved(s.revise_of), against=against))
+    slots = tuple(replace(s, stages=tuple(number[n] for n in s.stages)) for s in preset.slots if s.name != slot_name)
+    return replace(preset, stages=tuple(stages), slots=slots, left_out=preset.left_out + (slot_name,))
+
+
+def row_slots(preset):
+    """The slot map a task row keeps (decision 16): every slot's agent, and a left-out slot as None."""
+    found = slot_map(preset)
+    found.update({name: None for name in preset.left_out})
+    return found
 
 
 def _parts(slot):
@@ -779,10 +967,11 @@ def describe(loaded):
                 notes = ([f"input: {'task' if s.input == TASK_INPUT else f'stage {s.input_stage}'}"] if s.input else []) \
                     + ([f"contract {s.contract}"] if s.contract else [])
                 tail = f" ({', '.join(notes)})" if notes else ""
+                against = " and ".join(map(str, s.against_stages))
                 what = (f"review of stage {s.review_of}" if s.review_of is not None
-                        else f"attack of stage {s.attack_of}" if s.attack_of is not None
-                        else f"revise of stage {s.revise_of} against stage {s.against}" if s.revise_of is not None
-                        else s.role)
+                        else f"attack of stage {s.attack_of}" + (" (optional)" if s.optional else "") if s.attack_of is not None
+                        else f"revise of stage {s.revise_of} against stage{'s' if len(s.against_stages) > 1 else ''} {against}"
+                        if s.revise_of is not None else s.role)
                 lines.append(f"  {s.n}. {what} by {s.agent}{tail}")
             check = preset.check_stage
             if preset.has_reviews:
@@ -835,6 +1024,18 @@ def fill_unavailable(preset, flags, roster, available, *, send_paths, contracts,
     is the task's preset. `fills` is [{"slot", "agent", "default", "why"}]. With no combination left, the words name the
     slot, why its agent can't run, and why no other agent can take it."""
     flagged = {slot for slot, _ in flags}
+    left = []
+    for slot in optional_slots(preset):  # brief 32 (decision 11): left out, never filled, when its default isn't available
+        if slot.name not in flagged and not available(slot.agent).available:
+            left.append({"slot": slot.name, "agent": None, "default": slot.agent, "why": available(slot.agent).why})
+            preset = leave_out(preset, slot.name)
+    filled, fills, why = _fill_needed(preset, flags, flagged, roster, available, send_paths=send_paths, contracts=contracts,
+                                      roles=roles, verdicts=verdicts)
+    return (filled, left + fills, None) if filled is not None else (None, [], why)
+
+
+def _fill_needed(preset, flags, flagged, roster, available, *, send_paths, contracts, roles, verdicts):
+    """Decision 8 of brief 24 on the slots left: each whose agent isn't available is filled from `fill_candidates`."""
     need = [s for s in preset.slots if s.name not in flagged and not available(s.agent).available]
     if not need:
         filled, refused = _judged(preset, list(flags), roster, available, send_paths, contracts, roles, verdicts)
@@ -894,24 +1095,31 @@ def _no_fill_words(preset, flags, need, roster, available, send_paths, contracts
 
 
 FILLED = " filled by "
+LEFT_OUT = " left out ("  # brief 32 (decision 11): `<slot> left out (<default agent>): <why>`
 
 
 def fills_reason(fills):
     """The route_reason of a relay task (C6): `relay`, or `relay; <slot> filled by <agent>: <why>`, the fills joined by
-    ` · ` (a mark no reason of the router's uses)."""
+    ` · ` (a mark no reason of the router's uses); a slot left out (brief 32) is `<slot> left out (<default>): <why>`."""
     if not fills:
         return "relay"
-    return "relay; " + " · ".join(f"{f['slot']}{FILLED}{f['agent']}: {f['why']}" for f in fills)
+    return "relay; " + " · ".join(f"{f['slot']}{FILLED}{f['agent']}: {f['why']}" if f.get("agent")
+                                  else f"{f['slot']}{LEFT_OUT}{f['default']}): {f['why']}" for f in fills)
 
 
 def fills_of(route_reason):
-    """[{"slot", "agent", "why"}] read back from a relay task's route_reason; [] when nothing was filled."""
+    """[{"slot", "agent", "why"}] read back from a relay task's route_reason; [] when nothing was filled. A slot left out
+    reads `{"slot", "agent": None, "default", "why"}`."""
     text = route_reason or ""
     if not text.startswith("relay; "):
         return []
     found = []
     for part in text[len("relay; "):].split(" · "):
         head, _, why = part.partition(": ")
+        if LEFT_OUT in head and head.endswith(")"):
+            slot, _, default = head[:-1].partition(LEFT_OUT)
+            found.append({"slot": slot, "agent": None, "default": default, "why": why})
+            continue
         slot, _, agent = head.partition(FILLED)
         if slot and agent:
             found.append({"slot": slot, "agent": agent, "why": why})

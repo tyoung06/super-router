@@ -98,3 +98,13 @@ def test_the_executable_bit_is_kept(private):
     commit(private, "executable")
     found = publish.export(private)
     assert found.files["scripts/tool.py"][1] is True and found.files["router/core.py"][1] is False
+
+
+def test_the_router_notes_default_is_copied_and_the_owners_notes_never_are(private):
+    """Brief 30 (decision 1): the blank default goes; the owner's own file is never at HEAD, so never copied."""
+    write_tree(private, {"config/router-notes.default.md": "## All agents\n\n## Claude\n\n"})
+    commit(private, "the default")
+    (private / "config" / "router-notes.md").write_text("## All agents\nThe owner's own line.\n")  # never committed
+    found = publish.export(private)
+    assert "config/router-notes.default.md" in found.files and "config/router-notes.md" not in found.files
+    assert found.stops == []

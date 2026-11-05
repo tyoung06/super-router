@@ -253,8 +253,8 @@ def test_no_stop_line_on_a_task_that_passed_or_a_versus_pick(conn):
 
 def test_a_new_log_is_version_8_with_fallback_of_last_on_calls():
     c = log.init_db(":memory:")
-    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 16
-    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-5:] == ["fallback_of", "context", "memory", "served", "round_file"]  # briefs 18 and 19 added context and memory, 20 served, 21 round_file
+    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 21
+    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-9:] == ["fallback_of", "context", "memory", "served", "round_file", "tests", "model", "effort", "time_limit"]  # briefs 18 and 19 added context and memory, 20 served, 21 round_file
 
 
 def test_fallback_of_must_name_a_call_of_the_same_task(conn):
@@ -283,14 +283,14 @@ def _make_v7(path):
 def test_upgrade_from_version_7_adds_fallback_of_and_keeps_every_row(tmp_path):
     db, backups = tmp_path / "router.db", tmp_path / "backups"
     _make_v7(db)
-    with pytest.raises(log.VersionError, match=r"version 7 log.*sr migrate.*version 16 \(fallback_of column added"):
+    with pytest.raises(log.VersionError, match=r"version 7 log.*sr migrate.*version 21 \(fallback_of column added"):
         log.init_db(db)
     done = log.migrate(db, backups)
-    assert done["added"] == log.UPGRADES[7]["added"] == "fallback_of column added to calls; parent and split_plan columns added to tasks; slots and web columns added to tasks; project and handoff columns added to tasks; context column added to calls; chat and memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task"
+    assert done["added"] == log.UPGRADES[7]["added"] == "fallback_of column added to calls; parent and split_plan columns added to tasks; slots and web columns added to tasks; project and handoff columns added to tasks; context column added to calls; chat and memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task; project_files column added to tasks; tests column added to calls; from_task and idea columns added to tasks; ideas table added; plan and plan_step columns added to tasks; models column added to tasks; model, effort and time_limit columns added to calls; auto column added to tasks"
     assert (done["rows"], done["calls"], done["highest"]) == (1, 1, 1)
     assert (backups / done["backup"].name).exists() and done["backup"].name.startswith("router-v7-")
     c = log.init_db(db)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert c.execute("PRAGMA user_version").fetchone()[0] == 21
     assert c.execute("SELECT fallback_of FROM calls").fetchone()[0] is None
-    with pytest.raises(log.MigrateRefused, match="already a version 16"):
+    with pytest.raises(log.MigrateRefused, match="already a version 21"):
         log.migrate(db, backups)

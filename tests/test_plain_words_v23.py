@@ -49,7 +49,7 @@ def test_the_sweep_would_catch_an_old_line():
 def _state(tmp_path, version=None):
     path = tmp_path / "probe_state.json"
     if version is not None:
-        search.record_pass(path, version, key=cursor_worker.SANDBOX_KEY)
+        cursor_worker.record_pass(path, version)  # brief 32 (R0): a pass names the canaries it ran
     return path
 
 
@@ -101,7 +101,7 @@ def test_the_canary_progress_lines_say_safety_check(tmp_path):
     path = _state(tmp_path, A1)
     canaries, out = CursorCanaries(path, A2), []
     assert tuple(_cursor(path, A2, canaries, out)) == (True, None) and canaries.ran == 1
-    assert out == [f"probe: Cursor's safety check has no pass on agent {A2}; running its two canaries (two pool calls)",
+    assert out == [f"probe: Cursor's safety check has no pass on agent {A2}; running its three canaries (three pool calls)",
                    f"probe: Cursor's safety check passed on agent {A2}"]
 
 

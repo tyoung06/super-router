@@ -1,0 +1,59 @@
+{
+ "task_id": null,
+ "n": null,
+ "status": null,
+ "waiting_on": null,
+ "outcome": null,
+ "reason_code": null,
+ "exit": 0,
+ "message": "    3  Add a map of the seed shelves.  (Later on #20, 2026-10-19)\n    2  Print a planting calendar for the season.  (Added, 2026-10-19)\n    1  Add a map of the raised beds.  (Added, 2026-10-19)",
+ "ideas": [
+  {
+   "id": 3,
+   "text": "Add a map of the seed shelves.",
+   "source": {
+    "kind": "later",
+    "task_id": "sr-20261019-103600-0016",
+    "n": 20,
+    "suggested": false
+   },
+   "created_at": "2026-10-19T10:37:00+00:00",
+   "state": "open",
+   "sent_as": null
+  },
+  {
+   "id": 2,
+   "text": "Print a planting calendar for the season.",
+   "source": {
+    "kind": "added",
+    "task_id": null,
+    "n": null,
+    "suggested": false
+   },
+   "created_at": "2026-10-19T10:37:00+00:00",
+   "state": "open",
+   "sent_as": null
+  },
+  {
+   "id": 1,
+   "text": "Add a map of the raised beds.",
+   "source": {
+    "kind": "added",
+    "task_id": null,
+    "n": null,
+    "suggested": false
+   },
+   "created_at": "2026-10-19T10:37:00+00:00",
+   "state": "open",
+   "sent_as": null
+  }
+ ],
+ "dismissed": 0,
+ "used": [],
+ "suggest": {
+  "running": null,
+  "open": 3,
+  "off": null,
+  "last": null
+ }
+}

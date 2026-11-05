@@ -1,0 +1,7 @@
+diff --git a/loans.py b/loans.py
+index 8c9d0e1..a1b2c3d 100644
+--- a/loans.py
++++ b/loans.py
+@@ -12,4 +12,4 @@ def listed(loans, today):
+-    return sorted(loans, key=lambda loan: loan.due)
++    return sorted(loans, key=lambda loan: loan.due, reverse=True)

@@ -10,7 +10,8 @@ from tests.helpers import count_lines_in
 from tests.test_loop import Scripted
 from tests.test_relay import GOOD_NOTE, Chat, RelayHook
 
-RULE = checking.LENGTH_RULE_LINE
+RULE = checking.LENGTH_RULE_LINE  # collab's edit stage keeps it
+CHECK_RULE = checking.CHECK_LENGTH_LINE  # brief 29.1 (decision 14): the check's, with the target rule
 
 
 # ---------- the counter (decision 15, the owner's choice 6) ----------
@@ -136,8 +137,8 @@ def test_routed_prompts_by_kind(conn):
     _before_blocks(check, "The result is 5 words." + phrase)
     _before_blocks(recheck, "The result is 9 words." + phrase)
     _before_blocks(fix, "The result is 5 words." + phrase)
-    assert RULE in check and RULE in recheck
-    assert RULE not in fix  # the fix round gets the count line only
+    assert CHECK_RULE in check and CHECK_RULE in recheck
+    assert CHECK_RULE not in fix and RULE not in fix  # the fix round gets the count line only
     assert "The result is" not in worker.prompts[0]  # the doer's first call is no check
 
 
@@ -146,7 +147,7 @@ def test_a_research_build_check(conn):
     worker, chat = Scripted("A built result in five words."), Chat("PASS")
     _relay(conn, "research-build", "Summarise the note.", worker=worker, chatgpt=chat, hook=RelayHook(s1=GOOD_NOTE))
     _before_blocks(chat.prompts[0], "The result is 6 words.")
-    assert RULE in chat.prompts[0]
+    assert CHECK_RULE in chat.prompts[0]
     assert "The result is" not in worker.prompts[0]  # the build stage is no check
 
 

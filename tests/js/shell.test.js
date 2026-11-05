@@ -23,7 +23,7 @@ test("an online agent reads online, with its details; a text label always beside
   assert.match(claude.detail[0], /^Code 2\.1\.306 · search on$/);
   const up = { available: true, why: null, why_code: null, online: true };  // brief 24: the router says it is available
   const cursor = agentView({ ...agent("cursor"), ...up, probe: { state: "passed" } });
-  assert.match(cursor.detail[0], /^grok-4\.7-high · \d+ calls this week$/);
+  assert.match(cursor.detail[0], /^grok-4\.7-high · \d+ calls? this week$/);  // brief 32: the demo's Cursor made one call
   const grok = agentView({ ...agent("grok"), ...up, configured: true, live: true });
   assert.match(grok.detail[0], /calls this week$/);
 });
@@ -72,11 +72,11 @@ test("the Jev meter counts tokens against the cap, and memory says what it is do
 
 // ---------- the chips and slots ----------
 
-test("the chips are Route plus the presets from status, in order, nothing else; the first six get ⌥ keys", () => {
+test("the chips are Route, the presets from status in order, Split (brief 29), then Plan (brief 33.1); ⌥1 to ⌥8", () => {
   const chips = chipViews(STATUS, "route");
-  assert.deepEqual(chips.map((c) => c.key), ["route", ...STATUS.presets.map((p) => p.name)]);
+  assert.deepEqual(chips.map((c) => c.key), ["route", ...STATUS.presets.map((p) => p.name), "split", "plan"]);
   assert.equal(chips[0].checked, true);
-  assert.deepEqual(chips.map((c) => c.shortcut), ["⌥1", "⌥2", "⌥3", "⌥4", "⌥5", "⌥6"]);
+  assert.deepEqual(chips.map((c) => c.shortcut), ["⌥1", "⌥2", "⌥3", "⌥4", "⌥5", "⌥6", "⌥7", "⌥8"]);
   assert.equal(chips[1].label, "Research-build");
 });
 
@@ -87,8 +87,9 @@ test("a chip whose chain can't run now is greyed with status's reason", () => {
   assert.equal(vote.disabled, true);
   assert.equal(vote.reason, STATUS.presets.find((p) => p.name === "vote").why);
   assert.match(vote.reason, /^vote can't run now: slot /);
-  const allUp = { ...STATUS, presets: STATUS.presets.map((p) => ({ ...p, ready: true, why: null })) };
-  assert.equal(chipViews(allUp).every((c) => !c.disabled), true);
+  const allUp = { ...STATUS, presets: STATUS.presets.map((p) => ({ ...p, ready: true, why: null })),
+    plan: { ...STATUS.plan, ready: true, why: null } };
+  assert.equal(chipViews(allUp, "route", { project: "seed-library" }).every((c) => !c.disabled), true);  // 33.1: Plan
 });
 
 test("the slot strip offers only the agents status allows, with the preset's own words", () => {
@@ -152,10 +153,14 @@ test("the open chat adds --chat, a project --project, a quick task neither; file
   assert.deepEqual(team, { action: "send", team: "versus", text: "what is 6 times 7", chat: "brief23", slots: { b: "cursor" } });
 });
 
-test("a chip that takes no --project greys the project selector and the chat rides instead", () => {
-  const ctx = contextFor({ ...base, team: "versus", project: "garden-site" }, STATUS);
+test("every team takes --project now, so the project rides and the selector never greys (brief 29.1, decision 28)", () => {
+  for (const team of ["versus", "collab", "vote", "redteam"]) {
+    const ctx = contextFor({ ...base, team, project: "garden-site" }, STATUS);
+    assert.deepEqual([ctx.kind, ctx.projectGreyed], ["project", false], team);
+  }
+  const noPreset = { ...STATUS, presets: STATUS.presets.map((p) => p.name === "versus" ? { ...p, project: false } : p) };
+  const ctx = contextFor({ ...base, team: "versus", project: "garden-site" }, noPreset);  // a team status says no to greys
   assert.deepEqual([ctx.kind, ctx.projectGreyed], ["chat", true]);
-  assert.deepEqual(contextFor({ ...base, team: "redteam", project: "garden-site" }, STATUS).kind, "project");
 });
 
 test("the placeholder names the chain; the Jev box reads not asked on a team and fills on Route", () => {
@@ -179,12 +184,14 @@ test("the poll is 5 s while a task is open or a send is pending, else 60 s", () 
   assert.equal(pollInterval([], 0), 60000);
 });
 
-test("shortcuts: ⌥1–⌥6 the chips, Enter sends, Shift+Enter does not, an IME never sends, ? outside a field", () => {
+test("shortcuts: ⌥1–⌥7 the chips, Enter sends, Shift+Enter does not, an IME never sends, ? outside a field", () => {
   assert.deepEqual(shortcutFor({ altKey: true, code: "Digit4", key: "¢" }), { action: "chip", index: 3 });
   // brief 24 (decision 17): in a text field ⌥-digits type (brackets on German or French layouts), never a chip
   assert.equal(shortcutFor({ altKey: true, code: "Digit5", key: "[" }, { inText: true, inPrompt: true }), null);
   assert.equal(shortcutFor({ altKey: true, metaKey: true, code: "Digit4" }), null);
-  assert.equal(shortcutFor({ altKey: true, code: "Digit7" }), null);
+  assert.deepEqual(shortcutFor({ altKey: true, code: "Digit7" }), { action: "chip", index: 6 });  // brief 29: Split
+  assert.deepEqual(shortcutFor({ altKey: true, code: "Digit8" }), { action: "chip", index: 7 });  // brief 33.1: Plan
+  assert.equal(shortcutFor({ altKey: true, code: "Digit9" }), null);
   assert.deepEqual(shortcutFor({ key: "Enter" }, { inPrompt: true }), { action: "send" });
   assert.deepEqual(shortcutFor({ key: "Enter", metaKey: true }, { inPrompt: true }), { action: "send" });
   assert.equal(shortcutFor({ key: "Enter", shiftKey: true }, { inPrompt: true }), null);
@@ -222,12 +229,13 @@ test("a relay task names its preset, and a stopped chain its stage", () => {
   assert.equal(taskSummary({ ...rb, failed_stage: 2, outcome: "stopped" }).failed, "stopped at stage 2");
 });
 
-test("a split says split and a piece names itself as one, with its parent", () => {
+test("a split says split and a piece names its team and its place, with its parent", () => {
   const split = byState((t) => t.mode === "split");
   const piece = byState((t) => t.mode === "piece");
   assert.equal(taskSummary(split).team, "Split");
-  assert.deepEqual([taskSummary(piece).team, taskSummary(piece).piece, taskSummary(piece).parent],
-    ["Piece of a split", true, piece.parent]);
+  // brief 29 (decision 17): the piece's JSON names its team and its place, so the card does
+  assert.deepEqual([taskSummary(piece).team, taskSummary(piece).piece, taskSummary(piece).parent, taskSummary(piece).pieceOf],
+    ["Route", true, piece.parent, `piece ${piece.piece_of.piece} of split #${piece.piece_of.n}`]);
 });
 
 test("the state says what a task waits on, and the check how it went, with the note", () => {

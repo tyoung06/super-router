@@ -27,6 +27,11 @@ CLAUDE_OPENINGS = (
 # On exit 0 only the plain limit line counts, so an answer that starts the same way stays an answer.
 _CLAUDE_EXIT_0 = re.compile(r"You've hit your [A-Za-z0-9 -]{1,40}? limit(?: · [^\n]*)?")
 CODEX_MARK = "hit your usage limit"   # "You've hit your usage limit. ... try again at <time>."
+# Brief 30 (A4): a Cursor call stopped by the X Subscription's weekly pool. Never seen live: the names are the error codes
+# the installed agent's own code carries for a used-up allowance (2026.10.22-27dcf5f: `FREE_USER_USAGE_LIMIT`,
+# `PRO_USER_USAGE_LIMIT`) and the plain words such a limit is said in. A pool stop is never resumable (rules v2.28): this only
+# picks the refusal's words. [GUESS] until a pool stop is seen.
+CURSOR_POOL = re.compile(r"(?i)usage[_ ]limit|out of usage|weekly limit|weekly pool")
 _TIMEOUT = 30
 
 
@@ -149,3 +154,51 @@ def injected(agent, db_path, *, root, run=subprocess.run):
             return subprocess.CompletedProcess(argv, **_injected_reply(agent, argv))
         return one_shot
     return wrap
+
+
+FAIL_ENV = "SR_INJECT_FAIL"  # build brief 32 (D's step 4): Cursor's next call fails, on a scratch log only
+FAIL_AGENTS = ("cursor",)
+# What the failed call returns: exit 1, nothing on stdout, one line on stderr (never the weekly pool's words)
+_FAILED = {"cursor": {"returncode": 1, "stdout": "", "stderr": "an injected failure for a test (SR_INJECT_FAIL=cursor)\n"}}
+
+
+def failing(agent, db_path, *, root, run=subprocess.run):
+    """The test-only failure hook (build brief 32, D's step 4): returns a function that wraps a subprocess runner so
+    `agent`'s next call ends as a failed call, and every later call goes through. The worker's own reading fails it
+    (`agent exited 1: …`), as it would a real failure. Raises InjectRefused on the real log or for any agent but
+    cursor (Claude's and ChatGPT's stops are the plan-limit hook's)."""
+    if agent not in FAIL_AGENTS:
+        raise InjectRefused(f"{FAIL_ENV} names cursor, not {agent!r}.")
+    if is_real_log(db_path, root=root, run=run):
+        raise InjectRefused(f"{FAIL_ENV} is test-only and works only on a scratch log; this is the real log "
+                            "(router.db in the main checkout), or git could not say which log it is.")
+
+    def wrap(real_run):
+        state = {"used": False}
+
+        def one_shot(argv, **kwargs):
+            if state["used"]:
+                return real_run(argv, **kwargs)
+            state["used"] = True
+            return subprocess.CompletedProcess(argv, **_FAILED[agent])
+        return one_shot
+    return wrap
+
+
+QUESTIONS_ENV = "SR_INJECT_QUESTIONS"  # build brief 33.4 (decision 17): a plan's stage 1 asks, on a scratch log only
+
+
+def questions_injected(value, db_path, *, root, run=subprocess.run):
+    """The test-only questions hook (build brief 33.4, decision 17): `plan` makes this command's new plan answer stage 1
+    with three fixed questions, in place of the model call. Raises InjectRefused on the real log or for any other value."""
+    if value != "plan":
+        raise InjectRefused(f"{QUESTIONS_ENV} names plan, not {value!r}.")
+    if is_real_log(db_path, root=root, run=run):
+        raise InjectRefused(f"{QUESTIONS_ENV} is test-only and works only on a scratch log; this is the real log "
+                            "(router.db in the main checkout), or git could not say which log it is.")
+    return True
+
+
+def cursor_pool(text):
+    """Brief 30 (A4): whether a stopped Cursor call's words (its row's text) say the weekly pool stopped it."""
+    return bool(CURSOR_POOL.search(text or ""))

@@ -1,0 +1,524 @@
+{
+ "api_version": 1,
+ "task_id": "sr-20261019-112552-0032",
+ "n": 45,
+ "created_at": "2026-10-19T11:25:55+00:00",
+ "updated_at": "2026-10-19T11:26:31+00:00",
+ "sent_at": null,
+ "source": "cli",
+ "text": "Make lend() refuse a packet that is out of stock, with a test.",
+ "status": "returned",
+ "waiting_on": "pick",
+ "outcome": null,
+ "reason_code": null,
+ "mode": "relay",
+ "preset": "versus",
+ "parent": null,
+ "project": "swap-shelf",
+ "chat": null,
+ "tag": "project:swap-shelf",
+ "skill": null,
+ "skill_source": null,
+ "agent": null,
+ "checker": null,
+ "check_state": null,
+ "check_note": "awaiting pick",
+ "route_reason": "relay",
+ "failed_stage": null,
+ "web": false,
+ "files": [],
+ "result": null,
+ "result_url": null,
+ "jev": {
+  "status": "not_asked",
+  "label": null,
+  "confidence": null,
+  "tokens": 0,
+  "needs_split": null,
+  "error": null
+ },
+ "slots": {
+  "a": "claude",
+  "b": "chatgpt"
+ },
+ "working": null,
+ "steps": {
+  "chain": [
+   {
+    "stage": 1,
+    "role": "build",
+    "agent": "claude"
+   },
+   {
+    "stage": 2,
+    "role": "build",
+    "agent": "chatgpt"
+   },
+   {
+    "stage": 3,
+    "role": "review",
+    "agent": "chatgpt"
+   },
+   {
+    "stage": 4,
+    "role": "review",
+    "agent": "claude"
+   }
+  ],
+  "now": null
+ },
+ "fallback": {
+  "ok": false,
+  "agent": null,
+  "reason": "not eligible: a file-mode task never falls back; discard it and run it again, or resume a stopped call"
+ },
+ "resume": {
+  "ok": false,
+  "substitute": null,
+  "agent": null,
+  "checker": null,
+  "reason": "it is returned; only a task stopped by a plan limit or by a process that ended can be resumed"
+ },
+ "pid": null,
+ "run_started_at": null,
+ "answered_by": null,
+ "stand_in": null,
+ "filled": null,
+ "card_line": null,
+ "takeover": null,
+ "late": null,
+ "project_files": {
+  "base": "4f2a9c1e5b7d3a8f6c0e2b4d6f8a1c3e5b7d9f0a",
+  "branch": "main",
+  "candidates": {
+   "a": {
+    "agent": "claude",
+    "changed": [
+     {
+      "minus": 0,
+      "path": "loans.py",
+      "plus": 7,
+      "status": "changed"
+     },
+     {
+      "minus": 0,
+      "path": "test_loans.py",
+      "plus": 6,
+      "status": "changed"
+     }
+    ],
+    "copy": true,
+    "copy_id": "sr-20261019-112552-0032-a",
+    "diff": "tasks/sr-20261019-112552-0032/changes-a.diff",
+    "files": 12,
+    "latest": null,
+    "left_out": [],
+    "tests": {
+     "command": [
+      "python3",
+      "-m",
+      "unittest"
+     ],
+     "exit": 0,
+     "outcome": "passed",
+     "output": "tasks/sr-20261019-112552-0032/tests-a.txt",
+     "summary": "OK"
+    }
+   },
+   "b": {
+    "agent": "chatgpt",
+    "changed": [
+     {
+      "minus": 0,
+      "path": "loans.py",
+      "plus": 2,
+      "status": "changed"
+     },
+     {
+      "minus": 0,
+      "path": "test_loans.py",
+      "plus": 6,
+      "status": "changed"
+     }
+    ],
+    "copy": true,
+    "copy_id": "sr-20261019-112552-0032-b",
+    "diff": "tasks/sr-20261019-112552-0032/changes-b.diff",
+    "files": 12,
+    "latest": null,
+    "left_out": [],
+    "tests": {
+     "command": [
+      "python3",
+      "-m",
+      "unittest"
+     ],
+     "exit": 0,
+     "outcome": "passed",
+     "output": "tasks/sr-20261019-112552-0032/tests-b.txt",
+     "summary": "OK"
+    }
+   }
+  },
+  "changed": [],
+  "commit": null,
+  "copy": true,
+  "diff": null,
+  "files": 12,
+  "latest": null,
+  "left_out": [],
+  "mode": "on",
+  "state": "none",
+  "tests": null,
+  "undo_commit": null,
+  "versus": true,
+  "why": null
+ },
+ "notes": [],
+ "open_musts": [],
+ "land_anyway": false,
+ "no_split": null,
+ "piece_of": null,
+ "router_notes": {
+  "hash": "8b61a57199701a87",
+  "chars": 330,
+  "file": "tasks/sr-20261019-112552-0032/router-notes.md"
+ },
+ "spec": null,
+ "forgotten": null,
+ "save_path": null,
+ "text_only": false,
+ "save_spec": null,
+ "card_actions": {
+  "pin": false,
+  "save": false,
+  "forget": false,
+  "remember": false
+ },
+ "next": [],
+ "from": null,
+ "idea": null,
+ "plan": null,
+ "plan_step": null,
+ "one_step": null,
+ "questions": null,
+ "models": null,
+ "auto": null,
+ "calls": [
+  {
+   "call_id": "sr-20261019-112552-0032-s1",
+   "order": 1,
+   "kind": "stage",
+   "stage": 1,
+   "role": "build",
+   "agent": "claude",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T11:26:04+00:00",
+   "finished_at": "2026-10-19T11:26:07+00:00",
+   "round_file": "tasks/sr-20261019-112552-0032/01-build-a-claude.md",
+   "served": {
+    "asked": "claude-sonnet-5-5",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/models.json",
+    "key": null,
+    "layer": "agent",
+    "model": "claude-sonnet-5-5",
+    "note": null,
+    "source": "stream: init and modelUsage",
+    "time_limit": 600
+   },
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "off (probe not passed)",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 348,
+    "from": "sr-20261019-112552-0032",
+    "judge": false,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "claude": 25
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-112552-0032/01-build-a-claude-prompt.md",
+   "model": "claude-sonnet-5-5",
+   "effort": null,
+   "time_limit": 600
+  },
+  {
+   "call_id": "sr-20261019-112552-0032-s2",
+   "order": 2,
+   "kind": "stage",
+   "stage": 2,
+   "role": "build",
+   "agent": "chatgpt",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T11:26:10+00:00",
+   "finished_at": "2026-10-19T11:26:13+00:00",
+   "round_file": "tasks/sr-20261019-112552-0032/02-build-b-chatgpt.md",
+   "served": {
+    "asked": "gpt-6.1-sol",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/agents.json",
+    "key": null,
+    "layer": "agent",
+    "model": "gpt-6.1-sol",
+    "note": null,
+    "source": "codex header",
+    "time_limit": 600
+   },
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "allowed",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 372,
+    "from": "sr-20261019-112552-0032",
+    "judge": false,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "chatgpt": 49
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-112552-0032/02-build-b-chatgpt-prompt.md",
+   "model": "gpt-6.1-sol",
+   "effort": null,
+   "time_limit": 600
+  },
+  {
+   "call_id": "sr-20261019-112552-0032-s3",
+   "order": 3,
+   "kind": "stage",
+   "stage": 3,
+   "role": "review",
+   "agent": "chatgpt",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T11:26:16+00:00",
+   "finished_at": "2026-10-19T11:26:19+00:00",
+   "round_file": "tasks/sr-20261019-112552-0032/03-review-a-chatgpt.md",
+   "served": {
+    "asked": "gpt-6.1-sol",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/agents.json",
+    "key": null,
+    "layer": "agent",
+    "model": "gpt-6.1-sol",
+    "note": null,
+    "source": "codex header",
+    "time_limit": 600
+   },
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "allowed",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 603,
+    "from": "sr-20261019-112552-0032",
+    "judge": true,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "chatgpt": 49
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-112552-0032/03-review-a-chatgpt-prompt.md",
+   "model": "gpt-6.1-sol",
+   "effort": null,
+   "time_limit": 600
+  },
+  {
+   "call_id": "sr-20261019-112552-0032-s4",
+   "order": 4,
+   "kind": "stage",
+   "stage": 4,
+   "role": "review",
+   "agent": "claude",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T11:26:22+00:00",
+   "finished_at": "2026-10-19T11:26:25+00:00",
+   "round_file": "tasks/sr-20261019-112552-0032/04-review-b-claude.md",
+   "served": {
+    "asked": "claude-sonnet-5-5",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/models.json",
+    "key": null,
+    "layer": "agent",
+    "model": "claude-sonnet-5-5",
+    "note": null,
+    "source": "stream: init and modelUsage",
+    "time_limit": 600
+   },
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "off (probe not passed)",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 579,
+    "from": "sr-20261019-112552-0032",
+    "judge": true,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "claude": 25
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-112552-0032/04-review-b-claude-prompt.md",
+   "model": "claude-sonnet-5-5",
+   "effort": null,
+   "time_limit": 600
+  }
+ ],
+ "handoff": {
+  "attached": true,
+  "lines": 2,
+  "total": 2,
+  "left_out": false
+ },
+ "memory_stored": [],
+ "memory_given": [],
+ "candidates": [
+  {
+   "letter": "a",
+   "stage": 1,
+   "builder": "claude",
+   "text": "lend() now checks the packet's stock first and raises OutOfStock; a test lends the last packet twice.\n\n## Handoff\n### Produced\nloans.py and test_loans.py changed\n### Status\nlend() refuses an empty packet.\n### Next\nPick one.",
+   "missing": null,
+   "round_file": "tasks/sr-20261019-112552-0032/01-build-a-claude.md",
+   "review": {
+    "stage": 3,
+    "reviewer": "chatgpt",
+    "verdict": "pass",
+    "notes": "- Wrong: nothing.\n- Strong: the error names the packet.",
+    "round_file": "tasks/sr-20261019-112552-0032/03-review-a-chatgpt.md"
+   }
+  },
+  {
+   "letter": "b",
+   "stage": 2,
+   "builder": "chatgpt",
+   "text": "lend() returns False for a packet with no stock left, and a test covers it.\n\n## Handoff\n### Produced\nloans.py and test_loans.py changed\n### Status\nlend() says no to an empty packet.\n### Next\nPick one.",
+   "missing": null,
+   "round_file": "tasks/sr-20261019-112552-0032/02-build-b-chatgpt.md",
+   "review": {
+    "stage": 4,
+    "reviewer": "claude",
+    "verdict": "pass",
+    "notes": "- Wrong: nothing.\n- Strong: no exception for the caller to catch.",
+    "round_file": "tasks/sr-20261019-112552-0032/04-review-b-claude.md"
+   }
+  }
+ ],
+ "pick": null,
+ "votes": null,
+ "tally": null,
+ "attacks": null,
+ "pieces": null,
+ "join": null,
+ "estimate": null,
+ "menu": null,
+ "original_file": null,
+ "result_file": null,
+ "from_given": null
+}

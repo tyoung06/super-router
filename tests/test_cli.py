@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+from router import checking
 from router import __main__ as cli
 from router import log, safety
 from tests.helpers import add_row, shipped_roster, fake_label
@@ -114,7 +115,8 @@ def test_route_grok_override_sends_and_logs_sent(conn):
     assert (row["status"], row["agent"], row["route_reason"]) == ("sent", "grok", "override")
     assert row["run_uuid"] == "uuid-abc" and row["sent_at"]
     assert row["task"] == "Reply with the word pong"
-    assert post.calls[0][1]["json"] == {"task_id": row["task_id"], "task": "Reply with the word pong"}
+    assert post.calls[0][1]["json"] == {"task_id": row["task_id"],  # brief 29.1 (decision 20): the deliverable line
+                                        "task": "Reply with the word pong\n\n" + checking.DELIVERABLE_LINE}
     assert row["task_id"] in out
 
 
@@ -144,7 +146,7 @@ def test_route_claude_logs_done_with_redacted_result(conn):
     assert code == 0
     assert (row["status"], row["agent"], row["route_reason"]) == ("done", "claude", "best")
     assert row["result"] == "answer with [REDACTED] inside"
-    assert worker.calls[0][0] == ("explain venvs",)
+    assert worker.calls[0][0] == ("explain venvs\n\n" + checking.DELIVERABLE_LINE,)  # brief 29.1 (decision 20)
     assert "FAKE-KEY-123" not in out
 
 

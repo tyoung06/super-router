@@ -3,7 +3,7 @@
  "task_id": "sr-20261019-092100-0005",
  "n": 5,
  "created_at": "2026-10-19T09:21:03+00:00",
- "updated_at": "2026-10-19T09:21:21+00:00",
+ "updated_at": "2026-10-19T09:21:33+00:00",
  "sent_at": null,
  "source": "cli",
  "text": "A 25-word blurb for a bakery's new rye loaf.",
@@ -42,6 +42,31 @@
   "b": "chatgpt"
  },
  "working": null,
+ "steps": {
+  "chain": [
+   {
+    "stage": 1,
+    "role": "build",
+    "agent": "claude"
+   },
+   {
+    "stage": 2,
+    "role": "build",
+    "agent": "chatgpt"
+   },
+   {
+    "stage": 3,
+    "role": "review",
+    "agent": "chatgpt"
+   },
+   {
+    "stage": 4,
+    "role": "review",
+    "agent": "claude"
+   }
+  ],
+  "now": null
+ },
  "fallback": {
   "ok": false,
   "agent": null,
@@ -62,6 +87,37 @@
  "card_line": null,
  "takeover": null,
  "late": null,
+ "project_files": null,
+ "notes": [],
+ "open_musts": [],
+ "land_anyway": false,
+ "no_split": null,
+ "piece_of": null,
+ "router_notes": {
+  "hash": "8b61a57199701a87",
+  "chars": 330,
+  "file": "tasks/sr-20261019-092100-0005/router-notes.md"
+ },
+ "spec": null,
+ "forgotten": null,
+ "save_path": null,
+ "text_only": false,
+ "save_spec": null,
+ "card_actions": {
+  "pin": false,
+  "save": false,
+  "forget": false,
+  "remember": false
+ },
+ "next": [],
+ "from": null,
+ "idea": null,
+ "plan": null,
+ "plan_step": null,
+ "one_step": null,
+ "questions": null,
+ "models": null,
+ "auto": null,
  "calls": [
   {
    "call_id": "sr-20261019-092100-0005-s1",
@@ -73,9 +129,23 @@
    "status": "done",
    "verdict": null,
    "sent_at": "2026-10-19T09:21:09+00:00",
-   "finished_at": "2026-10-19T09:21:09+00:00",
+   "finished_at": "2026-10-19T09:21:12+00:00",
    "round_file": "tasks/sr-20261019-092100-0005/01-build-a-claude.md",
-   "served": null,
+   "served": {
+    "asked": "claude-sonnet-5-5",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/models.json",
+    "key": null,
+    "layer": "agent",
+    "model": "claude-sonnet-5-5",
+    "note": null,
+    "source": "stream: init and modelUsage",
+    "time_limit": 600
+   },
    "reason_code": null,
    "resume_of": null,
    "fallback_of": null,
@@ -90,8 +160,30 @@
     "found": null,
     "from": null,
     "with": null,
-    "limit": null
-   }
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 348,
+    "from": "sr-20261019-092100-0005",
+    "judge": false,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "claude": 25
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-092100-0005/01-build-a-claude-prompt.md",
+   "model": "claude-sonnet-5-5",
+   "effort": null,
+   "time_limit": 600
   },
   {
    "call_id": "sr-20261019-092100-0005-s2",
@@ -102,10 +194,24 @@
    "agent": "chatgpt",
    "status": "done",
    "verdict": null,
-   "sent_at": "2026-10-19T09:21:12+00:00",
-   "finished_at": "2026-10-19T09:21:12+00:00",
+   "sent_at": "2026-10-19T09:21:15+00:00",
+   "finished_at": "2026-10-19T09:21:18+00:00",
    "round_file": "tasks/sr-20261019-092100-0005/02-build-b-chatgpt.md",
-   "served": null,
+   "served": {
+    "asked": "gpt-6.1-sol",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/agents.json",
+    "key": null,
+    "layer": "agent",
+    "model": "gpt-6.1-sol",
+    "note": null,
+    "source": "codex header",
+    "time_limit": 600
+   },
    "reason_code": null,
    "resume_of": null,
    "fallback_of": null,
@@ -120,8 +226,30 @@
     "found": null,
     "from": null,
     "with": null,
-    "limit": null
-   }
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 372,
+    "from": "sr-20261019-092100-0005",
+    "judge": false,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "chatgpt": 49
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-092100-0005/02-build-b-chatgpt-prompt.md",
+   "model": "gpt-6.1-sol",
+   "effort": null,
+   "time_limit": 600
   },
   {
    "call_id": "sr-20261019-092100-0005-s3",
@@ -132,10 +260,24 @@
    "agent": "chatgpt",
    "status": "done",
    "verdict": null,
-   "sent_at": "2026-10-19T09:21:15+00:00",
-   "finished_at": "2026-10-19T09:21:15+00:00",
+   "sent_at": "2026-10-19T09:21:21+00:00",
+   "finished_at": "2026-10-19T09:21:24+00:00",
    "round_file": "tasks/sr-20261019-092100-0005/03-review-a-chatgpt.md",
-   "served": null,
+   "served": {
+    "asked": "gpt-6.1-sol",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/agents.json",
+    "key": null,
+    "layer": "agent",
+    "model": "gpt-6.1-sol",
+    "note": null,
+    "source": "codex header",
+    "time_limit": 600
+   },
    "reason_code": null,
    "resume_of": null,
    "fallback_of": null,
@@ -150,8 +292,30 @@
     "found": null,
     "from": null,
     "with": null,
-    "limit": null
-   }
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 603,
+    "from": "sr-20261019-092100-0005",
+    "judge": true,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "chatgpt": 49
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-092100-0005/03-review-a-chatgpt-prompt.md",
+   "model": "gpt-6.1-sol",
+   "effort": null,
+   "time_limit": 600
   },
   {
    "call_id": "sr-20261019-092100-0005-s4",
@@ -162,10 +326,24 @@
    "agent": "claude",
    "status": "done",
    "verdict": null,
-   "sent_at": "2026-10-19T09:21:18+00:00",
-   "finished_at": "2026-10-19T09:21:18+00:00",
+   "sent_at": "2026-10-19T09:21:27+00:00",
+   "finished_at": "2026-10-19T09:21:30+00:00",
    "round_file": "tasks/sr-20261019-092100-0005/04-review-b-claude.md",
-   "served": null,
+   "served": {
+    "asked": "claude-sonnet-5-5",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/models.json",
+    "key": null,
+    "layer": "agent",
+    "model": "claude-sonnet-5-5",
+    "note": null,
+    "source": "stream: init and modelUsage",
+    "time_limit": 600
+   },
    "reason_code": null,
    "resume_of": null,
    "fallback_of": null,
@@ -180,8 +358,30 @@
     "found": null,
     "from": null,
     "with": null,
-    "limit": null
-   }
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 579,
+    "from": "sr-20261019-092100-0005",
+    "judge": true,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "claude": 25
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-092100-0005/04-review-b-claude-prompt.md",
+   "model": "claude-sonnet-5-5",
+   "effort": null,
+   "time_limit": 600
   }
  ],
  "handoff": null,
@@ -225,6 +425,9 @@
  "attacks": null,
  "pieces": null,
  "join": null,
+ "estimate": null,
+ "menu": null,
  "original_file": null,
- "result_file": null
+ "result_file": null,
+ "from_given": null
 }

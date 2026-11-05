@@ -82,7 +82,7 @@ def test_a_quick_answer_stopped_on_claude_is_answered_by_chatgpt_with_no_check(c
     assert (row["status"], row["result"], row["agent"], row["checker"], row["check_state"]) == (
         "done", "an answer from chatgpt", "chatgpt", None, "not_needed")
     # what claude was sent, plus the search line: the substitute's own search (rules v2.22) follows the Web search rules
-    assert chat.prompts == [f"{ROUTE_TASK}\n\n{checking.SEARCH_LINE_GENERAL}"]
+    assert chat.prompts == [f"{ROUTE_TASK}\n\n{checking.DELIVERABLE_LINE}\n\n{checking.SEARCH_LINE_GENERAL}"]  # 29.1
     assert worker.prompts == []
     assert _calls(conn, row) == [("<id>", "do", "claude", "failed", "plan_limit", None),
                                  ("-resume", "do", "chatgpt", "done", None, "<id>")]
@@ -178,7 +178,7 @@ def test_a_relay_build_stage_stopped_on_claude_is_built_by_chatgpt_then_checked_
     code, out, row, worker, chat = _resume(conn, row, worker=Scripted("PASS"), chatgpt=Chat("a built summary"))
     assert code == 0, out
     # the stage prompt claude was sent, with the search line: ChatGPT searches on this stage (brief 8, the amendment)
-    assert chat.prompts == [relay.prompt_for("build", TASK, GOOD_NOTE, search=True)]
+    assert [less_next(p) for p in chat.prompts] == [relay.prompt_for("build", TASK, GOOD_NOTE, search=True)]
     # Brief 8 (the owner's amendment): search follows preset and role, whichever agent builds, so ChatGPT searches.
     assert chat.kwargs[0]["web_search"] == "live"
     assert "a built summary" in worker.prompts[0]
@@ -321,6 +321,7 @@ def test_reopen_is_only_for_a_failed_or_done_task_and_refuses_a_self_check(conn)
 # ---------- main wiring ----------
 
 from tests.test_relay import real_main  # noqa: E402,F401  (the fixture)
+from tests.helpers import less_next
 
 
 def test_main_resume_refuses_a_task_that_does_not_exist(real_main, capsys):

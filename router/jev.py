@@ -67,6 +67,28 @@ def ask_jev(task_text, *, seed, table, client):
     }
 
 
+def floor_of(roster, tagged):
+    """Brief 29.1 (decision 24): the floor a task's label is judged against: 0.4 on a task with --project or --chat (the
+    skill table's `tagged_min_confidence`), else the 0.8 floor."""
+    lab = roster.labeler
+    return lab.get("tagged_min_confidence", lab["min_confidence"]) if tagged else lab["min_confidence"]
+
+
+def judge(answer, roster, *, tagged):
+    """Jev's answer with its status judged against the task's own floor (decision 24), so `below_floor` never sits on a
+    task that routed: only an ok, below-floor or none-of-these answer is judged again; any other comes back as it is."""
+    if not tagged or answer.get("status") not in ("ok", "below_floor", "none_of_these"):
+        return answer
+    lab, confidence = roster.labeler, float(answer.get("confidence") or 0)
+    if confidence < floor_of(roster, True):
+        status = "below_floor"
+    elif answer.get("label") == lab["fallback_label"]:
+        status = "none_of_these"
+    else:
+        status = "ok"
+    return {**answer, "status": status}
+
+
 def label(task_text, *, task_id, roster, api_key, tokens_this_month, make_client=make_client):
     """Label one task. Returns what log.add_task stores: status, label, confidence,
     needs_split, tokens, error. The option order is shuffled with the task_id as the seed,

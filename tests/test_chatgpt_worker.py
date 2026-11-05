@@ -35,7 +35,9 @@ class CodexFake:
             raise self.raises
         if self.write_file and "--output-last-message" in argv:
             Path(argv[argv.index("--output-last-message") + 1]).write_text(self.answer)
-        return subprocess.CompletedProcess(argv, self.returncode, "", self.stderr)
+        # brief 33.3: codex's own header, as `codex exec` prints it before the work (the model it was configured with)
+        header = f"OpenAI Codex v0.162.1\n--------\nworkdir: /x\nmodel: {argv[argv.index('--model') + 1]}\nprovider: openai\n"
+        return subprocess.CompletedProcess(argv, self.returncode, header, self.stderr)
 
 
 def _pairs(argv):
@@ -199,3 +201,93 @@ def test_login_status_sees_only_the_four_names(monkeypatch):
     good = FakeRun(stdout="Logged in using ChatGPT")
     chatgpt_worker.login_status(run=good, environ={**ENVIRON, "OPENAI_API_KEY": "sk-FAKE"})
     assert "OPENAI_API_KEY" not in good.calls[0][1]["env"]
+
+
+# ---------- brief 33.3 (rules 2.48, Models): the choice, the effort flag, the time limit, the served record ----------
+
+def test_without_a_choice_the_call_runs_on_the_pin_with_no_effort_and_keeps_the_header_model():
+    from router import models
+    run = CodexFake("the answer")
+    answer = chatgpt_worker.run("hi", model=MODEL, web_search="disabled", run=run, environ=ENVIRON)
+    argv, kw = run.calls[0]
+    assert ("--model", MODEL) in _pairs(argv) and not any(v.startswith("model_reasoning_effort") for _, v in _pairs(argv))
+    assert kw["timeout"] == 600
+    assert answer == "the answer"
+    assert answer.served["asked"] == MODEL and answer.served["model"] == MODEL and answer.served["source"] == "codex header"
+    assert answer.served["credits"] == {"seen": False} and answer.served["differs"] is False and answer.served["file"] == models.AGENTS_NAME
+
+
+def test_the_choice_sets_the_model_the_effort_as_codexs_config_key_and_the_time_limit():
+    from router import models
+    choice = models.Choice("chatgpt", "gpt-6-astra", effort="xhigh", timeout=900, layer="stage", key="redteam.2",
+                           file="config/models.local.json")
+    run = CodexFake("ok")
+    answer = chatgpt_worker.run("hi", model=MODEL, web_search="live", run=run, environ=ENVIRON, choice=choice)
+    argv, kw = run.calls[0]
+    assert ("--model", "gpt-6-astra") in _pairs(argv) and ("-c", 'model_reasoning_effort="xhigh"') in _pairs(argv)
+    assert kw["timeout"] == 900 and argv[-1] == "-"
+    assert (answer.served["asked"], answer.served["model"], answer.served["effort"], answer.served["time_limit"],
+            answer.served["layer"], answer.served["key"]) == ("gpt-6-astra", "gpt-6-astra", "xhigh", 900, "stage", "redteam.2")
+
+
+def test_a_failed_call_keeps_its_served_record_and_a_timeout_names_its_own_limit():
+    from router import models
+    run = CodexFake(returncode=1, stderr="boom")
+    with pytest.raises(chatgpt_worker.WorkerError) as err:
+        chatgpt_worker.run("hi", model=MODEL, web_search="disabled", run=run, environ=ENVIRON)
+    assert err.value.served["model"] == MODEL
+    with pytest.raises(chatgpt_worker.WorkerError, match="timed out after 900 s"):
+        chatgpt_worker.run("hi", model=MODEL, web_search="disabled", run=CodexFake(raises=subprocess.TimeoutExpired(["codex"], 900)),
+                           environ=ENVIRON, choice=models.Choice("chatgpt", MODEL, timeout=900))
+
+
+def test_a_header_with_no_model_line_reads_served_unknown():
+    class Bare(CodexFake):
+        def __call__(self, argv, **kwargs):
+            proc = super().__call__(argv, **kwargs)
+            return subprocess.CompletedProcess(argv, proc.returncode, "", proc.stderr)
+    answer = chatgpt_worker.run("hi", model=MODEL, web_search="disabled", run=Bare("x"), environ=ENVIRON)
+    assert answer.served["model"] is None and answer.served["source"] is None and answer.served["asked"] == MODEL
+
+
+# ---------- Cleanup 1 (2.1): a failure names its cause, never the prompt's end ----------
+
+CAPACITY = "ERROR: Selected model is at capacity. Please try a different model."
+ECHOED = "Check the note on the seed trays.\n\nJudge it against what it says is done.\nThe doer read a copy of the files."
+
+
+def _failure(stderr, prompt=ECHOED, code=1):
+    with pytest.raises(chatgpt_worker.WorkerError) as err:
+        chatgpt_worker.run(prompt, model=MODEL, web_search="disabled", run=CodexFake(returncode=code, stderr=stderr), environ=ENVIRON)
+    return str(err.value)
+
+
+def test_a_capacity_error_names_itself_once_and_holds_no_prompt_text():
+    """The recorded shape (#159): Codex's stderr ends in the prompt, then the same ERROR line twice."""
+    text = _failure(f"{ECHOED}\n{CAPACITY}\n{CAPACITY}\n")
+    assert text == f"codex exited 1: {CAPACITY}"
+
+
+def test_several_different_errors_are_all_named_in_order():
+    assert _failure(f"reading things\nERROR: first\n{ECHOED}\nERROR: second\nERROR: first\n") == "codex exited 1: ERROR: first; ERROR: second"
+
+
+def test_an_error_line_inside_the_prompt_is_the_prompts_and_never_the_cause():
+    prompt = "Why does this print\nERROR: the seed tray is empty\nwhen I run it?"
+    assert _failure(f"{prompt}\n{CAPACITY}\n", prompt=prompt) == f"codex exited 1: {CAPACITY}"
+
+
+def test_no_error_line_keeps_todays_tail():
+    stderr = "x" * 400 + "the end of it"
+    assert _failure(stderr) == "codex exited 1: " + stderr[-300:]
+
+
+def test_a_lower_case_or_mid_line_error_is_not_an_error_line():
+    assert _failure("an ERROR: in a sentence\nerror: lower\n") == "codex exited 1: an ERROR: in a sentence\nerror: lower"
+
+
+def test_the_cause_survives_to_the_tasks_note():
+    """The row's text and the check's note, as `checking.next_step` reads a failed check."""
+    from router import checking
+    call = {"status": "failed", "text": f"codex exited 1: {CAPACITY}", "kind": "check"}
+    assert CAPACITY in checking._why_not_run(call)

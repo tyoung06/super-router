@@ -72,7 +72,7 @@
  "project_usage": {
   "exit": 2,
   "lines": [
-   "Refused: sr project add|list|remove|new (add <name> <path>; remove <name>; new <name> [--dry-run] [-- '<notes>']). Nothing was changed."
+   "Refused: sr project add|list|remove|new|tests|test|run-command|run|stop|secrets|files|git|notes|pin|save (add <name> <path>; remove <name>; new <name> [--dry-run] [-- '<notes>']; tests <name> [-- '<command>' | --clear]; test <name> [--status]; run-command <name> [-- '<command>' | --clear]; run <name> [--status]; stop <name>; secrets <name> [--set <NAME> (the value on stdin) | --remove <NAME>]; files <name> --file <path>...; git <name> [--dry-run]; notes <name> [--save [--expect <hash>] -- '<notes>']; pin <name> --task <id> -- '<text>'; save <name> --task <id> --path <path>). Nothing was changed."
   ]
  },
  "relay_refused_no_preset": {
@@ -169,7 +169,7 @@
    "sr-20261020-000000-0001 done by claude:",
    "Draft two.",
    "NOT PASSED: after one fix round. What the checker still wants fixed:",
-   "1. It still does not rhyme.",
+   "1. Make it rhyme. (not fixed: It still does not rhyme.)",
    "Run: sr fallback 1  (chatgpt redoes it; claude checks)"
   ]
  },
@@ -276,15 +276,23 @@
  "split_plan_without_a_terminal": {
   "exit": 0,
   "lines": [
-   "sr-20261020-000000-0001: split: claude plans 2 to 4 pieces; you approve them; each runs as its own routed task; claude joins the results; chatgpt checks.",
+   "sr-20261020-000000-0001: split: claude plans 2 to 4 pieces, each with its team; you approve them; they run one at a time; claude joins the results; chatgpt checks.",
    "Plan ready: 2 pieces.",
    "Task 1 · split · plan",
    "",
-   "1. List three garden seed tray brands.  → writing · claude / chatgpt",
-   "2. Write a haiku about trays.  → writing · claude / chatgpt",
+   "1. List three garden seed tray brands.",
+   "   team: route → writing · claude / chatgpt",
+   "   why: One writer and a checker are enough.",
+   "   Jev: writing 0.93",
+   "2. Write a haiku about trays.",
+   "   team: route → writing · claude / chatgpt",
+   "   why: One writer and a checker are enough.",
+   "   Jev: writing 0.93",
    "Join: Put the list above the haiku.",
+   "About 6 agent calls from here, up to 12 with fix rounds.",
+   "Jev: 2 labels so far; an edited text adds one",
    "",
-   "No terminal to ask in. Approve it in Terminal: sr split --go 1"
+   "The plan waits for your approval: sr split --go 1 --answer y|n"
   ]
  }
 }

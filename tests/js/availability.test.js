@@ -108,7 +108,7 @@ test("without Jev, Route asks for the skill before Send, and the request carries
   assert.equal(skillPick({ ...base, team: "collab" }, STATUS).needed, false);                     // a team names its agents
   const withJev = { ...STATUS, jev: { ...STATUS.jev, available: true, why: null } };
   assert.equal(skillPick({ ...base, skill: "planning" }, withJev).needed, false);
-  assert.equal(sendRequest({ ...base, skill: "planning" }, withJev).skill, undefined);
+  assert.equal(sendRequest({ ...base, skill: "planning" }, withJev).skill, "planning");  // UI A row 1 (A13): a skill on any routed task
 });
 
 test("the skill picker says which skills need Grok Bot, in status's words, and keeps them pickable", () => {

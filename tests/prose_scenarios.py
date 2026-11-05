@@ -9,7 +9,7 @@ import re
 
 from router import __main__ as cli
 from router import ids, log, presets, projects, relay
-from tests.helpers import add_row, fake_label, shipped_roster
+from tests.helpers import add_row, fake_label, shipped_roster, teamed
 from tests.test_loop import Clock, Scripted, Webhook
 from tests.test_relay import Chat, RelayHook
 
@@ -27,7 +27,7 @@ A_TEXT = "CANDIDATE-A: the SimTee adjusts to any height on any mat."
 B_TEXT = "CANDIDATE-B: one tray, every mat, every height."
 REVIEW_OF_A = "## Verdict\npass\n\n## Notes\n- Wrong: nothing.\n- Strong: clear."
 REVIEW_OF_B = "## Verdict\nfail\n\n## Notes\n- Wrong: it invents a spec.\n- Strong: short."
-PLAN = "## Pieces\n1. List three garden seed tray brands.\n2. Write a haiku about trays.\n\n## Join\nPut the list above the haiku."
+PLAN = teamed("## Pieces\n1. List three garden seed tray brands.\n2. Write a haiku about trays.\n\n## Join\nPut the list above the haiku.")  # brief 29
 
 
 def vote_answer(answer):

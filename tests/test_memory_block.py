@@ -88,6 +88,10 @@ def _block(entries, tag=TAG, cap=2000):
     return memory.render(tag, entries, cap)
 
 
+L = context.MEMORY_USE_LINE + "\n\n"  # brief 29.1 (decision 20): the line every call with a block gets, before it
+DOER = f"{TASK}\n\n{checking.DELIVERABLE_LINE}\n\n{checking.NEXT_LINE}"  # brief 29.1 (decision 20) and 33 (5)
+
+
 def _attach(conn, row, fake, agent="claude", limit=None, prompt="p", reuse=None):
     return context.attach(prompt, row, agent, [SECRET], limit=limit, conn=conn, hindsight=fake.client, reuse=reuse)
 
@@ -101,8 +105,8 @@ def test_entry_one_is_the_newest_delivered_task_from_the_log_even_when_recall_om
     fake = FakeHindsight(results=[FakeHindsight.result("task-sr-1", "whatever the store holds", tags=[TAG])])
     prompt, record, mem = _attach(conn, running, fake)
     block = _block([_entry(two), _entry(one)])
-    assert prompt == "p\n\n" + block and record is None
-    assert mem == {"tag": TAG, "found": 2, "sent": 2, "text": block}
+    assert prompt == "p\n\n" + L + block and record is None
+    assert mem == {"tag": TAG, "found": 2, "sent": 2, "text": block, "query": "Write two lines about seed trays.\nsecond task"}  # brief 30 (A3): the query kept
     assert "whatever the store holds" not in prompt  # the entry's text is the log's, never the chunk
 
 
@@ -112,7 +116,7 @@ def test_the_task_being_run_is_never_in_its_own_block(conn):
     log.add_call(conn, "sr-run", "sr-run", "do", "claude", status="done", text="half done")
     fake = FakeHindsight(results=[FakeHindsight.result("task-sr-run", "x", tags=[TAG]), FakeHindsight.result("task-sr-1", "y", tags=[TAG])])
     prompt, _, mem = _attach(conn, running, fake)
-    assert prompt == "p\n\n" + _block([_entry(one)]) and mem["found"] == 1
+    assert prompt == "p\n\n" + L + _block([_entry(one)]) and mem["found"] == 1
 
 
 def test_a_memory_from_another_tag_or_untagged_never_appears_and_the_request_says_so(conn):
@@ -124,8 +128,10 @@ def test_a_memory_from_another_tag_or_untagged_never_appears_and_the_request_say
                                   FakeHindsight.result("task-sr-u", "u", tags=[]),
                                   FakeHindsight.result("task-sr-1", "f", tags=[TAG])])
     prompt, _, mem = _attach(conn, running, fake)
-    assert prompt == "p\n\n" + _block([_entry(one)]) and mem["found"] == 1
-    assert fake.recalls == [{"query": TASK, "tags": [TAG], "tags_match": "any_strict", "max_tokens": 2000, "budget": "low"}]
+    assert prompt == "p\n\n" + L + _block([_entry(one)]) and mem["found"] == 1
+    # brief 29.1 (decision 26): the query is this task's text and the newest delivered task's
+    assert fake.recalls == [{"query": f"{TASK}\nfirst task", "tags": [TAG], "tags_match": "any_strict", "max_tokens": 2000,
+                             "budget": "low"}]
 
 
 def test_a_non_storable_source_task_is_dropped_and_a_picked_fail_candidate_is_kept_with_its_status(conn):
@@ -139,26 +145,29 @@ def test_a_non_storable_source_task_is_dropped_and_a_picked_fail_candidate_is_ke
     fake = FakeHindsight(results=[FakeHindsight.result(f"task-{t}", "x", tags=[TAG]) for t in ("sr-f", "sr-un", "sr-open", "sr-q", "sr-v")])
     prompt, _, mem = _attach(conn, running, fake)
     expected = _block([_entry(picked, "picked a; review by chatgpt: fail"), _entry(quick, "not_needed")])
-    assert prompt == "p\n\n" + expected and mem["found"] == 2
+    assert prompt == "p\n\n" + L + expected and mem["found"] == 2
     assert "### #5 · " in expected and " · versus · claude · picked a; review by chatgpt: fail\n" in expected
     assert " · quick_answer · claude · not_needed\n" in expected
 
 
 def test_a_matching_chunk_is_shown_and_an_unmatched_one_gives_the_content_head(conn):
     """The owner's refinement after Phase F: when Hindsight's chunk text is a byte-for-byte substring of the task's content
-    from the log, the entry shows the chunk; otherwise the content's head, as before. Entry one, from the log, is always
-    the head, even when recall returns one of its chunks."""
+    from the log, the entry shows the chunk; otherwise the content's head, as before. The newest three, from the log, are
+    always heads (brief 29.1, decision 25: never ranked), even when recall returns one of their chunks."""
     para1, para2 = "first paragraph about trays " * 4, "second paragraph about mats " * 4
     a = _done(conn, "sr-a", "task a", f"{para1.strip()}\n\n{para2.strip()}", at=T0)
+    x = _done(conn, "sr-x", "task x", "result x", at=T0 + timedelta(minutes=30))
     b = _done(conn, "sr-b", "task b", "result b", at=T0 + timedelta(hours=1))
+    c = _done(conn, "sr-c2", "task c2", "result c2", at=T0 + timedelta(hours=1, minutes=30))
     newest = _done(conn, "sr-c", "task c", "result c, one line\n\nresult c, second line", at=T0 + timedelta(hours=2))
     running = _queued(conn)
     fake = FakeHindsight(results=[FakeHindsight.result("task-sr-a", para2.strip(), tags=[TAG]),            # a substring: shown
-                                  FakeHindsight.result("task-sr-b", "a paraphrase the log never held", tags=[TAG]),  # not: the head
-                                  FakeHindsight.result("task-sr-c", "result c, second line", tags=[TAG])])   # entry one: the head
+                                  FakeHindsight.result("task-sr-x", "a paraphrase the log never held", tags=[TAG]),  # not: the head
+                                  FakeHindsight.result("task-sr-c", "result c, second line", tags=[TAG])])   # a newest: the head
     prompt, _, mem = _attach(conn, running, fake)
     chunk_entry = memory.Entry(a["n"], memory.local_date(a["updated_at"]), "writing", "claude", None, para2.strip())
-    assert prompt == "p\n\n" + _block([_entry(newest), _entry(b), chunk_entry]) and mem["found"] == 3
+    want = [_entry(newest), _entry(c), _entry(b), _entry(x), chunk_entry]
+    assert prompt == "p\n\n" + L + _block(want) and mem["found"] == 5
     assert "a paraphrase the log never held" not in prompt and para1.strip() not in prompt
 
 
@@ -167,7 +176,8 @@ def test_duplicates_by_task_number_keep_the_first(conn):
     running = _queued(conn)
     fake = FakeHindsight(results=[FakeHindsight.result("task-sr-1", "chunk 1", tags=[TAG]), FakeHindsight.result("task-sr-1", "chunk 2", tags=[TAG])])
     prompt, _, mem = _attach(conn, running, fake)
-    assert prompt == "p\n\n" + _block([_entry(one)]) and mem == {"tag": TAG, "found": 1, "sent": 1, "text": _block([_entry(one)])}
+    assert prompt == "p\n\n" + L + _block([_entry(one)]) and mem == {"tag": TAG, "found": 1, "sent": 1, "text": _block([_entry(one)]),
+                                                                  "query": "Write two lines about seed trays.\nfirst task"}
 
 
 def test_a_flagged_memory_is_dropped_and_the_record_names_its_number(conn):
@@ -178,7 +188,7 @@ def test_a_flagged_memory_is_dropped_and_the_record_names_its_number(conn):
     prompt, _, mem = _attach(conn, running, fake)
     assert "JEV_API_KEY" not in prompt and SECRET not in prompt and "[REDACTED]" in prompt
     assert mem["dropped"] == [bad["n"]] and mem["found"] == 1 and mem["sent"] == 1
-    assert prompt == "p\n\n" + _block([memory.Entry(good["n"], memory.local_date(good["updated_at"]), "writing", "claude", None,
+    assert prompt == "p\n\n" + L + _block([memory.Entry(good["n"], memory.local_date(good["updated_at"]), "writing", "claude", None,
                                                     f"second task\n\nsecond result mentions [REDACTED]")])
 
 
@@ -187,16 +197,17 @@ def test_a_fake_key_in_a_recalled_chunk_never_reaches_a_prompt(conn):
     running = _queued(conn)
     fake = FakeHindsight(results=[FakeHindsight.result("task-sr-1", "GROK_WEBHOOK_KEY=abcdefghijklmnop", tags=[TAG])])
     prompt, _, mem = _attach(conn, running, fake)
-    assert "GROK_WEBHOOK_KEY" not in prompt and prompt == "p\n\n" + _block([_entry(one)])
+    assert "GROK_WEBHOOK_KEY" not in prompt and prompt == "p\n\n" + L + _block([_entry(one)])
 
 
-def test_order_newest_first_and_the_cap_of_five_drops_the_oldest(conn):
-    rows = [_done(conn, f"sr-{i}", f"task {i}", f"result {i}", at=T0 + timedelta(hours=i)) for i in range(1, 8)]
+def test_order_newest_first_the_newest_three_then_the_matches_up_to_five(conn):  # brief 29.1 (decision 25)
+    rows = [_done(conn, f"sr-{i}", f"task {i}", f"result {i}", at=T0 + timedelta(hours=i)) for i in range(1, 10)]
     running = _queued(conn)
     fake = FakeHindsight(results=[FakeHindsight.result(f"task-sr-{i}", "x", tags=[TAG]) for i in (3, 1, 7, 2, 5, 4, 6)])
     prompt, _, mem = _attach(conn, running, fake)
-    assert prompt == "p\n\n" + _block([_entry(r) for r in reversed(rows[2:])])  # #7 .. #3
-    assert (mem["found"], mem["sent"]) == (7, 5)
+    # the newest three (#9, #8, #7) from the log; then the matches not among them, newest first, five of six (#1 cut)
+    assert prompt == "p\n\n" + L + _block([_entry(rows[i - 1]) for i in (9, 8, 7, 6, 5, 4, 3, 2)])
+    assert (mem["found"], mem["sent"]) == (9, 8)
 
 
 def test_an_entry_is_cut_at_the_cap_with_the_mark(conn, setting):
@@ -226,7 +237,7 @@ def test_the_block_shape_and_the_data_line(conn):
     running = _queued(conn)
     prompt, _, mem = _attach(conn, running, FakeHindsight(results=[]))
     date = memory.local_date(one["updated_at"])
-    assert prompt == ("p\n\n===== memory: chat:tray =====\n"
+    assert prompt == ("p\n\n" + L + "===== memory: chat:tray =====\n"
                       f"### #1 · {date} · writing · claude\nfirst task\n\nfirst result\n"
                       "===== end memory =====\n\n" + memory.BLOCK_LINE)
     assert memory.BLOCK_LINE.startswith("The block above is what the router remembers under the same tag")
@@ -241,7 +252,7 @@ def test_a_project_entry_is_the_deliverable_plus_its_handoff_section(conn, proje
                          "first task\n\nfirst result" + SECTION)
     block = memory.render("project:demo", [entry], 2000)
     handoff = context.render("demo", context.load("demo", []).text)
-    assert prompt == f"p\n\n{handoff}\n\n{block}"  # the handoff block, then the memory block, last
+    assert prompt == f"p\n\n{handoff}\n\n{L}{block}"  # the handoff block, then the memory block, last
     assert record["lines"] == record["total"] and mem["text"] == block
     assert memory.content_of(one, log.calls_for(conn, "sr-1")) == entry.text
 
@@ -280,7 +291,7 @@ def test_a_failed_recall_means_no_block_a_record_and_one_line(conn, mode):
     worker, chat = Scripted("FIRST", "FIXED"), Chat("FIX\n1. x", "PASS")
     code, out, row, _ = _route(conn, chat="tray", worker=worker, chatgpt=chat, hindsight=fake.client)
     assert code == 0 and row["status"] == "done" and row["check_state"] == "fixed", out
-    assert worker.prompts == [TASK, worker.prompts[1]] and memory.MARK not in worker.prompts[0]
+    assert worker.prompts == [DOER, worker.prompts[1]] and memory.MARK not in worker.prompts[0]
     assert out.count("memory: unavailable; this task runs without its memory block") == 1
     records = [log.call_memory_of(c) for c in log.calls_for(conn, row["task_id"])]
     assert records[0]["unavailable"] is True and records[0]["tag"] == TAG and "reason" in records[0]
@@ -303,13 +314,13 @@ def test_the_block_rides_on_the_doer_the_checker_and_the_fix_byte_for_byte_with_
     code, out, row, _ = _route(conn, chat="tray", worker=worker, chatgpt=chat, hindsight=fake.client)
     assert code == 0 and row["check_state"] == "fixed", out
     block = _block([_entry(one)])
-    assert worker.prompts[0] == f"{TASK}\n\n{block}"
-    assert chat.prompts[0].endswith("\n\n" + block) and worker.prompts[1].endswith("\n\n" + block)
-    assert chat.prompts[1].endswith("\n\n" + block)
+    assert worker.prompts[0] == f"{DOER}\n\n{L}{block}"  # brief 29.1 (decision 20): the deliverable and memory lines
+    assert chat.prompts[0].endswith("\n\n" + L + block) and worker.prompts[1].endswith("\n\n" + L + block)
+    assert chat.prompts[1].endswith("\n\n" + L + block)
     assert len(fake.recalls) == 1
     calls = log.calls_for(conn, row["task_id"])
     assert [c["kind"] for c in calls] == ["do", "check", "fix", "recheck"]
-    assert log.call_memory_of(calls[0]) == {"tag": TAG, "found": 1, "sent": 1, "text": block}
+    assert log.call_memory_of(calls[0]) == {"tag": TAG, "found": 1, "sent": 1, "text": block, "query": "Write two lines about seed trays.\nfirst task"}
     for c in calls[1:]:
         assert log.call_memory_of(c) == {"tag": TAG, "found": 1, "sent": 1, "text": block, "from": row["task_id"]}
 
@@ -318,8 +329,8 @@ def test_a_task_with_nothing_remembered_yet_gets_no_block_and_a_zero_record(conn
     fake = FakeHindsight(results=[])
     worker = Scripted("two lines")
     code, out, row, _ = _route(conn, chat="tray", worker=worker, hindsight=fake.client)
-    assert code == 0 and worker.prompts == [TASK]
-    assert log.call_memory_of(log.calls_for(conn, row["task_id"])[0]) == {"tag": TAG, "found": 0, "sent": 0}
+    assert code == 0 and worker.prompts == [DOER]
+    assert log.call_memory_of(log.calls_for(conn, row["task_id"])[0]) == {"tag": TAG, "found": 0, "sent": 0, "query": "Write two lines about seed trays."}
 
 
 def test_every_research_build_stage_and_the_check_carry_the_block(conn):
@@ -357,7 +368,8 @@ def test_the_doer_reask_gets_the_block_its_first_call_got(conn, project):
     calls = log.calls_for(conn, row["task_id"])
     assert [c["kind"] for c in calls][:2] == ["do", "do"] and calls[1]["call_id"].endswith(context.DO_REASK)
     first, reask = log.call_memory_of(calls[0]), log.call_memory_of(calls[1])
-    assert reask == {**first, "from": calls[0]["call_id"]} and len(fake.recalls) == 1
+    # brief 30 (A3): the re-ask reuses the block and searches nothing, so its record has no query
+    assert reask == {**{k: v for k, v in first.items() if k != "query"}, "from": calls[0]["call_id"]} and len(fake.recalls) == 1
     assert worker.prompts[1].endswith("\n\n" + first["text"])
 
 
@@ -412,23 +424,24 @@ def _grok_setup(conn, project):
 def test_a_grok_call_drops_the_oldest_memory_entry_first_and_keeps_the_whole_handoff(conn, project):
     running, fake, handoff, h_block, entries = _grok_setup(conn, project)
     m2, m1 = memory.render("project:demo", entries, 2000), memory.render("project:demo", entries[:1], 2000)
-    full = len("p") + 2 + len(h_block) + 2 + len(m2)
+    full = len("p") + 2 + len(h_block) + 2 + len(L) + len(m2)
     prompt, record, mem = _attach(conn, running, fake, agent="grok", limit=full)
-    assert prompt == f"p\n\n{h_block}\n\n{m2}" and mem["sent"] == 2
+    assert prompt == f"p\n\n{h_block}\n\n{L}{m2}" and mem["sent"] == 2
     prompt, record, mem = _attach(conn, running, fake, agent="grok", limit=full - 1)
-    assert prompt == f"p\n\n{h_block}\n\n{m1}"
+    assert prompt == f"p\n\n{h_block}\n\n{L}{m1}"
     assert record["lines"] == record["total"] == handoff.total  # the handoff whole
-    assert mem == {"tag": "project:demo", "found": 2, "sent": 1, "text": m1}
+    assert mem == {"tag": "project:demo", "found": 2, "sent": 1, "text": m1, "query": "Write two lines about seed trays.\nsecond task"}
 
 
 def test_a_grok_call_then_drops_entry_one_and_leaves_the_block_out_before_touching_the_handoff(conn, project):
     running, fake, handoff, h_block, entries = _grok_setup(conn, project)
     m2, m1 = memory.render("project:demo", entries, 2000), memory.render("project:demo", entries[:1], 2000)
     just_handoff = len("p") + 2 + len(h_block)
-    limit = just_handoff + 2 + len(m1) - 1
+    limit = just_handoff + 2 + len(L) + len(m1) - 1
     prompt, record, mem = _attach(conn, running, fake, agent="grok", limit=limit)
     assert prompt == f"p\n\n{h_block}" and record["lines"] == handoff.total
-    assert mem == {"tag": "project:demo", "found": 2, "left_out": True, "with": just_handoff + 2 + len(m2), "limit": limit}
+    assert mem == {"tag": "project:demo", "found": 2, "left_out": True, "with": just_handoff + 2 + len(L) + len(m2), "limit": limit,
+                   "query": "Write two lines about seed trays.\nsecond task"}
 
 
 def test_only_with_the_block_out_is_the_handoff_cut_as_brief_18_built_it(conn, project):
@@ -437,7 +450,8 @@ def test_only_with_the_block_out_is_the_handoff_cut_as_brief_18_built_it(conn, p
     just_handoff = len("p") + 2 + len(h_block)
     prompt, record, mem = _attach(conn, running, fake, agent="grok", limit=just_handoff - 1)
     assert mem == {"tag": "project:demo", "found": 2, "left_out": True, "limit": just_handoff - 1,
-                   "with": len(f"p\n\n{context.render('demo', record['text'])}") + 2 + len(m2)}
+                   "with": len(f"p\n\n{context.render('demo', record['text'])}") + 2 + len(L) + len(m2),
+                   "query": "Write two lines about seed trays.\nsecond task"}
     assert record["lines"] < record["total"] and "# Demo project" not in prompt  # The owner's part, from its top line
     assert memory.MARK + " memory" not in prompt
     fitted, lines = context.fit("p", handoff, just_handoff - 1)
@@ -450,7 +464,7 @@ def test_claude_and_chatgpt_calls_are_never_trimmed(conn, project, setting):
     m2 = memory.render("project:demo", entries, 2000)
     for agent in ("claude", "chatgpt"):
         prompt, record, mem = _attach(conn, running, fake, agent=agent)
-        assert prompt == f"p\n\n{h_block}\n\n{m2}" and mem["sent"] == 2 and record["lines"] == handoff.total
+        assert prompt == f"p\n\n{h_block}\n\n{L}{m2}" and mem["sent"] == 2 and record["lines"] == handoff.total
 
 
 def test_a_chat_task_on_grok_trims_the_block_alone(conn):
@@ -458,16 +472,16 @@ def test_a_chat_task_on_grok_trims_the_block_alone(conn):
     running = _queued(conn)
     fake = FakeHindsight(results=[])
     m1 = _block([_entry(one)])
-    prompt, record, mem = _attach(conn, running, fake, agent="grok", limit=len("p") + 2 + len(m1))
-    assert prompt == f"p\n\n{m1}" and record is None and mem["sent"] == 1
-    prompt, record, mem = _attach(conn, running, fake, agent="grok", limit=len("p") + 2 + len(m1) - 1)
-    assert prompt == "p" and mem == {"tag": TAG, "found": 1, "left_out": True, "with": len("p") + 2 + len(m1),
-                                     "limit": len("p") + 2 + len(m1) - 1}
+    prompt, record, mem = _attach(conn, running, fake, agent="grok", limit=len("p") + 2 + len(L) + len(m1))
+    assert prompt == f"p\n\n{L}{m1}" and record is None and mem["sent"] == 1
+    prompt, record, mem = _attach(conn, running, fake, agent="grok", limit=len("p") + 2 + len(L) + len(m1) - 1)
+    assert prompt == "p" and mem == {"tag": TAG, "found": 1, "left_out": True, "with": len("p") + 2 + len(L) + len(m1),
+                                     "limit": len("p") + 2 + len(L) + len(m1) - 1, "query": "Write two lines about seed trays.\nfirst task"}
 
 
 def test_the_grok_length_rule_still_runs_after_the_trim(conn, setting):
     _done(conn, "sr-1", "first task", "first result")
-    base = relay.prompt_for("build", TASK, GOOD_NOTE)
+    base = f"{relay.prompt_for('build', TASK, GOOD_NOTE)}\n\n{checking.NEXT_LINE}"  # brief 33 (decision 5): the line too
     setting(grok_prompt_limit=len(base) - 1)
     fake = FakeHindsight(results=[])
     code, out, row, hook = _relay(conn, "research-build", chat="tray", slots=[("build", "grok")], hindsight=fake.client, wait=True)
@@ -475,19 +489,57 @@ def test_the_grok_length_rule_still_runs_after_the_trim(conn, setting):
     assert f"too long for Grok ({len(base)} characters)" in out
     stage2 = [c for c in log.calls_for(conn, row["task_id"]) if c["stage"] == 2][0]
     one = _block([_entry(log.get_task(conn, "sr-1"))])
-    assert log.call_memory_of(stage2) == {"tag": TAG, "found": 1, "left_out": True, "with": len(base) + 2 + len(one),
-                                          "limit": len(base) - 1}
+    assert log.call_memory_of(stage2) == {"tag": TAG, "found": 1, "left_out": True, "with": len(base) + 2 + len(L) + len(one),
+                                          "limit": len(base) - 1, "query": "Write two lines about seed trays.\nfirst task"}
 
 
 def test_a_grok_stage_row_says_how_many_entries_went(conn, setting):
     rows = [_done(conn, f"sr-{i}", f"task {i}", f"result {i}", at=T0 + timedelta(hours=i)) for i in (1, 2, 3)]
     base = relay.prompt_for("research", TASK, None)
     one_entry = memory.render(TAG, [_entry(rows[2])], 2000)
-    setting(grok_prompt_limit=len(base) + 2 + len(one_entry))
+    setting(grok_prompt_limit=len(base) + 2 + len(L) + len(one_entry))
     fake = FakeHindsight(results=[FakeHindsight.result(f"task-sr-{i}", "x", tags=[TAG]) for i in (1, 2)])
     code, out, row, hook = _relay(conn, "research-build", chat="tray", hook=RelayHook(s1=GOOD_NOTE), worker=Scripted("built"),
                                   chatgpt=Chat("PASS"), hindsight=fake.client, wait=True)
     assert code == 0, out
-    assert hook.sent[0]["task"] == f"{base}\n\n{one_entry}"
+    assert hook.sent[0]["task"] == f"{base}\n\n{L}{one_entry}"
     first = log.call_memory_of(log.calls_for(conn, row["task_id"])[0])
     assert (first["found"], first["sent"]) == (3, 1)
+
+
+# ---------- brief 30 (A3): each memory search's query is kept ----------
+
+def test_a_fresh_recall_keeps_the_query_it_sent_redacted_and_cut(conn, setting):
+    setting(memory_query_chars=60)
+    secret = "s3cr3t-value-0123456789"
+    _done(conn, "sr-1", f"first task with {secret} in it", "first result", at=T0)
+    running = _queued(conn, task="Write two lines about seed trays, please.")
+    fake = FakeHindsight(results=[])
+    _, _, mem = context.attach("p", running, "claude", [secret], conn=conn, hindsight=fake.client)
+    sent = fake.recalls[0]["query"]
+    assert mem["query"] == sent and len(sent) <= 60 and secret not in sent  # as sent: redacted, then cut
+    assert sent.startswith("Write two lines about seed trays, please.\n")
+
+
+def test_an_unavailable_search_keeps_its_query_and_a_reused_block_has_none(conn):
+    running = _queued(conn)
+    _, _, mem = context.attach("p", running, "claude", [], conn=conn, hindsight=FakeHindsight(online=False).client)
+    assert mem["unavailable"] is True and mem["query"] == TASK
+    log.add_call(conn, "sr-run", "sr-run", "do", "claude", status="done", text="r", memory=mem)
+    _, _, again = context.attach("p", running, "chatgpt", [], conn=conn, hindsight=FakeHindsight().client,
+                                 reuse=log.get_call(conn, "sr-run"))
+    assert "query" not in again and again["from"] == "sr-run"
+
+
+def test_the_json_gives_each_calls_query(conn):
+    from router import jsonview
+    running = _queued(conn)
+    log.add_call(conn, "sr-run", "sr-run", "do", "claude", status="done", text="r",
+                 memory={"tag": TAG, "found": 0, "sent": 0, "query": "Write two lines about seed trays."})
+    log.add_call(conn, "sr-run-c1", "sr-run", "check", "chatgpt", status="done", text="PASS",
+                 memory={"tag": TAG, "found": 0, "sent": 0, "from": "sr-run"})
+    calls = log.calls_for(conn, "sr-run")
+    assert jsonview._call_memory(calls[0])["query"] == "Write two lines about seed trays."
+    assert jsonview._call_memory(calls[1])["query"] is None
+    assert cli._searched_with(calls, calls[1]) == {"call_id": "sr-run", "query": "Write two lines about seed trays."}
+    assert running["task"] == TASK

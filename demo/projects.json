@@ -2,10 +2,785 @@
  "api_version": 1,
  "projects": [
   {
+   "name": "bean-board",
+   "path": "~/Projects/bean-board",
+   "handoff_lines": 2,
+   "open_task": null,
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "what_now": {
+    "rung": 1,
+    "words": "Waiting on you: #52 · a plan to approve",
+    "control": "open",
+    "task_id": "sr-20261019-112624-0039",
+    "n": 52,
+    "chip": null,
+    "need": null,
+    "chips": null,
+    "plan_md": null
+   },
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "task #52 is open on bean-board: finish or cancel it first"
+   },
+   "ideas": 0,
+   "plan": null,
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   }
+  },
+  {
+   "name": "compost-log",
+   "path": "~/Projects/compost-log",
+   "handoff_lines": 2,
+   "open_task": null,
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "what_now": {
+    "rung": "finish",
+    "words": "All 2 steps done",
+    "control": "chips",
+    "task_id": "sr-20261019-112636-003b",
+    "n": 54,
+    "chip": null,
+    "need": null,
+    "chips": [
+     {
+      "kind": "readme",
+      "words": "Write the README",
+      "later": false,
+      "fill": {
+       "team": "route",
+       "project": "compost-log",
+       "chat": null,
+       "text": "Write README.md for this project: what it does, how to set it up, how to run it and how to test it.",
+       "from": null,
+       "idea": null,
+       "step": null
+      }
+     },
+     {
+      "kind": "run_command",
+      "words": "Set the run command",
+      "later": false,
+      "fill": null,
+      "opens": "run_command"
+     },
+     {
+      "kind": "what_next",
+      "words": "What next",
+      "later": false,
+      "fill": {
+       "team": "plan",
+       "project": "compost-log",
+       "chat": null,
+       "text": "Plan what to build next.",
+       "from": null,
+       "idea": null,
+       "step": null
+      }
+     }
+    ],
+    "plan_md": null
+   },
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "every step of plan #54 is done"
+   },
+   "ideas": 0,
+   "plan": {
+    "task_id": "sr-20261019-112636-003b",
+    "n": 54,
+    "done": 2,
+    "total": 2,
+    "next": null,
+    "plan_md": null,
+    "file": "docs/PLAN.md",
+    "steps": [
+     {
+      "k": 1,
+      "text": "Make the skeleton: compost.py that prints the bins, and test_compost.py with one test that passes.",
+      "team": "route",
+      "done": true,
+      "stop_here": false
+     },
+     {
+      "k": 2,
+      "text": "Add turn(bin) that records a turning date, with a test.",
+      "team": "route",
+      "done": true,
+      "stop_here": false
+     }
+    ],
+    "stop_here": []
+   },
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   }
+  },
+  {
    "name": "garden-site",
    "path": "~/Projects/garden-site",
+   "handoff_lines": 17,
+   "open_task": null,
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "what_now": {
+    "rung": 4,
+    "words": "Next: Add the opening hours.",
+    "control": "chip",
+    "task_id": "sr-20261019-103600-0016",
+    "n": 20,
+    "chip": {
+     "kind": "agent",
+     "words": "Add the opening hours.",
+     "later": true,
+     "fill": {
+      "team": "route",
+      "project": "garden-site",
+      "chat": null,
+      "text": "Add the opening hours.",
+      "from": null,
+      "idea": null,
+      "step": null
+     }
+    },
+    "need": null,
+    "chips": null,
+    "plan_md": null
+   },
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "garden-site has no current plan: approve one first"
+   },
+   "ideas": 3,
+   "plan": null,
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   }
+  },
+  {
+   "name": "herb-labels",
+   "path": "~/Projects/herb-labels",
+   "handoff_lines": 2,
+   "open_task": null,
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "what_now": {
+    "rung": 3,
+    "words": "One step: Add a one-line docstring to label_text() in labels.py.",
+    "control": "chip",
+    "task_id": "sr-20261019-112630-003a",
+    "n": 53,
+    "chip": {
+     "kind": "build_it",
+     "words": "Build it",
+     "later": false,
+     "fill": {
+      "team": "route",
+      "project": "herb-labels",
+      "chat": null,
+      "text": "Add a one-line docstring to label_text() in labels.py.",
+      "from": null,
+      "idea": null,
+      "step": null
+     }
+    },
+    "need": null,
+    "chips": null,
+    "plan_md": null
+   },
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "herb-labels has no current plan: approve one first"
+   },
+   "ideas": 0,
+   "plan": null,
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   }
+  },
+  {
+   "name": "mulch-notes",
+   "path": "~/Projects/mulch-notes",
+   "handoff_lines": 2,
+   "open_task": null,
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "what_now": {
+    "rung": "auto_finished",
+    "words": "Auto finished: land the run?",
+    "control": "open",
+    "task_id": "sr-20261019-112739-004c",
+    "n": 71,
+    "chip": null,
+    "need": null,
+    "chips": null,
+    "plan_md": null
+   },
+   "auto": {
+    "state": "finished",
+    "run": {
+     "task_id": "sr-20261019-112739-004c",
+     "n": 71,
+     "state": "finished",
+     "words": "Auto finished: land the run?",
+     "stop": null,
+     "used": 6,
+     "budget": 12,
+     "next": null
+    },
+    "switch": "hidden",
+    "why": "run #71 is finished and waits to land: Land run or Discard run first"
+   },
+   "ideas": 0,
+   "plan": {
+    "task_id": "sr-20261019-112736-004b",
+    "n": 70,
+    "done": 0,
+    "total": 2,
+    "next": {
+     "k": 1,
+     "text": "Make the skeleton: mulch.py that prints a help line, and test_mulch.py with one test that runs it.",
+     "team": "route",
+     "done_when": "test_mulch.py's test_help passes under python3 -m unittest"
+    },
+    "plan_md": null,
+    "file": "docs/PLAN.md",
+    "steps": [
+     {
+      "k": 1,
+      "text": "Make the skeleton: mulch.py that prints a help line, and test_mulch.py with one test that runs it.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     },
+     {
+      "k": 2,
+      "text": "Add note(bed, depth) that records a mulch note in mulch.json, with a test.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     }
+    ],
+    "stop_here": []
+   },
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   }
+  },
+  {
+   "name": "pea-trial",
+   "path": "~/Projects/pea-trial",
+   "handoff_lines": 2,
+   "open_task": null,
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "what_now": {
+    "rung": "plan_need",
+    "words": "Before step 3: set FROST_FEED_KEY",
+    "control": "secrets",
+    "task_id": "sr-20261019-112612-0036",
+    "n": 49,
+    "chip": null,
+    "need": {
+     "kind": "key",
+     "name": "FROST_FEED_KEY",
+     "words": "Before step 3: set FROST_FEED_KEY"
+    },
+    "chips": null,
+    "plan_md": null
+   },
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "Before step 3: set FROST_FEED_KEY (Auto never starts a step with an unmet need)"
+   },
+   "ideas": 0,
+   "plan": {
+    "task_id": "sr-20261019-112612-0036",
+    "n": 49,
+    "done": 2,
+    "total": 4,
+    "next": {
+     "k": 3,
+     "text": "Fetch the week's frost forecast and warn when a sowing falls in a frost window, with a test that fakes the feed.",
+     "team": "redteam",
+     "done_when": "test_frost.py's test_warns_in_frost_window passes with a faked feed"
+    },
+    "plan_md": null,
+    "file": "docs/PLAN.md",
+    "steps": [
+     {
+      "k": 1,
+      "text": "Make the skeleton: trial.py that prints a help line, and test_trial.py with one test that runs it.",
+      "team": "route",
+      "done": true,
+      "stop_here": false
+     },
+     {
+      "k": 2,
+      "text": "Add record_sowing(bed, date) that stores a sowing in trial.json, with a test.",
+      "team": "route",
+      "done": true,
+      "stop_here": false
+     },
+     {
+      "k": 3,
+      "text": "Fetch the week's frost forecast and warn when a sowing falls in a frost window, with a test that fakes the feed.",
+      "team": "redteam",
+      "done": false,
+      "stop_here": false
+     },
+     {
+      "k": 4,
+      "text": "Write the README: how to record a sowing and read the frost warnings.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     }
+    ],
+    "stop_here": []
+   },
+   "spec": {
+    "present": true,
+    "hash": "18e8a9b81c51c761",
+    "chars": 398,
+    "examples": [
+     "E1",
+     "E2",
+     "E3"
+    ],
+    "done_when": [
+     "D1",
+     "D2"
+    ]
+   }
+  },
+  {
+   "name": "plot-planner",
+   "path": "~/Projects/plot-planner",
    "handoff_lines": 11,
-   "open_task": null
+   "open_task": null,
+   "last_test": {
+    "outcome": "passed",
+    "exit": 0,
+    "when": "2026-10-19T11:00:09+00:00",
+    "summary": "OK",
+    "head": "7d3e1a9"
+   },
+   "test_running": false,
+   "run_command": [
+    "python3",
+    "planner.py",
+    "--serve"
+   ],
+   "run": {
+    "state": "running",
+    "running": true,
+    "started": "2026-10-19T11:01:00+00:00",
+    "ended": null,
+    "exit": null
+   },
+   "secrets": 2,
+   "what_now": {
+    "rung": 1,
+    "words": "Waiting on you: #38 · a change ready to land",
+    "control": "open",
+    "task_id": "sr-20261019-112530-002b",
+    "n": 38,
+    "chip": null,
+    "need": null,
+    "chips": null,
+    "plan_md": null
+   },
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "task #38 is open on plot-planner: finish or cancel it first"
+   },
+   "ideas": 0,
+   "plan": null,
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   }
+  },
+  {
+   "name": "rain-gauge",
+   "path": "~/Projects/rain-gauge",
+   "handoff_lines": 2,
+   "open_task": null,
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "what_now": {
+    "rung": 1,
+    "words": "Waiting on you: #59 · a plan to approve",
+    "control": "open",
+    "task_id": "sr-20261019-112654-0040",
+    "n": 59,
+    "chip": null,
+    "need": null,
+    "chips": null,
+    "plan_md": null
+   },
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "task #59 is open on rain-gauge: finish or cancel it first"
+   },
+   "ideas": 0,
+   "plan": {
+    "task_id": "sr-20261019-112648-003e",
+    "n": 57,
+    "done": 1,
+    "total": 3,
+    "next": {
+     "k": 2,
+     "text": "Add record(mm, date) that stores a reading in gauge.json, with a test.",
+     "team": "route",
+     "done_when": "test_gauge.py's test_record passes, checking a reading is read back"
+    },
+    "plan_md": null,
+    "file": "docs/PLAN.md",
+    "steps": [
+     {
+      "k": 1,
+      "text": "Make the skeleton: gauge.py that prints a help line, and test_gauge.py with one test that runs it.",
+      "team": "route",
+      "done": true,
+      "stop_here": false
+     },
+     {
+      "k": 2,
+      "text": "Add record(mm, date) that stores a reading in gauge.json, with a test.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     },
+     {
+      "k": 3,
+      "text": "Add a weekly total and a README that says how to run the tests.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     }
+    ],
+    "stop_here": []
+   },
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   }
+  },
+  {
+   "name": "seed-library",
+   "path": "~/Projects/seed-library",
+   "handoff_lines": 21,
+   "open_task": null,
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "what_now": {
+    "rung": 1,
+    "words": "Waiting on you: #33 · a change ready to land",
+    "control": "open",
+    "task_id": "sr-20261019-112500-0023",
+    "n": 33,
+    "chip": null,
+    "need": null,
+    "chips": null,
+    "plan_md": null
+   },
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "task #33 is open on seed-library: finish or cancel it first"
+   },
+   "ideas": 0,
+   "plan": null,
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   }
+  },
+  {
+   "name": "seed-swap",
+   "path": "~/Projects/seed-swap",
+   "handoff_lines": 2,
+   "open_task": null,
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "what_now": {
+    "rung": "auto_running",
+    "words": "Auto · step 3 of 4 · 4 of 29 calls",
+    "control": null,
+    "task_id": "sr-20261019-112706-0042",
+    "n": 61,
+    "chip": null,
+    "need": null,
+    "chips": null,
+    "plan_md": null
+   },
+   "auto": {
+    "state": "on",
+    "run": {
+     "task_id": "sr-20261019-112706-0042",
+     "n": 61,
+     "state": "running",
+     "words": "Auto · step 3 of 4 · 4 of 29 calls",
+     "stop": null,
+     "used": 4,
+     "budget": 29,
+     "next": 4
+    },
+    "switch": "on",
+    "why": null
+   },
+   "ideas": 0,
+   "plan": {
+    "task_id": "sr-20261019-112700-0041",
+    "n": 60,
+    "done": 0,
+    "total": 4,
+    "next": {
+     "k": 1,
+     "text": "Make the skeleton: swap.py that prints a help line, and test_swap.py with one test that runs it.",
+     "team": "route",
+     "done_when": "test_swap.py's test_help passes under python3 -m unittest"
+    },
+    "plan_md": null,
+    "file": "docs/PLAN.md",
+    "steps": [
+     {
+      "k": 1,
+      "text": "Make the skeleton: swap.py that prints a help line, and test_swap.py with one test that runs it.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     },
+     {
+      "k": 2,
+      "text": "Add offer(packet, grower) that records an offer in swaps.json, with a test.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     },
+     {
+      "k": 3,
+      "text": "Match offers to wants and print the swaps, with a test that fakes two growers.",
+      "team": "redteam",
+      "done": false,
+      "stop_here": false
+     },
+     {
+      "k": 4,
+      "text": "Write the README: how to offer a packet and read the matches.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     }
+    ],
+    "stop_here": []
+   },
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   }
+  },
+  {
+   "name": "swap-shelf",
+   "path": "~/Projects/swap-shelf",
+   "handoff_lines": 2,
+   "open_task": null,
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "what_now": {
+    "rung": 1,
+    "words": "Waiting on you: #45 · pick A or B",
+    "control": "open",
+    "task_id": "sr-20261019-112552-0032",
+    "n": 45,
+    "chip": null,
+    "need": null,
+    "chips": null,
+    "plan_md": null
+   },
+   "auto": {
+    "state": "off",
+    "run": null,
+    "switch": "hidden",
+    "why": "task #45 is open on swap-shelf: finish or cancel it first"
+   },
+   "ideas": 0,
+   "plan": null,
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   }
+  },
+  {
+   "name": "trellis-plan",
+   "path": "~/Projects/trellis-plan",
+   "handoff_lines": 2,
+   "open_task": null,
+   "last_test": null,
+   "test_running": false,
+   "run_command": null,
+   "run": null,
+   "secrets": null,
+   "what_now": {
+    "rung": "auto_stopped",
+    "words": "Auto stopped: the budget is reached: 17 of 17 calls used",
+    "control": "open",
+    "task_id": "sr-20261019-112724-0048",
+    "n": 67,
+    "chip": null,
+    "need": null,
+    "chips": null,
+    "plan_md": null
+   },
+   "auto": {
+    "state": "stopped",
+    "run": {
+     "task_id": "sr-20261019-112724-0048",
+     "n": 67,
+     "state": "stopped",
+     "words": "Auto stopped: the budget is reached: 17 of 17 calls used",
+     "stop": {
+      "code": "budget",
+      "why": "the budget is reached: 17 of 17 calls used",
+      "step": 3
+     },
+     "used": 17,
+     "budget": 17,
+     "next": 3
+    },
+    "switch": "off",
+    "why": null
+   },
+   "ideas": 0,
+   "plan": {
+    "task_id": "sr-20261019-112718-0046",
+    "n": 65,
+    "done": 1,
+    "total": 3,
+    "next": {
+     "k": 2,
+     "text": "Add a bed's trellis plan from its climbers, with a test for beans and peas.",
+     "team": "redteam",
+     "done_when": "test_trellis.py's test_beans_and_peas passes"
+    },
+    "plan_md": null,
+    "file": "docs/PLAN.md",
+    "steps": [
+     {
+      "k": 1,
+      "text": "Make the skeleton: trellis.py that prints a help line, and test_trellis.py with one test that runs it.",
+      "team": "route",
+      "done": true,
+      "stop_here": false
+     },
+     {
+      "k": 2,
+      "text": "Add a bed's trellis plan from its climbers, with a test for beans and peas.",
+      "team": "redteam",
+      "done": false,
+      "stop_here": false
+     },
+     {
+      "k": 3,
+      "text": "Write the README: how to plan a bed's trellis.",
+      "team": "route",
+      "done": false,
+      "stop_here": false
+     }
+    ],
+    "stop_here": []
+   },
+   "spec": {
+    "present": false,
+    "hash": null,
+    "chars": 0,
+    "examples": [],
+    "done_when": []
+   }
   }
  ]
 }

@@ -3,7 +3,7 @@
  "task_id": "sr-20261019-103100-0015",
  "n": 19,
  "created_at": "2026-10-19T10:31:06+00:00",
- "updated_at": "2026-10-19T10:31:18+00:00",
+ "updated_at": "2026-10-19T10:31:24+00:00",
  "sent_at": null,
  "source": "cli",
  "text": "What did we decide about the newsletter schedule?",
@@ -39,6 +39,10 @@
  },
  "slots": null,
  "working": null,
+ "steps": {
+  "chain": null,
+  "now": null
+ },
  "fallback": {
   "ok": false,
   "agent": null,
@@ -59,6 +63,37 @@
  "card_line": null,
  "takeover": null,
  "late": null,
+ "project_files": null,
+ "notes": [],
+ "open_musts": [],
+ "land_anyway": false,
+ "no_split": null,
+ "piece_of": null,
+ "router_notes": {
+  "hash": "8b61a57199701a87",
+  "chars": 330,
+  "file": "tasks/sr-20261019-103100-0015/router-notes.md"
+ },
+ "spec": null,
+ "forgotten": null,
+ "save_path": "docs/what-did-we-decide-about-the.md",
+ "text_only": false,
+ "save_spec": null,
+ "card_actions": {
+  "pin": true,
+  "save": true,
+  "forget": true,
+  "remember": false
+ },
+ "next": [],
+ "from": null,
+ "idea": null,
+ "plan": null,
+ "plan_step": null,
+ "one_step": null,
+ "questions": null,
+ "models": null,
+ "auto": null,
  "calls": [
   {
    "call_id": "sr-20261019-103100-0015",
@@ -70,9 +105,23 @@
    "status": "done",
    "verdict": null,
    "sent_at": "2026-10-19T10:31:12+00:00",
-   "finished_at": "2026-10-19T10:31:12+00:00",
+   "finished_at": "2026-10-19T10:31:15+00:00",
    "round_file": "tasks/sr-20261019-103100-0015/01-do-claude.md",
-   "served": null,
+   "served": {
+    "asked": "claude-sonnet-5-5",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/models.json",
+    "key": null,
+    "layer": "agent",
+    "model": "claude-sonnet-5-5",
+    "note": null,
+    "source": "stream: init and modelUsage",
+    "time_limit": 600
+   },
    "reason_code": null,
    "resume_of": null,
    "fallback_of": null,
@@ -87,8 +136,30 @@
     "found": 3,
     "from": null,
     "with": null,
-    "limit": null
-   }
+    "limit": null,
+    "query": "What did we decide about the newsletter schedule?\nOne word: should the garden newsletter go out weekly or monthly? Then one line why."
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 348,
+    "from": "sr-20261019-103100-0015",
+    "judge": false,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "claude": 25
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-103100-0015/01-do-claude-prompt.md",
+   "model": "claude-sonnet-5-5",
+   "effort": null,
+   "time_limit": 600
   },
   {
    "call_id": "sr-20261019-103100-0015-c1",
@@ -99,10 +170,24 @@
    "agent": "chatgpt",
    "status": "done",
    "verdict": "PASS",
-   "sent_at": "2026-10-19T10:31:15+00:00",
-   "finished_at": "2026-10-19T10:31:15+00:00",
+   "sent_at": "2026-10-19T10:31:18+00:00",
+   "finished_at": "2026-10-19T10:31:21+00:00",
    "round_file": "tasks/sr-20261019-103100-0015/02-check-chatgpt.md",
-   "served": null,
+   "served": {
+    "asked": "gpt-6.1-sol",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/agents.json",
+    "key": null,
+    "layer": "agent",
+    "model": "gpt-6.1-sol",
+    "note": null,
+    "source": "codex header",
+    "time_limit": 600
+   },
    "reason_code": null,
    "resume_of": null,
    "fallback_of": null,
@@ -117,8 +202,30 @@
     "found": 3,
     "from": "sr-20261019-103100-0015",
     "with": null,
-    "limit": null
-   }
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": "PASS",
+   "router_notes": {
+    "chars": 603,
+    "from": "sr-20261019-103100-0015",
+    "judge": true,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "chatgpt": 49
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-103100-0015/02-check-chatgpt-prompt.md",
+   "model": "gpt-6.1-sol",
+   "effort": null,
+   "time_limit": 600
   }
  ],
  "handoff": null,
@@ -127,7 +234,7 @@
    "document_id": "task-sr-20261019-103100-0015",
    "chars": 139,
    "state": "done/passed/2",
-   "at": "2026-10-19T10:31:21+00:00"
+   "at": "2026-10-19T10:31:27+00:00"
   }
  ],
  "memory_given": [
@@ -163,6 +270,9 @@
  "attacks": null,
  "pieces": null,
  "join": null,
+ "estimate": null,
+ "menu": null,
  "original_file": "tasks/sr-20261019-103100-0015/01-do-claude.md",
- "result_file": "tasks/sr-20261019-103100-0015/01-do-claude.md"
+ "result_file": "tasks/sr-20261019-103100-0015/01-do-claude.md",
+ "from_given": null
 }

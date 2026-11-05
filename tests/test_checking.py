@@ -60,8 +60,8 @@ def test_checker_prompt_demands_the_verdict_format():
 def test_the_no_tools_paragraph_appears_only_for_the_claude_worker():
     with_it = checking.checker_prompt(TASK, RESULT, no_tools=True).lower()
     without = checking.checker_prompt(TASK, RESULT, no_tools=False).lower()
-    for phrase in ("can't open links", "look anything up", "prices", "dates", "verified"):
-        assert phrase in with_it and phrase not in without, phrase
+    for phrase in ("can't open links", "look anything up", "prices", "claim to have verified"):  # brief 29.1: "unverified"
+        assert phrase in with_it and phrase not in without, phrase  # is the check's own word now, so the phrase is whole
 
 
 # ---------- the fix prompt ----------
@@ -128,6 +128,7 @@ def test_read_verdict(text, expected):
 
 def test_verdicts_match_the_log():
     assert set(v for v, _ in [checking.read_verdict("PASS"), checking.read_verdict("FIX\n1. x"),
+                               checking.read_verdict("BLOCKED: the notes"),  # brief 29.1 (decision 17)
                                checking.read_verdict("?")]) == set(log.VERDICTS)
 
 
@@ -170,6 +171,7 @@ def test_endings_table():
     assert checking.ENDINGS == {
         1: ("not_needed", 0), 2: ("unchecked", 0), 3: ("passed", 0), 4: ("unchecked", 0),
         5: ("failed", 5), 6: ("fixed", 0), 7: ("unchecked", 0), 8: ("failed", 5),
+        9: ("blocked", 5),  # brief 29.1 (decision 17): Blocked
     }
 
 

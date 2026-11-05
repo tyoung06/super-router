@@ -103,8 +103,8 @@ def test_chat_with_project_is_refused_before_anything(argv, capsys):
 
 def test_chat_is_refused_on_sr_split(capsys):
     assert cli.main(["split", "--chat", "x", "plan this"], platform="darwin") == 2
-    assert capsys.readouterr().out == ("Refused: --chat on sr split is refused in version 2; pieces carry no tag. "
-                                       "Nothing was logged or sent.\n")
+    assert capsys.readouterr().out == ("Refused: --chat on sr split is refused: a split carries no chat tag (its pieces "
+                                       "neither). Nothing was logged or sent.\n")  # brief 29: a split takes --project
     assert not cli.DB_PATH.exists()
 
 
@@ -179,10 +179,11 @@ def test_sr_log_shows_the_chat_beside_the_skill_and_filters_by_chat(conn):
 
 # ---------- the settings file (decision 9) ----------
 
-def test_the_five_memory_keys_are_in_the_shipped_settings_file():
+def test_the_six_memory_keys_are_in_the_shipped_settings_file():  # brief 29.1 (decision 25): newest and matches
     assert settings.memory_setting("memory_url") == ("http://127.0.0.1:8888", "config/settings.json")
     assert settings.memory_setting("memory_bank") == ("super-router", "config/settings.json")
-    assert settings.memory_setting("memory_max_items") == (5, "config/settings.json")
+    assert settings.memory_setting("memory_newest") == (3, "config/settings.json")
+    assert settings.memory_setting("memory_matches") == (5, "config/settings.json")
     assert settings.memory_setting("memory_max_chars") == (2000, "config/settings.json")
     assert settings.memory_setting("memory_query_chars") == (1500, "config/settings.json")
     assert settings.grok_prompt_limit() == (3662, "config/settings.json")

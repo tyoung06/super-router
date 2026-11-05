@@ -14,9 +14,12 @@ from dataclasses import dataclass
 
 from router import log, plan_limit
 
-WAITING_ON = ("needs_label", "split_plan", "pick", "vote_pick", "grok", "piece", "probe", "memory")
+WAITING_ON = ("needs_label", "split_plan", "pick", "vote_pick", "grok", "piece", "probe", "memory",
+              "land",  # brief 28 (decision 10): a delivered change waiting to be landed or discarded
+              "answers")  # brief 33.4 (decision 5): a plan that asked its questions
 OUTCOMES = ("passed", "fixed", "failed_check", "returned", "cancelled", "timed_out", "picked", "tie", "skipped",
-            "stopped", "unchecked", "plan_limit", "process_ended")
+            "stopped", "unchecked", "plan_limit", "process_ended",
+            "blocked")  # brief 29.1 (decision 17): the check said the doer lacked what it needed
 RESERVED = ()  # brief 22 made every reserved word happen
 # Jev answers that leave a task waiting for the owner's label (rules v2.28, Jev): the terminal asks, or it comes back.
 FLOOR_STATUSES = ("below_floor", "none_of_these", "error", "over_cap", "not_set_up")  # brief 24: no Jev key
@@ -45,20 +48,26 @@ def _skipped(plan, task_id):
     return bool(plan) and any(p["id"] == task_id and p["skipped"] for p in plan.get("pieces", []))
 
 
-def of(task, calls, *, plan=None, held=False, waiting=None):
+def of(task, calls, *, plan=None, held=False, waiting=None, ordered=False):
     """The state of one task. `calls` are its call rows, oldest first. `plan` is the stored plan of a piece's split (for
     `skipped`); `held` says a queued piece waits for another piece's Grok call (the caller reads the siblings); `waiting`
-    (brief 22) is `probe` or `memory` when the task's own run waits on that lock (router/locks.py, read by the caller).
+    (brief 22) is `probe` or `memory` when the task's own run waits on that lock (router/locks.py, read by the caller);
+    `ordered` (brief 29) says a piece of a project split waits for an earlier piece (split.order_holder).
     First match wins; every row shape lands on exactly one value."""
     status, mode = task["status"], _get(task, "mode") or "route"
     roles = {c["role"] for c in calls if c["kind"] in log.STAGE_KINDS}
     review, vote = "review" in roles, "vote" in roles   # a preset with review stages (versus), or a tally (vote)
     is_open = status in ("queued", "sent")
-    if mode == "piece" and not is_open and _skipped(plan, task["task_id"]):
+    if log.is_piece(task) and not is_open and _skipped(plan, task["task_id"]):  # brief 29: a piece of any team
         return State(None, "skipped")
     if status in ("cancelled", "timed_out"):
         return State(None, status)
+    found = log.project_files_of(task) if "project_files" in task.keys() else None
+    if status == "done" and found and found.get("state") == "waiting":  # brief 28: never both: the outcome comes after
+        return State("land", None)
     if status == "returned":
+        if mode == "auto":  # brief 34 (decision 1): a stopped run waits on the owner, whatever stopped it
+            return State("auto", None)
         code = _get(task, "reason_code")
         if code:  # a return: the code its maker stored (brief 21); only a label can still be given
             if code == "needs_label" and not _get(task, "answered_by"):
@@ -68,6 +77,10 @@ def of(task, calls, *, plan=None, held=False, waiting=None):
             stored = log.split_plan_of(task)
             if stored is not None:
                 return State("piece" if stored.get("approved") else "split_plan", None)
+        if mode == "plan":  # brief 33.4 (decision 5): from the plan's record, never from check_note
+            stored = log.plan_of(task) or {}
+            if stored.get("questions") and not stored.get("answers"):
+                return State("answers", None)
         if mode == "relay" and review:
             return State("pick", None)
         if mode == "relay" and vote:
@@ -76,6 +89,8 @@ def of(task, calls, *, plan=None, held=False, waiting=None):
     if is_open:
         if waiting in ("probe", "memory"):  # brief 22 (decisions 7 and 8): its run waits on a probe or a memory start
             return State(waiting, None)
+        if ordered:  # brief 29 (decision 17): a piece of a project split held by an earlier one waits on its pieces
+            return State("piece", None)
         if held or any(c["agent"] == "grok" and c["status"] == "sent" for c in calls):
             return State("grok", None)
         if (mode in ("route", "piece") and not calls and not _get(task, "agent")
@@ -88,6 +103,8 @@ def of(task, calls, *, plan=None, held=False, waiting=None):
     if view and view[-1]["status"] == "failed" and view[-1]["reason_code"] == PROCESS_ENDED:
         return State(None, "process_ended")  # brief 22 (decision 4): written only by `sr check`, from a dead run
     if status == "failed":
+        if task["check_state"] == log.BLOCKED:  # brief 29.1 (decision 17)
+            return State(None, "blocked")
         if mode == "relay" and (review or vote) and _get(task, "failed_stage") is None:
             return State(None, "tie" if vote else "picked")  # The owner picked none
         return State(None, "stopped")

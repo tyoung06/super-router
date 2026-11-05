@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SETUP = (ROOT / "docs" / "SETUP.md").read_text()
+GUIDE = (ROOT / "docs" / "GUIDE.md").read_text()  # the docs refresh: using the router moved out of SETUP.md
 ENV = (ROOT / ".env.example").read_text()
 ROUTINE = ('A webhook fired with a JSON body. Do the work described in its "task" field. Then, without asking for '
            'approval, open a GitHub issue in the private repo owner/inbox whose title is exactly the "task_id" field and '
@@ -20,6 +21,10 @@ ROUTINE = ('A webhook fired with a JSON body. Do the work described in its "task
 
 def _section(title):
     return SETUP.split(f"## {title}\n", 1)[1].split("\n## ", 1)[0]
+
+
+def _guide(title):
+    return GUIDE.split(f"\n## {title}\n", 1)[1].split("\n## ", 1)[0]
 
 
 def test_claude_is_required_and_every_other_piece_says_what_happens_without_it():
@@ -61,24 +66,24 @@ def test_env_example_holds_placeholders_only_and_says_the_inbox_repo_is_a_settin
 
 # ---------- brief 26 (decision 16): Projects ----------
 
-def test_setup_has_a_projects_section_with_both_ways_in_and_the_root():
-    text = _section("Projects")
+def test_the_guide_has_a_projects_section_with_both_ways_in_and_the_root():
+    text = _guide("Projects")
     assert "**New project, on the page.**" in text and "`+`" in text  # on the page
     assert "sr project new" in text and "sr project add" in text      # in Terminal
     assert "`projects_root`" in text and "`~/Projects`" in text and "config/settings.local.json" in text
     assert "--dry-run" in text and "-- '" in text                      # the notes in quotes after --
-    assert "can't open the folder" in text and "all they know" in text  # HANDOFF.md, notes included, is all they get
+    # brief 28: with git, Claude changes a copy and the folder is touched only by a land; without it, HANDOFF.md is all
+    assert "Only Claude's build calls" in text and "never touched until you land" in text and "handoff only" in GUIDE
 
 
-def test_the_projects_section_comes_after_the_pieces_and_names_no_real_folder():
-    assert SETUP.index("## Projects") > SETUP.index("## Memory")
-    assert "/Users/" not in _section("Projects")
+def test_the_projects_section_names_no_real_folder():
+    assert "/Users/" not in _guide("Projects")
 
 
-def test_the_readme_names_new_project_in_its_memory_bullet():
+def test_the_readme_names_new_project():
     readme = (ROOT / "README.md").read_text()
-    bullet = next(line for line in readme.splitlines() if line.startswith("- **Memory per chat or project.**"))
-    assert "New project" in bullet and "`sr project new`" in bullet
+    section = readme.split("## Work on a project\n", 1)[1].split("\n## ", 1)[0]
+    assert "New project" in section and "`sr project new`" in section
 
 
 # ---------- brief 27 (decision 15): the Memory switch ----------
@@ -86,7 +91,7 @@ def test_the_readme_names_new_project_in_its_memory_bullet():
 def test_the_memory_section_explains_on_and_off_and_the_light():
     text = _section("Memory")
     assert "saves anything delivered while the store was down" in text and "while it was off" not in text
-    assert "**On and off.** The switch on this row turns memory on or off for this Mac." in text
+    assert "**On and off.** The switch in Settings → Memory turns memory on or off for this Mac." in text
     assert "`sr memory on`" in text and "`sr memory off`" in text
     assert "not even after you turn it back on" in text and "`HANDOFF.md` still goes with its tasks" in text
     ready = text.split("**Ready on the page.**", 1)[1]
@@ -94,7 +99,23 @@ def test_the_memory_section_explains_on_and_off_and_the_light():
         assert word in ready, word
 
 
-def test_the_readme_says_memory_can_be_switched_off_on_the_setup_sheet():
+def test_the_readme_says_memory_can_be_switched_off_in_settings():
     readme = (ROOT / "README.md").read_text()
     line = next(l for l in readme.splitlines() if "Hindsight" in l and l.lstrip().startswith("-"))
-    assert "switched off on the Setup sheet" in line
+    assert "switched off in Settings → Memory" in line
+
+
+# ---------- brief 28 (decision 21): the README's project clause, and the line that stays true ----------
+
+def test_the_readme_says_how_a_project_with_git_changes_and_who_writes_there():
+    readme = (ROOT / "README.md").read_text()
+    section = readme.split("## Work on a project\n", 1)[1].split("\n## ", 1)[0]
+    assert "Claude changes a copy of its files" in section and "land the checked change as one commit" in section
+    assert "The router writes only a project's handoff notes" not in readme  # false since brief 28
+    safety = readme.split("## Safety\n", 1)[1].split("\n## ", 1)[0]
+    assert "No agent writes in your projects" in safety and "only what you land" in safety and "never rewrites git history" in safety
+
+
+def test_the_guide_says_any_kind_of_file_goes_into_a_project():
+    text = _guide("Projects")
+    assert "Any kind of file goes in" in text and "a name starting with a dot" in text

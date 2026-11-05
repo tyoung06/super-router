@@ -1,0 +1,266 @@
+{
+ "api_version": 1,
+ "task_id": "sr-20261019-112624-0035",
+ "n": 48,
+ "created_at": "2026-10-19T11:26:30+00:00",
+ "updated_at": "2026-10-19T11:26:48+00:00",
+ "sent_at": null,
+ "source": "cli",
+ "text": "Write a careful note on what the garden's pesticide cupboard may hold and what it may not.",
+ "status": "done",
+ "waiting_on": null,
+ "outcome": "passed",
+ "reason_code": null,
+ "mode": "route",
+ "preset": null,
+ "parent": null,
+ "project": null,
+ "chat": null,
+ "tag": null,
+ "skill": "writing",
+ "skill_source": "jev",
+ "agent": "claude",
+ "checker": "chatgpt",
+ "check_state": "passed",
+ "check_note": null,
+ "route_reason": "best",
+ "failed_stage": null,
+ "web": false,
+ "files": [],
+ "result": "Keep only what the label says is for home gardens, in its own bottle, on the top shelf; never a decanted mix, never anything without a label.",
+ "result_url": null,
+ "jev": {
+  "status": "ok",
+  "label": "writing",
+  "confidence": 0.92,
+  "tokens": 640,
+  "needs_split": 0.08,
+  "error": null
+ },
+ "slots": null,
+ "working": null,
+ "steps": {
+  "chain": null,
+  "now": null
+ },
+ "fallback": {
+  "ok": false,
+  "agent": null,
+  "reason": "not a double fail: it passed"
+ },
+ "resume": {
+  "ok": false,
+  "substitute": null,
+  "agent": null,
+  "checker": null,
+  "reason": "it is done; only a task stopped by a plan limit or by a process that ended can be resumed"
+ },
+ "pid": null,
+ "run_started_at": null,
+ "answered_by": null,
+ "stand_in": null,
+ "filled": null,
+ "card_line": "Fable 5.1 re-ran this on Opus 5.5",
+ "takeover": null,
+ "late": null,
+ "project_files": null,
+ "notes": [],
+ "open_musts": [],
+ "land_anyway": false,
+ "no_split": null,
+ "piece_of": null,
+ "router_notes": {
+  "hash": "8b61a57199701a87",
+  "chars": 330,
+  "file": "tasks/sr-20261019-112624-0035/router-notes.md"
+ },
+ "spec": null,
+ "forgotten": null,
+ "save_path": "docs/write-a-careful-note-on-what.md",
+ "text_only": false,
+ "save_spec": null,
+ "card_actions": {
+  "pin": true,
+  "save": true,
+  "forget": false,
+  "remember": false
+ },
+ "next": [
+  {
+   "kind": "build_from",
+   "words": "Build from #48",
+   "later": false,
+   "fill": {
+    "team": "route",
+    "project": null,
+    "chat": null,
+    "text": "",
+    "from": "sr-20261019-112624-0035",
+    "idea": null,
+    "step": null
+   }
+  }
+ ],
+ "from": null,
+ "idea": null,
+ "plan": null,
+ "plan_step": null,
+ "one_step": null,
+ "questions": null,
+ "models": {
+  "claude": {
+   "effort": null,
+   "model": "claude-fable-5-1"
+  }
+ },
+ "auto": null,
+ "calls": [
+  {
+   "call_id": "sr-20261019-112624-0035",
+   "order": 1,
+   "kind": "do",
+   "stage": null,
+   "role": null,
+   "agent": "claude",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T11:26:36+00:00",
+   "finished_at": "2026-10-19T11:26:39+00:00",
+   "round_file": "tasks/sr-20261019-112624-0035/01-do-claude.md",
+   "served": {
+    "asked": "claude-fable-5-1",
+    "credits": {
+     "seen": false
+    },
+    "differs": true,
+    "effort": null,
+    "file": "the task",
+    "key": null,
+    "layer": "task",
+    "model": "claude-opus-5-5",
+    "note": null,
+    "source": "stream: init and modelUsage",
+    "time_limit": 1200
+   },
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "off (probe not passed)",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 348,
+    "from": "sr-20261019-112624-0035",
+    "judge": false,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "claude": 25
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-112624-0035/01-do-claude-prompt.md",
+   "model": "claude-fable-5-1",
+   "effort": null,
+   "time_limit": 1200
+  },
+  {
+   "call_id": "sr-20261019-112624-0035-c1",
+   "order": 2,
+   "kind": "check",
+   "stage": null,
+   "role": null,
+   "agent": "chatgpt",
+   "status": "done",
+   "verdict": "PASS",
+   "sent_at": "2026-10-19T11:26:42+00:00",
+   "finished_at": "2026-10-19T11:26:45+00:00",
+   "round_file": "tasks/sr-20261019-112624-0035/02-check-chatgpt.md",
+   "served": {
+    "asked": "gpt-6.1-sol",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/agents.json",
+    "key": null,
+    "layer": "agent",
+    "model": "gpt-6.1-sol",
+    "note": null,
+    "source": "codex header",
+    "time_limit": 600
+   },
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "allowed",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": "PASS",
+   "router_notes": {
+    "chars": 603,
+    "from": "sr-20261019-112624-0035",
+    "judge": true,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "chatgpt": 49
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-112624-0035/02-check-chatgpt-prompt.md",
+   "model": "gpt-6.1-sol",
+   "effort": null,
+   "time_limit": 600
+  }
+ ],
+ "handoff": null,
+ "memory_stored": [],
+ "memory_given": [],
+ "candidates": null,
+ "pick": null,
+ "votes": null,
+ "tally": null,
+ "attacks": null,
+ "pieces": null,
+ "join": null,
+ "estimate": null,
+ "menu": null,
+ "original_file": "tasks/sr-20261019-112624-0035/01-do-claude.md",
+ "result_file": "tasks/sr-20261019-112624-0035/01-do-claude.md",
+ "from_given": null
+}

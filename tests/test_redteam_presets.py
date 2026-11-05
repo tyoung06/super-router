@@ -5,6 +5,7 @@ never a check or a review; the revision contract, allowed on the last stage). Ch
 are filled; intake refuses `build` = `attack` and `build` = `check`; `attack` = `check` is allowed and the default.
 Every value here is fake except the shipped file."""
 import json
+from pathlib import Path
 
 import pytest
 
@@ -16,9 +17,12 @@ SENDERS = tuple(cli.SENDERS)
 ROSTER = shipped_roster()
 
 
+V16 = Path(__file__).parent / "fixtures" / "presets_v1_6.json"  # brief 32: the three-stage redteam, as old tasks have it
+
+
 def _loaded(path=None):
     return presets.load_presets(ROSTER, SENDERS, relay.CONTRACTS, roles=relay.ROLES, verdicts=relay.VERDICTS,
-                                path=path)
+                                path=path or V16)
 
 
 def _problems(entry):
@@ -181,7 +185,7 @@ def test_a_refused_redteam_filling_writes_no_row_and_calls_no_one(conn):
 
 
 def test_a_slot_that_would_make_the_reviser_differ_from_the_builder_is_refused(tmp_path):
-    doc = json.loads(presets.PRESETS_PATH.read_text())
+    doc = json.loads(V16.read_text())  # brief 32: the three-stage redteam this rule was written on
     doc["presets"]["redteam"]["slots"] = {"b1": [1], "attack": [2], "b3": [3], "check": ["checker"]}
     path = tmp_path / "presets.json"
     path.write_text(json.dumps(doc))

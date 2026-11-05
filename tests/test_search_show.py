@@ -41,9 +41,10 @@ def test_history_lists_the_queries_of_the_build_and_the_fix(conn):
     _relay(conn, claude=claude, chatgpt=Chat("FIX\n1. add a price", "PASS"), ready=True)
     lines = _show(conn, "1", history=True)
     build = next(i for i, line in enumerate(lines) if line.startswith("2. stage 2 build by claude"))
-    assert lines[build + 1:build + 3] == ["  search: allowed — 1 query", "    K10 price"]
+    assert lines[build + 1].startswith("  model: ")  # brief 33.3 (decision 7): the model line comes first
+    assert lines[build + 2:build + 4] == ["  search: allowed — 1 query", "    K10 price"]
     fix = next(i for i, line in enumerate(lines) if line.startswith("4. fix by claude"))
-    assert lines[fix + 1:fix + 3] == ["  search: allowed — 1 query", "    K10 price"]
+    assert lines[fix + 2:fix + 4] == ["  search: allowed — 1 query", "    K10 price"]
 
 
 def test_a_search_by_chatgpt_says_its_queries_are_not_reported():

@@ -30,15 +30,16 @@ def test_jev_floor_is_the_skill_tables_min_confidence(world):
 def test_each_preset_says_whether_it_takes_project_from_the_code_intake_uses(world):
     doc = _status(world)
     got = {p["name"]: p["project"] for p in doc["presets"]}
-    assert got == {"research-build": True, "collab": False, "versus": False, "redteam": True, "vote": False}
+    assert got == {"research-build": True, "collab": True, "versus": True, "redteam": True, "vote": True}  # brief 29.1
     assert all(p["project_refuses"] == ["cursor"] for p in doc["presets"])
+    assert {p["name"]: p["file_mode_refuses"] for p in doc["presets"]}["versus"] == ["grok"]  # decision 27
     assert cli._project_presets(cli._presets_or_none(ROSTER)) == [name for name, takes in got.items() if takes]
 
 
-def test_intake_refuses_project_where_status_says_no(world):
+def test_intake_takes_project_on_every_preset_status_says_yes_to(world):
+    """Brief 29.1 (decisions 8 to 10): no preset refuses --project now; an unknown project is still refused, by name."""
     found = world.json("relay", "versus", "write is_even", "--project", "anything")
-    assert (found["exit"], found["reason_code"], found["task_id"]) == (2, "tag_refused", None)
-    assert "research-build and redteam only" in found["message"]
+    assert (found["exit"], found["reason_code"], found["task_id"]) == (2, "project_unknown", None)
 
 
 # ---------- sr show --json: a split plan's pieces ----------

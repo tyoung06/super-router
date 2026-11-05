@@ -8,6 +8,7 @@ from datetime import timedelta
 
 import pytest
 
+from router import context
 from router import __main__ as cli
 from router import checking, log, memory, routing
 from tests.fake_hindsight import FakeHindsight
@@ -101,12 +102,14 @@ def test_the_owners_recall_answer_at_the_floor_comes_back_untagged_and_routes_ta
     assert code == 4 and (row["status"], row["skill"], row["skill_source"], row["route_reason"]) == ("returned", "recall", "owner", REASON)
     assert "Skill: recall (your choice)." in out and BACK in out and log.calls_for(conn, row["task_id"]) == []
     worker, chat = Scripted("we decided the tray must hold the ball"), Chat("PASS")
-    code, out, row = _route_asking(conn, QUESTION, LOW, Answers("recall"), chat="tray", worker=worker, chatgpt=chat,
+    # brief 29.1 (decision 24): a tagged task at 0.62 routes on Jev's label with no question; a Jev error still asks
+    code, out, row = _route_asking(conn, QUESTION, {"status": "error", "error": "Timeout", "tokens": 0}, Answers("recall"),
+                                   chat="tray", worker=worker, chatgpt=chat,
                                    hindsight=FakeHindsight(results=[]).client)  # rules v2.29: a tagged recall task needs the store
     assert code == 0, out
     assert (row["status"], row["skill"], row["skill_source"], row["agent"], row["checker"], row["check_state"]) == (
         "done", "recall", "owner", "claude", "chatgpt", "passed")
-    assert worker.prompts == [QUESTION] and chat.prompts  # nothing remembered under tray yet: no block, a check all the same
+    assert worker.prompts == [f"{QUESTION}\n\n{checking.DELIVERABLE_LINE}"] and chat.prompts  # nothing remembered under tray yet: no block, a check all the same
 
 
 # ---------- sr route, tagged: Claude does it, the block rides, ChatGPT checks with the memory line ----------
@@ -121,13 +124,14 @@ def test_a_tagged_recall_task_routes_to_claude_the_block_rides_and_chatgpt_check
     assert (row["status"], row["skill"], row["skill_source"], row["agent"], row["route_reason"], row["checker"], row["check_state"]) == (
         "done", "recall", "jev", "claude", "best", "chatgpt", "passed")
     block = _block([_entry(two), _entry(one)])                      # entry one from the log, then the recall match
-    assert worker.prompts == [f"{QUESTION}\n\n{block}"]              # the block rides on the doer
+    assert worker.prompts == [f"{QUESTION}\n\n{checking.DELIVERABLE_LINE}\n\n{context.MEMORY_USE_LINE}\n\n{block}"]              # the block rides on the doer
     assert chat.prompts[0].endswith("\n\n" + block)                   # and on the checker, byte for byte
     assert checking.CHECK_MEMORY_LINE in chat.prompts[0]              # with the memory line
     assert chat.prompts[0].index(checking.CHECK_MEMORY_LINE) < chat.prompts[0].index("===== TASK =====")
     calls = log.calls_for(conn, row["task_id"])
     assert [c["kind"] for c in calls] == ["do", "check"]
-    assert log.call_memory_of(calls[0]) == {"tag": "chat:tray", "found": 2, "sent": 2, "text": block}
+    assert log.call_memory_of(calls[0]) == {"tag": "chat:tray", "found": 2, "sent": 2, "text": block,  # brief 30 (A3)
+                                            "query": "what did we decide about the tray last time\nsecond task about the tray"}
     assert log.call_memory_of(calls[1]) == {"tag": "chat:tray", "found": 2, "sent": 2, "text": block, "from": row["task_id"]}
     assert len(fake.recalls) == 1 and len(fake.retains) == 1          # one recall for the doer; the delivered answer retained once
 
@@ -148,5 +152,5 @@ def test_at_claude_on_an_untagged_recall_task_is_an_override_as_today(conn):
     assert code == 0, out
     assert (row["status"], row["agent"], row["route_reason"], row["skill"], row["skill_source"], row["checker"], row["check_state"]) == (
         "done", "claude", "override", "recall", "jev", "chatgpt", "passed")
-    assert worker.prompts == [QUESTION] and memory.MARK not in worker.prompts[0]  # untagged: no block
+    assert worker.prompts == [f"{QUESTION}\n\n{checking.DELIVERABLE_LINE}"] and memory.MARK not in worker.prompts[0]  # untagged: no block
     assert checking.CHECK_MEMORY_LINE not in chat.prompts[0] and "you chose it with @claude" in out

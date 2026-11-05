@@ -40,7 +40,10 @@ def _row(n):
 
 
 def _floor(world, text=TEXT, *extra):
-    world.label = fake_label(LOW)
+    # brief 29.1 (decision 24): a tagged task under 0.8 routes now, so a tagged floor row comes from a Jev error, which
+    # still asks; an untagged one keeps Jev's low label
+    tagged = "--chat" in extra or "--project" in extra
+    world.label = fake_label({"status": "error", "error": "Timeout", "tokens": 0} if tagged else LOW)
     found = world.json("route", text, *extra)
     assert (found["status"], found["waiting_on"], found["reason_code"]) == ("returned", "needs_label", "needs_label")
     return found

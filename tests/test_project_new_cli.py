@@ -14,7 +14,7 @@ from tests.helpers import set_local
 from tests.test_json_actions import KEYS, World
 
 NOTES = "What it is: a seed tray planner.\nDecided: no paid tools."
-DRY_KEYS = ["api_version", "would", "name", "folder", "handoff", "reason_code", "message"]
+DRY_KEYS = ["api_version", "would", "name", "folder", "handoff", "reason_code", "message", "git"]  # brief 28: git
 
 
 @pytest.fixture
@@ -68,12 +68,13 @@ def test_new_with_notes_answers_with_the_envelope_and_the_project(world):
     code, out, err = world.run("project", "new", "--json", "seed-trays", "--", NOTES)
     assert code == 0 and err == ""
     found = one_object(out)
-    assert list(found) == KEYS + ["project"]
+    assert list(found) == KEYS + ["project", "git"] and found["git"] is None  # brief 28: no git in this test world
     folder = (world.root / "seed-trays").resolve()
     assert found["project"] == {"name": "seed-trays", "folder": projects.tilde(folder), "handoff_lines": 5, "did": "created"}
     assert (found["task_id"], found["reason_code"], found["exit"]) == (None, None, 0)
     assert found["message"] == (f"Created seed-trays at {projects.tilde(folder)}. HANDOFF.md made: your notes, then the "
-                                "router's block (5 lines).")
+                                "router's block (5 lines).\ngit isn't installed, so the project is made without it; file "
+                                "work needs git (Setup, Git).")  # brief 28 (decision 16)
     assert (folder / "HANDOFF.md").read_text() == NOTES + "\n\n" + projects.START + "\n" + projects.END + "\n"
     assert json.loads(world.registry.read_text()) == {"seed-trays": str(folder)}
 
@@ -81,7 +82,9 @@ def test_new_with_notes_answers_with_the_envelope_and_the_project(world):
 def test_new_without_json_prints_the_prose(world):
     code, out, err = world.run("project", "new", "seed-trays")
     folder = projects.tilde((world.root / "seed-trays").resolve())
-    assert (code, err) == (0, "") and out == f"Created seed-trays at {folder}. HANDOFF.md made with an empty block (2 lines).\n"
+    assert (code, err) == (0, "") and out == (f"Created seed-trays at {folder}. HANDOFF.md made with an empty block (2 lines).\n"
+                                              "git isn't installed, so the project is made without it; file work needs git "
+                                              "(Setup, Git).\n")  # brief 28 (decision 16)
 
 
 @pytest.mark.parametrize("notes", ['say "hi"', "it's", "a `tick`", "$HOME stays", "one\ntwo\n\nfour",
@@ -158,7 +161,9 @@ def test_the_dry_run_document_for_create(world):
     assert found == {"api_version": 1, "would": "create", "name": "seed-trays", "folder": folder,
                      "handoff": {"exists": False, "lines": None, "has_block": False}, "reason_code": None,
                      "message": f"Would create {folder} and its HANDOFF.md, and register seed-trays; the projects root "
-                                f"{projects.tilde(world.root.resolve())} is made too. Nothing was changed."}
+                                f"{projects.tilde(world.root.resolve())} is made too; git isn't installed, so it is made "
+                                "without git (file work needs git). Nothing was changed.",
+                     "git": False}  # brief 28 (decision 16): the dry run says whether git will be set up
     assert not world.root.exists()
 
 

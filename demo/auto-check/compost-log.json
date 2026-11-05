@@ -1,0 +1,11 @@
+{
+ "api_version": 1,
+ "task_id": null,
+ "n": null,
+ "status": null,
+ "waiting_on": null,
+ "outcome": null,
+ "reason_code": "auto_refused",
+ "exit": 2,
+ "message": "Refused: Auto can't start on compost-log: every step of plan #54 is done. Nothing was logged or sent."
+}

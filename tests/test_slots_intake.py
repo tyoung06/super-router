@@ -132,7 +132,8 @@ def test_own_work_names_the_two_slots_that_hold_the_same_agent():
 
 
 def test_slot_names_are_read_from_the_file():
-    assert presets.slot_names() == ("research", "build", "check", "lead", "partner", "a", "b", "attack", "c")  # 16; 17: c
+    assert presets.slot_names() == ("research", "build", "check", "lead", "partner", "a", "b", "attack", "attack2",
+                                    "c")  # 16; 17: c; 32: attack2
 
 
 # ---------- the command line ----------

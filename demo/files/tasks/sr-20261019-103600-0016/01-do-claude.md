@@ -10,3 +10,4 @@ nothing written: Lending rules, the seed library's two rules in a list.
 The README has its lending section.
 ### Next
 Add the opening hours.
+Add a map of the seed shelves.

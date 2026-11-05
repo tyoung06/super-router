@@ -9,7 +9,7 @@ TASK = "Write a long research brief about soil sensors."
 LONG = "x" * 5000
 NOTES = "1. Add the dates.\n2. Cite a source for the price.\n3. Remove the unsupported claim."
 REPLY_LINE = "Reply with the complete revised result only, with no commentary about the changes."
-FORMAT = "Reply format, with nothing before the first line:\nFirst line: exactly PASS or FIX.\nAfter FIX: a numbered list, one specific fix per line."
+FORMAT = checking.REPLY_FORMAT  # brief 29.1 (decision 14): PASS, FIX or BLOCKED, then the tagged items
 
 
 def _end_of(prompt, block):
@@ -57,13 +57,28 @@ def test_make_medias_commit_instructions_come_right_after_the_review_notes():
     assert _end_of(prompt, imagine) < 3000
 
 
+def test_a_grok_fix_round_from_a_5000_character_result_has_its_musts_and_notes_in_its_first_3000_characters():
+    """Brief 29.1 (decision 15): a fix round is exempt from Grok's limit, so its delivery may cut it: the musts, the notes
+    and the reply line come first."""
+    reading = checking.read_check("FIX\n1. [must] Add the dates.\n2. [must] Cite a source for the price.\n3. [note] Shorter.")
+    prompt = checking.fix_prompt(TASK, LONG, "", reading=reading, could_search=True, count=True)
+    assert _end_of(prompt, checking._block(checking.SUGGESTIONS_LABEL, "3. Shorter.")) < 3000
+    assert prompt.index(checking._block(checking.MUST_FIX_LABEL, "1. Add the dates.\n2. Cite a source for the price.")) \
+        < prompt.index("===== EARLIER RESULT =====")
+    assert prompt.endswith(checking._block("EARLIER RESULT", LONG))
+
+
 # ---------- the check prompt (the owner's addition) ----------
 
-def test_a_check_prompt_for_a_5000_character_result_has_its_reply_format_in_its_first_3000_characters():
+def test_a_check_prompt_has_its_reply_format_before_the_blocks_and_never_reaches_grok_past_its_limit():
+    """Brief 29.1 (decision 14): the check's words alone pass Grok's limit, so a Grok check is skipped, never cut (the
+    `Grok skipped` line); for every other agent the instructions and the format still come before the blocks."""
+    from router import settings
     for kw in ({"no_tools": True}, {"no_tools": False, "can_browse": True}, {"no_tools": False, "relay": True}):
         prompt = checking.checker_prompt(TASK, LONG, **kw)
-        assert _end_of(prompt, FORMAT) < 3000, kw
+        assert _end_of(prompt, FORMAT) < prompt.index("===== TASK ====="), kw
         assert prompt.endswith(checking._block("RESULT", LONG))
+    assert len(checking.checker_prompt("", "", no_tools=False, can_browse=True)) > settings.grok_prompt_limit()[0]
 
 
 def test_the_check_prompt_order_is_instructions_format_then_task_and_result():

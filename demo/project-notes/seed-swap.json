@@ -1,0 +1,17 @@
+{
+ "api_version": 1,
+ "notes": {
+  "name": "seed-swap",
+  "folder": "~/Projects/seed-swap",
+  "notes": "",
+  "block": "<!-- sr:start -->\n<!-- sr:end -->",
+  "hash": "e3b0c44298fc1c14",
+  "chars": 0,
+  "lines": 0,
+  "max": 20000,
+  "git": false,
+  "tracked": false,
+  "exists": true,
+  "has_block": true
+ }
+}

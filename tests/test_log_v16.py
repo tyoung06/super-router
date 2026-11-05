@@ -9,14 +9,17 @@ from datetime import datetime, timezone
 import pytest
 
 from router import log
+from tests.helpers import V16_CALLS_SCHEMA, V16_SCHEMA
 
 NOW = "2026-10-22T09:00:00+00:00"
 WHEN = datetime(2026, 10, 22, 9, 0, tzinfo=timezone.utc)
 
 
 def _v15_log(path, sources):
-    """A version 15 log (the current columns; 16 adds none) holding one task per `skill_source` value."""
-    conn = log.init_db(path)
+    """A version 15 log (16 added no column; brief 28's 17 adds two, left out here) holding one task per `skill_source`
+    value."""
+    conn = sqlite3.connect(path)
+    conn.executescript(f"{V16_SCHEMA}; {V16_CALLS_SCHEMA};")
     for n, source in enumerate(sources, 1):
         conn.execute("INSERT INTO tasks (task_id, created_at, updated_at, source, task, jev_status, skill, skill_source, "
                      "status) VALUES (?, ?, ?, 'cli', ?, 'ok', 'writing', ?, 'done')",
@@ -37,7 +40,7 @@ def _sources(path):
 
 
 def test_the_version_and_the_two_stored_values():
-    assert log.VERSION == 16 and log.SKILL_SOURCES == ("jev", "owner")
+    assert log.VERSION == 21 and log.SKILL_SOURCES == ("jev", "owner", "router")  # brief 29.1: the follow-up's, no new version
 
 
 def test_the_old_value_is_found_by_exclusion_never_spelled():
@@ -52,7 +55,7 @@ def test_a_version_15_log_lands_on_16_with_only_the_stored_value_renamed(tmp_pat
     assert done["job"] == "upgrade" and done["from"] == 15 and done["rows"] == 5 and done["calls"] == 1
     assert "skill_source" in done["added"] and "owner" in done["added"]
     assert _sources(db) == ["jev", None, "owner", "owner", "owner"]
-    assert log.file_version(db) == 16
+    assert log.file_version(db) == 21
     assert _sources(done["backup"]) == ["jev", None, "a-legacy-value", "owner", "another-old-one"]  # the copy from before
     assert done["backup"].name == "router-v15-2026-10-22.db"
 
@@ -61,7 +64,7 @@ def test_a_log_with_nothing_to_rename_lands_on_16_unchanged(tmp_path):
     db, backups = tmp_path / "router.db", tmp_path / "backups"
     _v15_log(db, ["jev", None])
     log.migrate(db, backups, now=WHEN)
-    assert _sources(db) == ["jev", None] and log.file_version(db) == 16
+    assert _sources(db) == ["jev", None] and log.file_version(db) == 21
 
 
 def test_an_older_log_gets_the_rename_too():

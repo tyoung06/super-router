@@ -24,6 +24,10 @@ POLL_SECONDS = 1.0
 WAITS = ("probe", "memory")
 
 
+class Busy(Exception):
+    """`held(..., wait=False)`: another process holds the lock (brief 28: one router write in a project at a time)."""
+
+
 def _folder(base, name):
     path = Path(base) / name
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -51,10 +55,10 @@ def _clear_wait(folder, task_id):
 
 
 @contextmanager
-def held(name, *, folder, task_id=None, on=None, sleep=time.sleep, poll=POLL_SECONDS):
-    """Hold lock `name` for the block, waiting (polling, so Ctrl+C still works) while another process holds it. With
-    `task_id` and `on`, the task shows `waiting_on: <on>` from the moment it starts waiting until the block ends. No
-    folder (a test with no run folder): nothing to share, the block just runs."""
+def held(name, *, folder, task_id=None, on=None, sleep=time.sleep, poll=POLL_SECONDS, wait=True):
+    """Hold lock `name` for the block, waiting (polling, so Ctrl+C still works) while another process holds it, or with
+    `wait=False` raising Busy at once. With `task_id` and `on`, the task shows `waiting_on: <on>` from the moment it
+    starts waiting until the block ends. No folder (a test with no run folder): nothing to share, the block just runs."""
     if folder is None:
         yield
         return
@@ -68,6 +72,8 @@ def held(name, *, folder, task_id=None, on=None, sleep=time.sleep, poll=POLL_SEC
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
             except BlockingIOError:
+                if not wait:
+                    raise Busy(name) from None
                 sleep(poll)
         pid, started = runs.me()
         os.ftruncate(fd, 0)

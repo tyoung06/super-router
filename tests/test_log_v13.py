@@ -25,9 +25,9 @@ def conn():
 
 def test_a_new_log_is_version_13_with_served_last_on_calls():
     c = log.init_db(":memory:")
-    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 16
-    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-4:] == ["context", "memory", "served", "round_file"]  # brief 21: round_file
-    assert [r[1] for r in c.execute("PRAGMA table_info(tasks)")][-8:] == ["project", "handoff", "chat", "memory", "reason_code", "pid", "run_started_at", "answered_by"]
+    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 21
+    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-8:] == ["context", "memory", "served", "round_file", "tests", "model", "effort", "time_limit"]  # brief 21: round_file
+    assert [r[1] for r in c.execute("PRAGMA table_info(tasks)")][-15:] == ["project", "handoff", "chat", "memory", "reason_code", "pid", "run_started_at", "answered_by", "project_files", "from_task", "idea", "plan", "plan_step", "models", "auto"]
 
 
 def test_a_call_stores_its_served_record_and_every_other_call_reads_none(conn):
@@ -44,7 +44,7 @@ def test_a_call_stores_its_served_record_and_every_other_call_reads_none(conn):
 
 def test_a_served_record_names_the_asked_model_and_counts_its_tool_events(conn):
     log.add_task(conn, "sr-r", "t", "cli", JEV_OK)
-    with pytest.raises(ValueError, match="a call's served record names the asked model and counts its tool events"):
+    with pytest.raises(ValueError, match="a call's served record names the asked model"):
         log.add_call(conn, "sr-r", "sr-r", "do", "cursor", status="done", text="r", served={"model": "x"})
     with pytest.raises(ValueError, match="a call's served record"):
         log.add_call(conn, "sr-r", "sr-r", "do", "cursor", status="done", text="r", served="not a dict")
@@ -75,27 +75,27 @@ def _make_v12(path):
 def test_upgrade_from_version_12_adds_the_column_and_keeps_every_row(tmp_path):
     db, backups = tmp_path / "router.db", tmp_path / "backups"
     _make_v12(db)
-    with pytest.raises(log.VersionError, match=r"version 12 log.*sr migrate.*version 16 \(served column added to calls; reason_code column added to tasks"):
+    with pytest.raises(log.VersionError, match=r"version 12 log.*sr migrate.*version 21 \(served column added to calls; reason_code column added to tasks"):
         log.init_db(db)
     done = log.migrate(db, backups)
-    assert done["added"] == log.UPGRADES[12]["added"] == "served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task"
+    assert done["added"] == log.UPGRADES[12]["added"] == "served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task; project_files column added to tasks; tests column added to calls; from_task and idea columns added to tasks; ideas table added; plan and plan_step columns added to tasks; models column added to tasks; model, effort and time_limit columns added to calls; auto column added to tasks"
     assert (done["rows"], done["calls"], done["highest"]) == (3, 1, 3)
     assert done["backup"].name.startswith("router-v12-") and done["backup"].exists()
     c = log.init_db(db)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert c.execute("PRAGMA user_version").fetchone()[0] == 21
     assert [tuple(r) for r in c.execute("SELECT served FROM calls")] == [(None,)]
     assert log.served_of(log.get_call(c, "sr-2")) is None
     assert log.call_memory_of(log.get_call(c, "sr-2")) == {"tag": "chat:tray", "sent": 1, "found": 1, "text": "b"}  # the old columns kept
     assert log.chat_of(log.get_task(c, "sr-2")) == "tray" and log.memory_of(log.get_task(c, "sr-2"))[0]["chars"] == 5
     c.close()
-    with pytest.raises(log.MigrateRefused, match="already a version 16"):
+    with pytest.raises(log.MigrateRefused, match="already a version 21"):
         log.migrate(db, backups)
 
 
 def test_every_older_upgrade_lands_on_13_with_the_served_column():
     for from_version in range(2, 13):
         plan = log.UPGRADES[from_version]
-        assert plan["added"].endswith("served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task"), from_version
+        assert plan["added"].endswith("served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task; project_files column added to tasks; tests column added to calls; from_task and idea columns added to tasks; ideas table added; plan and plan_step columns added to tasks; models column added to tasks; model, effort and time_limit columns added to calls; auto column added to tasks"), from_version
         # version 2 makes its calls table from CALLS_SCHEMA, which already has the served column
         assert ("ALTER TABLE calls ADD COLUMN served TEXT" in plan["statements"]) == (from_version != 2), from_version
     assert log.UPGRADES[12]["columns"] == log.V12_COLUMNS and log.UPGRADES[12]["call_columns"] == log.V12_CALL_COLUMNS
@@ -109,5 +109,5 @@ def test_sr_migrate_prints_the_backup_the_column_and_the_counts(tmp_path, capsys
     out = capsys.readouterr().out
     assert "Log: router.db, version 12, 3 rows (highest #3), integrity ok, no open tasks." in out
     assert "Backup copy: backups/router-v12-" in out
-    assert "Upgraded in place: served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task, now version 16." in out
+    assert "Upgraded in place: served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task; project_files column added to tasks; tests column added to calls; from_task and idea columns added to tasks; ideas table added; plan and plan_step columns added to tasks; models column added to tasks; model, effort and time_limit columns added to calls; auto column added to tasks, now version 21." in out
     assert "Checked after: 3 rows, 1 calls, highest #3, every version 12 column unchanged" in out

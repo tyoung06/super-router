@@ -79,14 +79,19 @@ def test_a_pass_on_the_installed_version_runs_nothing(tmp_path, state_path):
     assert _gate(tmp_path, V1, fakes, out)() is True and fakes.ran == [] and out == []
 
 
-def test_no_pass_runs_claudes_two_probes_records_them_and_answers(tmp_path, state_path):
+def test_no_pass_runs_the_probe_the_call_needs_records_it_and_answers(tmp_path, state_path):
+    """Brief 29.1 (issue 3): a call that may search runs the search probe alone; the --web file probe waits for a call
+    that needs it (it ran first for every call before)."""
     search.record_pass(state_path, "2.1.0")
     search.record_pass(state_path, "2.1.0", key=search.WEB_FILES)
     fakes, out = ClaudeProbes(state_path, V1), []
-    assert _gate(tmp_path, V1, fakes, out)() is True
-    assert fakes.ran == [search.SEARCH_KEY, search.WEB_FILES]  # exactly two probe runs
-    assert search.passed_version(state_path, search.SEARCH_KEY) == V1 == search.passed_version(state_path, search.WEB_FILES)
+    gate = _gate(tmp_path, V1, fakes, out)
+    assert gate() is True
+    assert fakes.ran == [search.SEARCH_KEY]  # exactly one probe run
+    assert search.passed_version(state_path, search.SEARCH_KEY) == V1
+    assert search.passed_version(state_path, search.WEB_FILES) == "2.1.0"
     assert f"probe: claude search passed on Claude Code {V1}" in out
+    assert gate(search.WEB_FILES) is True and fakes.ran == [search.SEARCH_KEY, search.WEB_FILES]
     assert f"probe: claude --web files passed on Claude Code {V1}" in out
 
 
@@ -98,13 +103,13 @@ def test_the_web_file_mode_alone_probes_only_what_is_missing(tmp_path, state_pat
 
 def test_a_probe_that_ran_and_failed_stays_failed_until_claude_moves(tmp_path, state_path):
     fakes, out = ClaudeProbes(state_path, V1, "fail"), []
-    assert _gate(tmp_path, V1, fakes, out)() is False and len(fakes.ran) == 2
+    assert _gate(tmp_path, V1, fakes, out)() is False and len(fakes.ran) == 1  # brief 29.1 (issue 3): its own probe
     assert probes.failure(state_path, search.SEARCH_KEY)["kind"] == probes.RAN_FAILED
     assert any("FAILED" in line and "search stays off on this version" in line for line in out)
     fakes.ran.clear()
     assert _gate(tmp_path, V1, fakes, out, now=T0 + timedelta(days=3))() is False and fakes.ran == []  # no retry
     fakes.version, fakes.outcome = V2, "pass"
-    assert _gate(tmp_path, V2, fakes, out)() is True and len(fakes.ran) == 2  # a new version: probed again
+    assert _gate(tmp_path, V2, fakes, out)() is True and len(fakes.ran) == 1  # a new version: probed again
 
 
 def test_a_probe_that_could_not_run_is_tried_again_after_an_hour(tmp_path, state_path):
@@ -115,7 +120,7 @@ def test_a_probe_that_could_not_run_is_tried_again_after_an_hour(tmp_path, state
     fakes.ran.clear()
     assert _gate(tmp_path, V1, fakes, out, now=T0 + timedelta(minutes=59))() is False and fakes.ran == []
     fakes.outcome = "pass"
-    assert _gate(tmp_path, V1, fakes, out, now=T0 + timedelta(minutes=61))() is True and len(fakes.ran) == 2
+    assert _gate(tmp_path, V1, fakes, out, now=T0 + timedelta(minutes=61))() is True and len(fakes.ran) == 1
     assert probes.failure(state_path, search.SEARCH_KEY) is None  # a pass clears the record
 
 
@@ -182,7 +187,8 @@ def test_the_lock_file_says_who_holds_it_only_while_held(tmp_path):
 # ---------- Cursor ----------
 
 class CursorCanaries:
-    """`check` for cursor_ready: the two canaries' result, recorded as cursor_probe.command_check records it."""
+    """`check` for cursor_ready: the canaries' result, recorded as cursor_probe.command_check records it (brief 32, R0: with
+    the canaries it ran)."""
 
     def __init__(self, path, version, outcome="pass"):
         self.path, self.version, self.outcome, self.ran = path, version, outcome, 0
@@ -200,7 +206,7 @@ class CursorCanaries:
             checks = [cursor_probe.Check("read canary: agent ran to the end", False, "agent timed out after 600 s")]
         result = cursor_probe.Result(checks, self.version, 1.0)
         if result.passed:
-            search.record_pass(self.path, self.version, key=cursor_worker.SANDBOX_KEY)
+            cursor_worker.record_pass(self.path, self.version)
         else:
             search.clear(self.path, key=cursor_worker.SANDBOX_KEY)
         return result

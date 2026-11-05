@@ -6,7 +6,8 @@ import pytest
 
 from router import __main__ as cli
 from router import checking, log
-from tests.helpers import fake_label, grok_era_roster
+from tests.helpers import fake_label, grok_era_roster, as_recheck, today
+from tests.helpers import less_next
 
 SECRET = "FAKE-KEY-123"
 CONFIG = {"GROK_WEBHOOK_URL": "https://example.invalid/hook", "GROK_WEBHOOK_KEY": SECRET}
@@ -25,14 +26,15 @@ class Scripted:
     """A fake agent: each call returns the next scripted reply (or raises it). Records prompts."""
 
     def __init__(self, *replies):
-        self.replies, self.prompts = list(replies), []
+        self.replies, self.prompts, self.choices = list(replies), [], []
 
-    def __call__(self, prompt):
+    def __call__(self, prompt, **kwargs):
         self.prompts.append(prompt)
+        self.choices.append(kwargs.get("choice"))  # brief 33.3: the model, effort and time limit the router resolved
         reply = self.replies.pop(0) if self.replies else "an answer"
         if isinstance(reply, BaseException) or isinstance(reply, type):
             raise reply
-        return reply
+        return as_recheck(prompt, reply)  # brief 29.1: an old-shape re-check reply in the new shape
 
 
 class _Reply:
@@ -68,7 +70,7 @@ class Webhook:
             call_id = payload["task_id"]
             key = self._key(call_id)
             if key in self.bodies and key not in self.fail:
-                issues.append({"number": n, "title": call_id, "body": self.bodies[key],
+                issues.append({"number": n, "title": call_id, "body": as_recheck(payload.get("task"), self.bodies[key]),
                                "url": f"https://github.com/x/y/issues/{n}"})
         return issues
 
@@ -157,7 +159,7 @@ def test_row_3_first_check_passes(conn):
     assert _calls(conn, task_id) == [(task_id, "do", "grok", "done", None), (f"{task_id}-c1", "check", "claude", "done", "PASS")]
     assert "CHECKED (sanity check only): passed." in out and "can't open links" in out
     assert out.index(RESULT) < out.index("CHECKED")
-    assert worker.prompts == [checking.checker_prompt(TASK, RESULT, no_tools=True)]
+    assert worker.prompts == [checking.checker_prompt(TASK, RESULT, no_tools=True, could_search=True, sent_on=today())]  # Grok did it
     assert hook.closed == [1]
 
 
@@ -182,7 +184,8 @@ def test_row_5_fix_round_did_not_run(conn):
     assert (row["status"], row["result"], row["check_state"]) == ("done", RESULT, "failed")
     assert row["check_note"] == "fix round by grok didn't run: webhook returned HTTP 500: server"
     assert hook.sent[1]["task_id"] == f"{task_id}-f1"
-    assert hook.sent[1]["task"] == checking.fix_prompt(TASK, RESULT, "1. Give the exact date.", count=True)
+    assert less_next(hook.sent[1]["task"]) == checking.fix_prompt(TASK, RESULT, "1. Give the exact date.", count=True, could_search=True,
+                                                       reading=checking.read_check("FIX\n1. Give the exact date."))
     assert "FIX ROUND FAILED: grok, webhook returned HTTP 500: server." in out
     assert "The checker's fix list:" in out and "1. Give the exact date." in out
     assert _calls(conn, task_id)[-1] == (f"{task_id}-f1", "fix", "grok", "failed", None)
@@ -200,7 +203,8 @@ def test_row_6_fixed_then_passes_and_the_original_is_not_printed(conn):
     assert "CHECKED (sanity check only): passed after one fix." in out
     assert f"sr show {row['n']} --history" in out
     assert FIXED in out and RESULT not in out and "Give the exact date" not in out
-    assert worker.prompts[1] == checking.checker_prompt(TASK, FIXED, no_tools=True)
+    assert worker.prompts[1] == checking.checker_prompt(TASK, FIXED, no_tools=True, could_search=True,  # brief 29.1
+                                                        first=checking.read_check("FIX\n1. Give the exact date."), sent_on=today())
     assert hook.closed == [1, 2]
 
 
@@ -221,8 +225,9 @@ def test_row_8_fix_then_fix_again(conn):
     assert (row["status"], row["result"], row["check_state"]) == ("done", FIXED, "failed")
     assert row["check_note"] == "not passed after one fix round"
     assert "NOT PASSED: after one fix round. What the checker still wants fixed:" in out
-    assert "1. Still no source for the date." in out
-    assert FIXED in out and RESULT not in out and "Give the exact date" not in out
+    # brief 29.1 (decision 15): the open must by the first list's number, with what is still wrong
+    assert "1. Give the exact date. (not fixed: Still no source for the date.)" in out
+    assert FIXED in out and RESULT not in out
 
 
 # ---------- a result that says it couldn't do the task ----------

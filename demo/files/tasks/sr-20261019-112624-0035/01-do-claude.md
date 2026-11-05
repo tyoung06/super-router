@@ -1,0 +1,1 @@
+Keep only what the label says is for home gardens, in its own bottle, on the top shelf; never a decanted mix, never anything without a label.

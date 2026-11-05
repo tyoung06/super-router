@@ -16,6 +16,19 @@ REFUSAL_CODES = (
     "unreachable",  # brief 24 (decision 1): an agent the task needs whose online check did not answer
     "project_partial",  # brief 26 (decision 7): `sr project new` stopped after the folder was made; what exists is named
     "memory_off",  # brief 27 (decision 8): `sr memory start` or `rebuild` while memory is off; `sr memory on` turns it on
+    "land_refused",  # brief 28: land, undo or discard refused (a conflict, a key-scan hit); nothing written
+    # brief 30: the router notes (invalid, or holding a key or a .env value; changed since `--expect`'s hash) and Forget on
+    # a task memory never held (untagged, or a piece)
+    "notes_invalid", "notes_key", "notes_changed", "nothing_stored",
+    # brief 33 (decisions 8, 15 and 16): a --from source that can't be built from; an idea's text, --idea or --dismiss
+    # refused; a project at ideas_max open ideas
+    "bad_from", "bad_idea", "ideas_full", "bad_answers", "suggest_refused",
+    # brief 33.1 (decisions 1 and 12): `sr plan` refused at intake; a step (`--step`) that isn't the current plan's next
+    "plan_refused", "bad_step",
+    # brief 33.3 (decisions 4 and 5): a --model or --effort the task can't take, or an sr models set the files refuse
+    "bad_model",
+    # brief 34 (decisions 1 and 7): `sr auto --on` refused with nothing written; a run stopped at its budget
+    "auto_refused", "budget",
 )
 
 
@@ -27,6 +40,7 @@ class Receipt:
         self.lines, self.task_id, self.code, self.multi = [], None, None, multi
         self.document = None  # a read command's own JSON document (deliver), printed in place of the envelope
         self.extra = {}  # brief 26: keys added after the envelope's own (a new project's `project`)
+        self.extra_any = {}  # brief 30 (A2): keys added whatever the exit (`sr probe --json`'s `probe`)
 
     def __call__(self, line=""):
         self.lines.append(str(line))
@@ -52,11 +66,12 @@ def mark(out, *, task_id=None, code=None, command=False):
         marker(task_id=task_id, code=code, command=command)
 
 
-def attach(out, **keys):
+def attach(out, *, always=False, **keys):
     """Brief 26 (decision 11): keys the envelope carries after its own eight, such as `project` on a successful
-    `sr project new`. Nothing without a Receipt."""
+    `sr project new`. `always` (brief 30, A2): carried on a failed or refused run too (`sr probe --json`: what a failed
+    check found). Nothing without a Receipt."""
     if isinstance(out, Receipt):
-        out.extra.update(keys)
+        (out.extra_any if always else out.extra).update(keys)
 
 
 def deliver(out, document):

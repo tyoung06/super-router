@@ -3,7 +3,7 @@
  "task_id": "sr-20261019-093100-0007",
  "n": 7,
  "created_at": "2026-10-19T09:31:03+00:00",
- "updated_at": "2026-10-19T09:31:30+00:00",
+ "updated_at": "2026-10-19T09:31:36+00:00",
  "sent_at": null,
  "source": "cli",
  "text": "One word: should the garden newsletter go out weekly or monthly? Then one line why.",
@@ -43,6 +43,26 @@
   "c": "grok"
  },
  "working": null,
+ "steps": {
+  "chain": [
+   {
+    "stage": 1,
+    "role": "vote",
+    "agent": "claude"
+   },
+   {
+    "stage": 2,
+    "role": "vote",
+    "agent": "chatgpt"
+   },
+   {
+    "stage": 3,
+    "role": "vote",
+    "agent": "grok"
+   }
+  ],
+  "now": null
+ },
  "fallback": {
   "ok": false,
   "agent": null,
@@ -63,6 +83,52 @@
  "card_line": null,
  "takeover": null,
  "late": null,
+ "project_files": null,
+ "notes": [],
+ "open_musts": [],
+ "land_anyway": false,
+ "no_split": null,
+ "piece_of": null,
+ "router_notes": {
+  "hash": "8b61a57199701a87",
+  "chars": 330,
+  "file": "tasks/sr-20261019-093100-0007/router-notes.md"
+ },
+ "spec": null,
+ "forgotten": null,
+ "save_path": "docs/one-word-should-the-garden-newsletter.md",
+ "text_only": false,
+ "save_spec": null,
+ "card_actions": {
+  "pin": true,
+  "save": true,
+  "forget": true,
+  "remember": false
+ },
+ "next": [
+  {
+   "kind": "build_from",
+   "words": "Build from #7",
+   "later": false,
+   "fill": {
+    "team": "route",
+    "project": null,
+    "chat": "garden",
+    "text": "",
+    "from": "sr-20261019-093100-0007",
+    "idea": null,
+    "step": null
+   }
+  }
+ ],
+ "from": null,
+ "idea": null,
+ "plan": null,
+ "plan_step": null,
+ "one_step": null,
+ "questions": null,
+ "models": null,
+ "auto": null,
  "calls": [
   {
    "call_id": "sr-20261019-093100-0007-s1",
@@ -74,9 +140,23 @@
    "status": "done",
    "verdict": null,
    "sent_at": "2026-10-19T09:31:09+00:00",
-   "finished_at": "2026-10-19T09:31:09+00:00",
+   "finished_at": "2026-10-19T09:31:12+00:00",
    "round_file": "tasks/sr-20261019-093100-0007/01-vote-a-claude.md",
-   "served": null,
+   "served": {
+    "asked": "claude-sonnet-5-5",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/models.json",
+    "key": null,
+    "layer": "agent",
+    "model": "claude-sonnet-5-5",
+    "note": null,
+    "source": "stream: init and modelUsage",
+    "time_limit": 600
+   },
    "reason_code": null,
    "resume_of": null,
    "fallback_of": null,
@@ -91,8 +171,30 @@
     "found": 2,
     "from": null,
     "with": null,
-    "limit": null
-   }
+    "limit": null,
+    "query": "One word: should the garden newsletter go out weekly or monthly? Then one line why.\nDraft a 40-word notice that the garden's tool shed now opens at 7 am."
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 348,
+    "from": "sr-20261019-093100-0007",
+    "judge": false,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "claude": 25
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-093100-0007/01-vote-a-claude-prompt.md",
+   "model": "claude-sonnet-5-5",
+   "effort": null,
+   "time_limit": 600
   },
   {
    "call_id": "sr-20261019-093100-0007-s2",
@@ -103,10 +205,24 @@
    "agent": "chatgpt",
    "status": "done",
    "verdict": null,
-   "sent_at": "2026-10-19T09:31:12+00:00",
-   "finished_at": "2026-10-19T09:31:12+00:00",
+   "sent_at": "2026-10-19T09:31:15+00:00",
+   "finished_at": "2026-10-19T09:31:18+00:00",
    "round_file": "tasks/sr-20261019-093100-0007/02-vote-b-chatgpt.md",
-   "served": null,
+   "served": {
+    "asked": "gpt-6.1-sol",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/agents.json",
+    "key": null,
+    "layer": "agent",
+    "model": "gpt-6.1-sol",
+    "note": null,
+    "source": "codex header",
+    "time_limit": 600
+   },
    "reason_code": null,
    "resume_of": null,
    "fallback_of": null,
@@ -121,8 +237,30 @@
     "found": 2,
     "from": null,
     "with": null,
-    "limit": null
-   }
+    "limit": null,
+    "query": "One word: should the garden newsletter go out weekly or monthly? Then one line why.\nDraft a 40-word notice that the garden's tool shed now opens at 7 am."
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 372,
+    "from": "sr-20261019-093100-0007",
+    "judge": false,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "chatgpt": 49
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-093100-0007/02-vote-b-chatgpt-prompt.md",
+   "model": "gpt-6.1-sol",
+   "effort": null,
+   "time_limit": 600
   },
   {
    "call_id": "sr-20261019-093100-0007-s3",
@@ -133,8 +271,8 @@
    "agent": "grok",
    "status": "done",
    "verdict": null,
-   "sent_at": "2026-10-19T09:31:15+00:00",
-   "finished_at": "2026-10-19T09:31:24+00:00",
+   "sent_at": "2026-10-19T09:31:21+00:00",
+   "finished_at": "2026-10-19T09:31:30+00:00",
    "round_file": "tasks/sr-20261019-093100-0007/03-vote-c-grok.md",
    "served": null,
    "reason_code": null,
@@ -148,8 +286,30 @@
     "found": 2,
     "from": null,
     "with": null,
-    "limit": null
-   }
+    "limit": null,
+    "query": "One word: should the garden newsletter go out weekly or monthly? Then one line why.\nDraft a 40-word notice that the garden's tool shed now opens at 7 am."
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 373,
+    "from": "sr-20261019-093100-0007",
+    "judge": false,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "grok": 50
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-093100-0007/03-vote-c-grok-prompt.md",
+   "model": null,
+   "effort": null,
+   "time_limit": null
   }
  ],
  "handoff": null,
@@ -158,7 +318,7 @@
    "document_id": "task-sr-20261019-093100-0007",
    "chars": 172,
    "state": "done/passed/3",
-   "at": "2026-10-19T09:31:33+00:00"
+   "at": "2026-10-19T09:31:39+00:00"
   }
  ],
  "memory_given": [
@@ -222,6 +382,9 @@
  "attacks": null,
  "pieces": null,
  "join": null,
+ "estimate": null,
+ "menu": null,
  "original_file": null,
- "result_file": "tasks/sr-20261019-093100-0007/01-vote-a-claude.md"
+ "result_file": "tasks/sr-20261019-093100-0007/01-vote-a-claude.md",
+ "from_given": null
 }

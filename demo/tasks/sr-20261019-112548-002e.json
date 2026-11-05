@@ -1,0 +1,264 @@
+{
+ "api_version": 1,
+ "task_id": "sr-20261019-112548-002e",
+ "n": 41,
+ "created_at": "2026-10-19T11:25:51+00:00",
+ "updated_at": "2026-10-19T11:26:03+00:00",
+ "sent_at": null,
+ "source": "cli",
+ "text": "Write a Python function that parses a planting date, then write its docstring from the exact function you wrote, then a usage example that calls it.",
+ "status": "failed",
+ "waiting_on": null,
+ "outcome": "stopped",
+ "reason_code": null,
+ "mode": "split",
+ "preset": null,
+ "parent": null,
+ "project": null,
+ "chat": null,
+ "tag": null,
+ "skill": null,
+ "skill_source": null,
+ "agent": "claude",
+ "checker": "chatgpt",
+ "check_state": "pending",
+ "check_note": null,
+ "route_reason": "split",
+ "failed_stage": 1,
+ "web": false,
+ "files": [],
+ "result": "no split: Each part needs the one before it: the docstring and the example are written from the exact function.",
+ "result_url": null,
+ "jev": {
+  "status": "not_asked",
+  "label": null,
+  "confidence": null,
+  "tokens": 0,
+  "needs_split": null,
+  "error": null
+ },
+ "slots": null,
+ "working": null,
+ "steps": {
+  "chain": [
+   {
+    "stage": 1,
+    "role": "split_plan",
+    "agent": "claude"
+   },
+   {
+    "stage": 2,
+    "role": "integrate",
+    "agent": "claude"
+   },
+   {
+    "stage": null,
+    "role": "check",
+    "agent": "chatgpt"
+   }
+  ],
+  "now": null
+ },
+ "fallback": {
+  "ok": false,
+  "agent": null,
+  "reason": "not a double fail: it is failed, so it stopped before its check"
+ },
+ "resume": {
+  "ok": false,
+  "substitute": null,
+  "agent": null,
+  "checker": null,
+  "reason": "not a plan limit: no split: Each part needs the one before it: the docstring and the example are written from the exact function."
+ },
+ "pid": null,
+ "run_started_at": null,
+ "answered_by": null,
+ "stand_in": null,
+ "filled": null,
+ "card_line": null,
+ "takeover": null,
+ "late": null,
+ "project_files": null,
+ "notes": [],
+ "open_musts": [],
+ "land_anyway": false,
+ "no_split": "Each part needs the one before it: the docstring and the example are written from the exact function.",
+ "piece_of": null,
+ "router_notes": {
+  "hash": "8b61a57199701a87",
+  "chars": 330,
+  "file": "tasks/sr-20261019-112548-002e/router-notes.md"
+ },
+ "spec": null,
+ "forgotten": null,
+ "save_path": null,
+ "text_only": false,
+ "save_spec": null,
+ "card_actions": {
+  "pin": false,
+  "save": false,
+  "forget": false,
+  "remember": false
+ },
+ "next": [],
+ "from": null,
+ "idea": null,
+ "plan": null,
+ "plan_step": null,
+ "one_step": null,
+ "questions": null,
+ "models": null,
+ "auto": null,
+ "calls": [
+  {
+   "call_id": "sr-20261019-112548-002e-s1",
+   "order": 1,
+   "kind": "stage",
+   "stage": 1,
+   "role": "split_plan",
+   "agent": "claude",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T11:25:57+00:00",
+   "finished_at": "2026-10-19T11:26:00+00:00",
+   "round_file": "tasks/sr-20261019-112548-002e/01-split_plan-claude.md",
+   "served": {
+    "asked": "claude-sonnet-5-5",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/models.json",
+    "key": null,
+    "layer": "agent",
+    "model": "claude-sonnet-5-5",
+    "note": null,
+    "source": "stream: init and modelUsage",
+    "time_limit": 600
+   },
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "off (probe not passed)",
+    "count": null
+   },
+   "memory": {
+    "state": "not_kept",
+    "sent": null,
+    "found": null,
+    "from": null,
+    "with": null,
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 583,
+    "from": "sr-20261019-112548-002e",
+    "judge": false,
+    "planner": true,
+    "sections": {
+     "all_agents": 58,
+     "claude": 25,
+     "planner": 48
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-112548-002e/01-split_plan-claude-prompt.md",
+   "model": "claude-sonnet-5-5",
+   "effort": null,
+   "time_limit": 600
+  }
+ ],
+ "handoff": null,
+ "memory_stored": [],
+ "memory_given": [],
+ "candidates": null,
+ "pick": null,
+ "votes": null,
+ "tally": null,
+ "attacks": null,
+ "pieces": null,
+ "join": null,
+ "estimate": null,
+ "menu": [
+  {
+   "name": "route",
+   "description": "Jev labels the task; the skill table picks who does it and who checks it.",
+   "chain": "Jev's label → the skill table's doer → its checker",
+   "ready": true,
+   "why": null,
+   "project": true,
+   "calls": 2,
+   "max_calls": 4,
+   "needs_you": null
+  },
+  {
+   "name": "research-build",
+   "description": "One agent researches the web and X, a second builds from what it found, and a third checks the result.",
+   "chain": "Grok research → Claude build → ChatGPT check",
+   "ready": true,
+   "why": null,
+   "project": true,
+   "calls": 3,
+   "max_calls": 5,
+   "needs_you": null
+  },
+  {
+   "name": "collab",
+   "description": "Two agents work as a pair: one plans, the other improves the plan, the first does the work, and the second edits and checks it.",
+   "chain": "Claude plan → ChatGPT amend → Claude build → ChatGPT edit (check)",
+   "ready": true,
+   "why": null,
+   "project": true,
+   "calls": 4,
+   "max_calls": 4,
+   "needs_you": null
+  },
+  {
+   "name": "versus",
+   "description": "Two agents each build their own answer from the task alone and review each other's, then you pick the winner.",
+   "chain": "Claude build → ChatGPT build → ChatGPT review → Claude review → your pick",
+   "ready": true,
+   "why": null,
+   "project": false,
+   "calls": 4,
+   "max_calls": 4,
+   "needs_you": "pick"
+  },
+  {
+   "name": "redteam",
+   "description": "One agent builds, two others attack it on their own, the builder fixes what they found, and a checker confirms the fixes.",
+   "chain": "Claude build → ChatGPT attack → Cursor attack → Claude revise → ChatGPT check",
+   "ready": true,
+   "why": null,
+   "project": true,
+   "calls": 5,
+   "max_calls": 7,
+   "needs_you": null
+  },
+  {
+   "name": "vote",
+   "description": "Three agents answer the same short question on their own; the majority wins, and a tie comes to you.",
+   "chain": "Claude vote → ChatGPT vote → Grok vote → tally",
+   "ready": true,
+   "why": null,
+   "project": true,
+   "calls": 3,
+   "max_calls": 3,
+   "needs_you": "tie"
+  }
+ ],
+ "original_file": null,
+ "result_file": null,
+ "from_given": null
+}

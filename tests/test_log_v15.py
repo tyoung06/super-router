@@ -13,7 +13,7 @@ import pytest
 
 from router import __main__ as cli
 from router import log
-from tests.helpers import V14_SCHEMA
+from tests.helpers import V14_SCHEMA, V16_CALLS_SCHEMA
 
 V15_ADDED = "pid, run_started_at and answered_by columns added to tasks"
 NEW_TASK_COLUMNS = ["pid", "run_started_at", "answered_by"]
@@ -25,7 +25,7 @@ def _make_v14(path, open_task=False):
     c = sqlite3.connect(path)
     tasks_v14 = V14_SCHEMA
     assert not any(name in tasks_v14 for name in NEW_TASK_COLUMNS)
-    c.executescript(f"{tasks_v14}; {log.CALLS_SCHEMA}; PRAGMA user_version = 14;")
+    c.executescript(f"{tasks_v14}; {V16_CALLS_SCHEMA}; PRAGMA user_version = 14;")  # brief 28: no tests column
     rows = (("sr-1", "returned", "returned: needs your label", None, "needs_label"),
             ("sr-2", "queued" if open_task else "done", "best", "passed", None),
             ("sr-3", "done", "relay", "passed", None))
@@ -54,9 +54,9 @@ def _mode(path):
 
 def test_a_new_log_is_version_15_with_the_three_run_columns_last_on_tasks():
     c = log.init_db(":memory:")
-    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 16
-    assert [r[1] for r in c.execute("PRAGMA table_info(tasks)")][-4:] == ["reason_code"] + NEW_TASK_COLUMNS
-    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-1] == "round_file"  # calls unchanged
+    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 21
+    assert [r[1] for r in c.execute("PRAGMA table_info(tasks)")][-11:] == ["reason_code"] + NEW_TASK_COLUMNS + ["project_files", "from_task", "idea", "plan", "plan_step", "models", "auto"]
+    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-5:] == ["round_file", "tests", "model", "effort", "time_limit"]  # calls unchanged but brief 28's tests
     c.close()
 
 
@@ -80,7 +80,7 @@ def test_every_connection_waits_15_seconds_for_another_writer(tmp_path):
 def test_init_db_refuses_a_version_14_log_and_names_the_three_columns(tmp_path):
     db = tmp_path / "router.db"
     _make_v14(db)
-    with pytest.raises(log.VersionError, match=r"version 14 log.*sr migrate.*version 16 \(" + V15_ADDED + "; " + log.V16_ADDED + r"\)"):
+    with pytest.raises(log.VersionError, match=r"version 14 log.*sr migrate.*version 21 \(" + V15_ADDED + "; " + log.V16_ADDED + "; " + log.V17_ADDED + "; " + log.V18_ADDED + "; " + log.V19_ADDED + "; " + log.V20_ADDED + "; " + log.V21_ADDED + r"\)"):
         log.init_db(db)
     assert _mode(db) == "delete"  # nothing was changed
 
@@ -91,17 +91,17 @@ def test_upgrade_from_version_14_adds_the_three_columns_keeps_every_row_and_sets
     db, backups = tmp_path / "router.db", tmp_path / "backups"
     _make_v14(db)
     done = log.migrate(db, backups)
-    assert done["added"] == log.UPGRADES[14]["added"] == V15_ADDED + "; " + log.V16_ADDED
+    assert done["added"] == log.UPGRADES[14]["added"] == V15_ADDED + "; " + log.V16_ADDED + "; " + log.V17_ADDED + "; " + log.V18_ADDED + "; " + log.V19_ADDED + "; " + log.V20_ADDED + "; " + log.V21_ADDED
     assert (done["from"], done["rows"], done["calls"], done["highest"], done["journal_mode"]) == (14, 3, 2, 3, "wal")
     assert _mode(db) == "wal"
     c = log.init_db(db)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert c.execute("PRAGMA user_version").fetchone()[0] == 21
     assert [tuple(r) for r in c.execute("SELECT task_id, pid, run_started_at, answered_by, reason_code FROM tasks"
                                         " ORDER BY rowid")] == [
         ("sr-1", None, None, None, "needs_label"), ("sr-2", None, None, None, None), ("sr-3", None, None, None, None)]
     assert log.get_call(c, "sr-2")["round_file"] == "tasks/sr-2/01-do-claude.md"  # the version 14 column kept
     c.close()
-    with pytest.raises(log.MigrateRefused, match="already a version 16"):
+    with pytest.raises(log.MigrateRefused, match="already a version 21"):
         log.migrate(db, backups)
 
 
@@ -164,7 +164,7 @@ def test_a_backup_that_does_not_match_is_removed_and_nothing_changes(tmp_path, m
 def test_every_older_upgrade_lands_on_15_with_the_three_columns():
     for from_version in range(2, 15):
         plan = log.UPGRADES[from_version]
-        assert plan["added"].endswith(V15_ADDED + "; " + log.V16_ADDED), from_version
+        assert plan["added"].endswith(V15_ADDED + "; " + log.V16_ADDED + "; " + log.V17_ADDED + "; " + log.V18_ADDED + "; " + log.V19_ADDED + "; " + log.V20_ADDED + "; " + log.V21_ADDED), from_version
         for column in NEW_TASK_COLUMNS:
             assert f"ALTER TABLE tasks ADD COLUMN {column}" in plan["statements"], (from_version, column)
     assert log.UPGRADES[14]["columns"] == log.V14_COLUMNS == log.V13_COLUMNS + ("reason_code",)
@@ -179,7 +179,7 @@ def test_sr_migrate_prints_the_backup_check_the_journal_mode_and_the_counts(tmp_
     assert "Log: router.db, version 14, 3 rows (highest #3), integrity ok, no open tasks." in out
     assert "Backup copy: backups/router-v14-" in out and "(owner-only), made with SQLite's backup API" in out
     assert "integrity ok, version 14, 3 rows, 2 calls, content the same as the log's" in out
-    assert f"Upgraded in place: {V15_ADDED}; {log.V16_ADDED}, now version 16." in out
+    assert f"Upgraded in place: {V15_ADDED}; {log.V16_ADDED}; {log.V17_ADDED}; {log.V18_ADDED}; {log.V19_ADDED}; {log.V20_ADDED}; {log.V21_ADDED}, now version 21." in out
     assert "Journal mode: wal (a JSON read and a running task can use the log at once)." in out
     assert "Checked after: 3 rows, 2 calls, highest #3, every version 14 column unchanged" in out
 

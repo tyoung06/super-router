@@ -46,6 +46,7 @@ class Result:
     claude_version: str
     seconds: float
     queries: list = field(default_factory=list)
+    tools: dict = field(default_factory=dict)  # the design chat's fix of 29 Oct: the other tools, {ran, refused}, by name
 
     @property
     def passed(self):
@@ -80,7 +81,7 @@ def _listing(workspace):
 def judge(*, returncode, stdout, stderr, config, home_names, prompt_text, before, after, files_before, files_after):
     """Every check, from the evidence only. `.env` values never leave this function."""
     events = claude_worker._events(stdout)
-    uses = claude_worker.tool_uses(events)
+    calls = claude_worker.tool_calls(events)
     result = next((e for e in reversed(events) if e.get("type") == "result"), None)
     answer = (result or {}).get("result") or ""
     checks = []
@@ -89,10 +90,11 @@ def judge(*, returncode, stdout, stderr, config, home_names, prompt_text, before
                         f"exit {returncode}, {len(events)} events" + ("" if finished else ", no clean result")))
     problems = claude_worker.init_problems(events) if events else ["no init event"]
     checks.append(Check("init: WebSearch only, no MCP server", not problems, "; ".join(problems)))
-    searches = [i for n, i in uses if n == "WebSearch"]
+    searches = [c["input"] for c in calls if c["name"] == "WebSearch"]
     checks.append(Check("WebSearch ran", bool(searches), f"{len(searches)} search(es) in Claude's tool log"))
-    others = sorted({str(n) for n, _ in uses if n != "WebSearch"})
-    checks.append(Check("no other tool ran", not others, ", ".join(others) if others else "none in the tool log"))
+    # the design chat's fix of 29 Oct: a tool asked for and refused never ran (Claude Code 2.1.312 asks for ones it lacks)
+    ran, refused = claude_worker.ran_and_refused(calls, claude_worker.SEARCH_TOOLS)
+    checks.append(Check("no other tool ran", not ran, claude_worker.tools_line(ran, refused)))
     secrets = [v for v in config.values() if isinstance(v, str) and len(v) >= MIN_SECRET_LENGTH]
     hit = any(v in stdout or v in stderr for v in secrets)
     checks.append(Check("no .env value in the output", not hit, "found" if hit else "not found"))
@@ -136,7 +138,9 @@ def probe(*, config, env_path, home, workspace=None, repo=None, run=subprocess.r
                             config=config, home_names=home_names, prompt_text=text, before=before,
                             after=_listing(workspace), files_before=files_before,
                             files_after=_probe_files(repo, workspace, home))
-    return Result(checks, version, seconds, queries)
+    ran, refused = claude_worker.ran_and_refused(claude_worker.tool_calls(claude_worker._events(proc.stdout or "")),
+                                                 claude_worker.SEARCH_TOOLS)
+    return Result(checks, version, seconds, queries, tools={"ran": ran, "refused": refused})
 
 
 def command_check(state_path, **probe_kw):

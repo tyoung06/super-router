@@ -32,17 +32,18 @@ def _columns(conn, table):
 
 def test_a_new_log_is_version_5_with_calls_check_note_files_and_the_relay_columns(tmp_path):
     c = log.init_db(tmp_path / "router.db")
-    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 16
+    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 21
     assert _columns(c, "tasks") == list(log.V2_COLUMNS) + ["check_note", "files", "mode", "preset", "failed_stage",
                                                          "parent", "split_plan", "slots", "web", "project", "handoff", "chat", "memory", "reason_code",
-                                                         "pid", "run_started_at", "answered_by"]
+                                                         "pid", "run_started_at", "answered_by", "project_files",
+                                                         "from_task", "idea", "plan", "plan_step", "models", "auto"]  # brief 33
     assert _columns(c, "calls") == CALL_COLUMNS + ["stage", "role", "reason_code", "resume_of", "search", "fallback_of",
-                                                   "context", "memory", "served", "round_file"]
+                                                   "context", "memory", "served", "round_file", "tests", "model", "effort", "time_limit"]
     c.close()
 
 
-def test_the_six_check_states_and_nothing_else(conn):
-    assert log.CHECK_STATES == ("not_needed", "unchecked", "pending", "passed", "fixed", "failed")
+def test_the_seven_check_states_and_nothing_else(conn):  # brief 29.1 (decision 17): `blocked` is the seventh
+    assert log.CHECK_STATES == ("not_needed", "unchecked", "pending", "passed", "fixed", "failed", "blocked")
     for n, state in enumerate(log.CHECK_STATES):
         log.add_task(conn, f"sr-{n}", "t", "cli", JEV_OK)
         log.set_route(conn, f"sr-{n}", agents=ALL_AGENTS, agent="grok", route_reason="best", check_state=state)
@@ -85,9 +86,9 @@ def test_a_claude_call_is_written_finished_in_one_go(conn):
 
 def test_call_kind_status_and_verdict_are_checked_in_code(conn):
     add_row(conn, "sr-1")
-    assert log.CALL_KINDS == ("do", "check", "fix", "recheck", "stage", "reask")
+    assert log.CALL_KINDS == ("do", "check", "fix", "recheck", "stage", "reask", "questions")  # brief 33.4 (decision 3)
     assert log.CALL_STATUSES == ("sent", "done", "failed", "timed_out")
-    assert log.VERDICTS == ("PASS", "FIX", "unreadable")
+    assert log.VERDICTS == ("PASS", "FIX", "BLOCKED", "unreadable")  # brief 29.1 (decision 17)
     with pytest.raises(ValueError):
         log.add_call(conn, "sr-1-x", "sr-1", "redo", "claude")
     with pytest.raises(ValueError):

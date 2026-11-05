@@ -10,7 +10,7 @@ parenthesis); Details keep the whole sentence. A takeover (decision 6) and a Gro
 C11) are read from the task's calls. Pure: it reads a task row and its calls and nothing else."""
 import re
 
-from router import availability, presets, routing, takeover
+from router import availability, log, presets, routing, takeover
 
 SOCIAL_NOTE = routing.SOCIAL_NOTE  # decision 9; "done without Meta": the owner
 SLOT_WORDS = {"research": "the research", "build": "the build", "check": "the check", "attack": "the attack",
@@ -73,6 +73,9 @@ def parts(row, preset=None, calls=()):
     found = []
     took, before = takeover.found(calls) if calls else (None, None)
     doer_moved = took is not None and before["kind"] not in ("check", "recheck")
+    reason = row["route_reason"] if "route_reason" in row.keys() else None
+    if (reason or "").startswith(routing.NO_FILES_DOER):  # brief 33.2 fix 1b: the one line, as the record has it
+        found.append(reason)
     stood = stand_in(row, calls)
     if stood is not None and not doer_moved:
         found += [f"{availability.name_of(stood['agent'])} did this", short(stood["why"])]
@@ -82,11 +85,59 @@ def parts(row, preset=None, calls=()):
         from router import resume  # resume reads relay, which reads checking; kept local as takeover's words are
         found += [f"{availability.name_of(took['agent'])} took over {resume.stopped_text(before)}",
                   short(takeover.why_words(before))]
+    found += model_notes(calls)  # brief 33.3 (decisions 6 and 7)
     found += skipped(row)
     extra = note(row)
     if found and extra:
         found.append(extra)
+    if any(_notes_left_out(c) for c in calls or ()):  # brief 30 (decision 6): Grok got no router notes on a call
+        from router import notes  # kept local, as the other words here are
+        found.append(notes.GROK_LEFT_OUT)
+    if any(_spec_left_out(c) for c in calls or ()):  # brief 33.2 (decision 2.4): Grok got no SPEC.md on a call
+        from router import spec  # kept local
+        found.append(spec.GROK_LEFT_OUT)
     return found
+
+
+CREDITS_LINE = "stopped: billed to usage credits · Fable is off"  # brief 33.3 (decision 6)
+
+
+def model_notes(calls):
+    """Brief 33.3: the one-line notes about models, each said once: a served model that differs from the one asked
+    (decision 7: `Fable 5.1 re-ran this on claude-opus-4-8`), a Fable default that ran on Opus while Fable is off
+    (decision 6: the card says why), and a call billed to usage credits (the task stopped, Fable off)."""
+    from router import models  # models reads log; kept local as resume is above
+    found = []
+    for call in calls or ():
+        keys = call.keys() if hasattr(call, "keys") else call
+        if "served" not in keys or call["agent"] not in models.AGENTS:
+            continue
+        record = log.served_of(call) or {}
+        differs = models.differs_note(call)
+        if differs and differs not in found:
+            found.append(differs)
+        if record.get("note") and record["note"] not in found:
+            found.append(record["note"])
+        if (record.get("credits") or {}).get("billed") and CREDITS_LINE not in found:
+            found.append(CREDITS_LINE)
+    return found
+
+
+def _spec_left_out(call):
+    """Brief 33.2 (decision 2.4): a Grok call whose SPEC.md block was left out for its prompt limit."""
+    return bool(((log.context_of(call) or {}).get("spec") or {}).get("left_out"))
+
+
+def _notes_left_out(call):
+    """Brief 30 (decision 6): a Grok call whose router notes were left out for its prompt limit."""
+    import json
+    keys = call.keys() if hasattr(call, "keys") else call
+    raw = call["context"] if "context" in keys else None
+    try:
+        record = json.loads(raw) if isinstance(raw, str) else raw
+    except ValueError:
+        return False
+    return call["agent"] == "grok" and isinstance(record, dict) and bool((record.get("notes") or {}).get("left_out"))
 
 
 def line(row, preset=None, calls=()):

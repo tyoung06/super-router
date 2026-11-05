@@ -206,7 +206,7 @@ def test_a_cancel_during_the_send_is_reported(conn):
 
 
 def test_a_claude_answer_for_a_task_cancelled_meanwhile_is_shown_as_not_saved(conn):
-    def worker(task):
+    def worker(task, **kwargs):  # brief 33.3: the worker gets choice=
         log.set_cancelled(conn, log.recent_tasks(conn)[0]["task_id"])
         return "late answer"
     lines = []

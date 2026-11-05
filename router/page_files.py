@@ -2,13 +2,15 @@
 and 11). A file is opened only when, resolved through links, it sits inside the task folder its path names: one of
 `tasks/<task_id>/`, `media/in/<task_id>/`, `media/pages/<task_id>/`, `media/frames/<task_id>/` and
 `media/out/<task_id>/`, for a task id of the router's shape. So a link that leads out of its task folder is refused,
-into another task's folder too. Besides those: `report_path` exactly, and a registered project's `HANDOFF.md` exactly.
+into another task's folder too. Besides those: `report_path` exactly, and a registered project's `HANDOFF.md` exactly
+(brief 33.1: and its `docs/PLAN.md`, never through a link).
 Never a hidden name (`.env*` among them), `router.db*`, `backups/` or `config/`. Text over 2 MB reads its first 2 MB.
 
 The one write: a file dropped on the page goes into the drop folder, after Media's types and its 50 MB limit, with
 exclusive create (a clash becomes " (2)", never an overwrite, never through a link). Open in Finder runs
 `["open", "-R", <path>]` on an allowed path, on macOS only. Nothing here reads `.env` or the log."""
 import os
+import stat
 import re
 import subprocess
 import sys
@@ -21,7 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 TASK_ID = re.compile(r"sr-\d{8}-\d{6}-[0-9a-f]{4}")
 ROOTS = ("tasks", "media/in", "media/pages", "media/frames", "media/out")  # each followed by /<task_id>/
 TEXT_LIMIT = 2 * 1024 * 1024
-TEXT = (".md", ".txt", ".json", ".ndjson", ".log", ".csv", ".html", ".htm")
+TEXT = (".md", ".txt", ".json", ".ndjson", ".log", ".csv", ".html", ".htm", ".diff")  # brief 28: changes.diff as text
 MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif",
         ".pdf": "application/pdf", ".mp4": "video/mp4", ".mov": "video/quicktime"}
 ROUND = re.compile(r"(\d+)-(.+)-([a-z]+)\.md")   # tasks/<task_id>/<NN>-<role>-<agent>.md (rules v2.30, Round outputs)
@@ -142,6 +144,23 @@ def _exactly(real, wanted):
         return False
 
 
+PLAN_FILE = "docs/PLAN.md"  # brief 33.1 (decision 20): router/plan.py's FILE, the one more file a project shows
+
+
+def plan_file(root, folder):
+    """Brief 33.1 (decision 20): a registered project's docs/PLAN.md, read only, as its HANDOFF.md is: that file exactly,
+    and never when `docs` or the file is a link (the router never writes through one, and the page never reads through
+    one). Refused otherwise."""
+    for part in ("docs", PLAN_FILE):
+        if (Path(folder) / part).is_symlink():
+            raise Refused(f"{part} in the project's folder is a link: the page never reads through a link")
+    wanted = str(Path(folder) / PLAN_FILE)
+    try:
+        return resolve(root, wanted, handoffs=[wanted])
+    except Refused as e:
+        raise Refused("the project has no docs/PLAN.md yet" if str(e) == "no such file" else str(e)) from None
+
+
 def resolve(root, path, *, report_path=None, handoffs=()):
     """The real file `path` names when decision 9 allows it; else Refused."""
     if not isinstance(path, str) or not path:
@@ -201,22 +220,48 @@ def _name_problem(name):
     return None
 
 
-def drop_write(drop_folder, name, data):
+def _same_file(path, data):
+    """True when `path` is a plain file (never through a link) holding exactly `data`."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError:
+        return False
+    with os.fdopen(fd, "rb") as f:
+        info = os.fstat(f.fileno())
+        return stat.S_ISREG(info.st_mode) and info.st_size == len(data) and f.read(len(data) + 1) == data
+
+
+def drop_write(drop_folder, name, data, *, project=False):
     """Write one dropped file into the drop folder (decision 8); returns its path. Media's types and its 50 MB limit
-    first; exclusive create, never through a link; a clash becomes ` (2)`, ` (3)`, … never an overwrite."""
+    first; exclusive create, never through a link; a clash becomes ` (2)`, ` (3)`, … never an overwrite. A drop on a
+    project (brief 28, `/break-ui`) takes any type, since `sr project files` checks each file, and is never renamed: its
+    name is the one it gets in the project. So a name already waiting there is the same file again only when its bytes
+    are (used as it is); another file of that name is refused, and nothing is written."""
     if drop_folder is None:
         raise Refused("no drop folder is set (drop_folder in config/settings.json)")
     problem = _name_problem(name)
     if problem:
         raise Refused(problem)
     suffix = Path(name).suffix.lower().lstrip(".")
-    if suffix not in media.EXTENSIONS + drop.CONVERTED:
+    if not project and suffix not in media.EXTENSIONS + drop.CONVERTED:
         what = f"a .{suffix} file" if suffix else "a file with no type"
         raise Refused(f"{what} can't go on a task; the types are {', '.join(media.EXTENSIONS + drop.CONVERTED)}")
     if len(data) > media.MAX_BYTES:
         raise Refused("the file is over 50 MB")
     folder = Path(drop_folder).expanduser()
     folder.mkdir(parents=True, exist_ok=True)
+    if project:
+        target = folder / name
+        try:
+            fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        except FileExistsError:
+            if _same_file(target, data):
+                return target
+            raise Refused(f"an older {name} is waiting in the drop folder from a drop that wasn't added; move it out "
+                          "of the drop folder, then drop this one again") from None
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        return target
     stem, ext = Path(name).stem, Path(name).suffix
     for n in range(1, 1000):
         target = folder / (name if n == 1 else f"{stem} ({n}){ext}")
@@ -230,10 +275,25 @@ def drop_write(drop_folder, name, data):
     raise Refused("too many files of that name in the drop folder")
 
 
-def reveal(root, path, *, report_path=None, handoffs=(), run=subprocess.run, platform=sys.platform):
-    """Open in Finder (decision 11): `open -R` on a path decision 9 allows, on macOS only."""
+def project_folder(path, projects):
+    """Cleanup 1 (2.6): the real folder when `path` is exactly a registered project's (as its registry names it, `~` allowed),
+    else None: never anything inside one, a climb that lands on one, or a link to one. Only `reveal` reads this; the files
+    rule (`resolve`) still takes files alone, so the page can read nothing new."""
+    if not isinstance(path, str) or not path or ".." in Path(path).parts:
+        return None
+    given = Path(path).expanduser()
+    if not given.is_absolute() or given.is_symlink() or not given.is_dir():
+        return None
+    if not any(given == Path(folder).expanduser() for folder in projects or ()):
+        return None
+    return given.resolve()
+
+
+def reveal(root, path, *, report_path=None, handoffs=(), projects=(), run=subprocess.run, platform=sys.platform):
+    """Open in Finder (decision 11): `open -R` on a path decision 9 allows, or a registered project's own folder (`projects`,
+    Cleanup 1), on macOS only."""
     if platform != "darwin":
         raise Refused("Open in Finder is macOS only")
-    real = resolve(root, path, report_path=report_path, handoffs=handoffs)
+    real = project_folder(path, projects) or resolve(root, path, report_path=report_path, handoffs=handoffs)
     run(["open", "-R", str(real)], capture_output=True, text=True, timeout=10, stdin=subprocess.DEVNULL)
     return real

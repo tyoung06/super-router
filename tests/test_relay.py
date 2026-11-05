@@ -292,8 +292,8 @@ class Chat(Scripted):
         self.kwargs = []
 
     def __call__(self, prompt, **kwargs):
-        self.kwargs.append(kwargs)
-        return super().__call__(prompt)
+        self.kwargs.append({k: v for k, v in kwargs.items() if k != "choice"})  # brief 33.3: choice= rides on every call
+        return super().__call__(prompt, **kwargs)  # Scripted keeps each call's choice (`choices`)
 
 
 class RelayHook(Webhook):
@@ -338,7 +338,7 @@ def test_the_dry_chain_logs_a_stage_1_row_a_stage_2_row_and_a_check_row(conn):
                             ("sr-r-s2", "stage", 2, "build", "claude", "done"),
                             ("sr-r-c1", "check", None, None, "chatgpt", "done")]
     assert hook.sent[0]["task_id"] == "sr-r-s1" and "Do not do the task itself" in hook.sent[0]["task"]
-    assert worker.prompts == [relay.prompt_for("build", TASK, GOOD_NOTE)]
+    assert [less_next(p) for p in worker.prompts] == [relay.prompt_for("build", TASK, GOOD_NOTE)]
     assert "===== RESEARCH NOTE =====" in worker.prompts[0]
     assert hook.closed == [1]
     assert row["result"] in out and GOOD_NOTE not in out, "stage results stay hidden when the chain runs through"
@@ -493,7 +493,7 @@ def test_a_fix_round_on_a_relay_task_sends_the_builder_the_task_its_result_the_f
     fix_prompt = worker.prompts[1]
     assert "===== TASK =====\n" + TASK in fix_prompt
     assert "===== EARLIER RESULT =====\nA 150-word summary built from the note." in fix_prompt
-    assert "===== REVIEW NOTES =====\n1. Name the week the posts are from." in fix_prompt
+    assert "===== MUST FIX =====\n1. Name the week the posts are from." in fix_prompt  # brief 29.1 (decision 15)
     assert f"===== RESEARCH NOTE =====\n{GOOD_NOTE}" in fix_prompt
     assert "CHECKED: passed after one fix." in out and GOOD_NOTE not in out
 
@@ -533,6 +533,7 @@ from pathlib import Path as _Path  # noqa: E402
 
 from router import page  # noqa: E402
 from tests.helpers import add_row, shipped_roster as _shipped  # noqa: E402
+from tests.helpers import less_next
 
 INDEX = _Path(__file__).resolve().parent.parent / "static" / "index.html"
 ROSTER = _shipped()
@@ -814,7 +815,8 @@ def test_the_no_new_research_line_is_in_the_relay_checker_prompt_only():
     assert relay_check.index(checking.NO_RESULT_RULE) < relay_check.index(NO_NEW_RESEARCH) < relay_check.index("===== TASK")
     for route_check in (checking.checker_prompt(TASK, "built", no_tools=False, can_browse=True),
                         checking.checker_prompt(TASK, "built", no_tools=True)):
-        assert NO_NEW_RESEARCH not in route_check and "new research" not in route_check
+        assert NO_NEW_RESEARCH not in route_check  # brief 29.1 (decision 18): every check names new research once,
+        assert route_check.count("new research") == 1  # in the unverified line, never as the relay's line
 
 
 def test_a_research_build_check_and_recheck_carry_the_line_and_a_route_check_does_not(conn):

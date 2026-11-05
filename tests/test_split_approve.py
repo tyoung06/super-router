@@ -5,8 +5,10 @@ terminal the split stops at the plan and `sr split --go <n>` approves it later. 
 every secret here is fake."""
 import pytest
 
+from router import checking
 from router import __main__ as cli
 from router import log, split
+from tests.helpers import plan_prompt_as_sent, teamed
 from tests.test_loop import Clock, Scripted
 from tests.test_relay import CONFIG, ROSTER, Chat, RelayHook
 
@@ -16,8 +18,8 @@ P1 = "Write a 100-word intro paragraph about adjustable garden seed trays. No pr
 P2 = "Write a 5-item setup checklist for using an adjustable garden seed tray on a heat mat. No prices."
 P3 = "Write “one” closing line — café-style, with  two spaces. No prices."
 JOIN = "Put the intro paragraph first, then the checklist under it."
-PLAN = f"## Pieces\n1. {P1}\n2. {P2}\n\n## Join\n{JOIN}\n"
-PLAN3 = f"## Pieces\n1. {P1}\n2. {P2}\n3. {P3}\n\n## Join\n{JOIN}\n"
+PLAN = teamed(f"## Pieces\n1. {P1}\n2. {P2}\n\n## Join\n{JOIN}\n")  # brief 29: a team and a why per piece
+PLAN3 = teamed(f"## Pieces\n1. {P1}\n2. {P2}\n3. {P3}\n\n## Join\n{JOIN}\n")
 WRITING = {"status": "ok", "label": "writing", "confidence": 0.93, "needs_split": 0.2, "tokens": 700}
 LOW = {"status": "below_floor", "label": "planning", "confidence": 0.55, "needs_split": 0.2, "tokens": 650}
 
@@ -39,7 +41,7 @@ class Ask:
     def __init__(self, *replies):
         self.replies, self.prompts = list(replies), []
 
-    def __call__(self, prompt):
+    def __call__(self, prompt, **kwargs):  # brief 33.3: the worker gets choice=
         self.prompts.append(prompt)
         if not self.replies:
             raise EOFError
@@ -107,7 +109,7 @@ def test_a_billing_switch_refuses_a_split(conn):
 def test_the_plan_step_asks_claude_once_with_the_plan_prompt_and_writes_no_piece_row(conn):
     code, out, worker, chat, jev, _ = _split(conn)
     assert code == 0, out
-    assert worker.prompts == [split.plan_prompt(TASK)] and chat.prompts == []
+    assert worker.prompts == [plan_prompt_as_sent(TASK, ROSTER)] and chat.prompts == []
     assert _pieces(conn) == []
     row = _split_row(conn)
     assert (row["mode"], row["jev_status"], row["agent"], row["checker"], row["route_reason"], row["status"],
@@ -140,10 +142,14 @@ def test_without_a_terminal_the_plan_is_printed_and_the_split_stops_at_it(conn):
     code, out, *_ = _split(conn)
     n = _split_row(conn)["n"]
     assert f"Task {n} · split · plan" in out
-    assert f"1. {P1}  → writing · claude / chatgpt" in out
-    assert f"2. {P2}  → writing · claude / chatgpt" in out
-    assert f"Join: {JOIN}" in out
-    assert f"No terminal to ask in. Approve it in Terminal: sr split --go {n}" in out
+    # brief 29 (decision 7): each piece's team, where it goes, the planner's why and Jev's label; the count; (decision 3)
+    # the line that names the answer by flag
+    assert f"1. {P1}\n   team: route → writing · claude / chatgpt\n   why: One writer and a checker are enough.\n" \
+           f"   Jev: writing 0.93" in out
+    assert f"2. {P2}\n   team: route → writing · claude / chatgpt" in out
+    assert f"Join: {JOIN}\nAbout 6 agent calls from here, up to 12 with fix rounds.\nJev: 2 labels so far; an edited " \
+           "text adds one" in out
+    assert f"The plan waits for your approval: sr split --go {n} --answer y|n" in out
     assert "Run these" not in out
 
 
@@ -197,7 +203,7 @@ def test_each_piece_row_is_routed_by_the_skill_table(conn):
 
 def test_e_edits_one_piece_the_edit_runs_and_both_texts_are_kept(conn):
     edit = "Write a 5-item checklist for a heat mat with an adjustable tray. No prices."
-    ask = Ask("e", "2", edit, "y")
+    ask = Ask("e", "2", edit, "", "y")  # brief 29 (decision 8): then its team, Enter keeping it
     code, out, worker, chat, jev, _ = _split(conn, ask=ask)
     plan = log.split_plan_of(_split_row(conn))
     assert plan["pieces"][1]["planner_text"] == P2 and plan["pieces"][1]["edited_text"] == edit
@@ -206,9 +212,11 @@ def test_e_edits_one_piece_the_edit_runs_and_both_texts_are_kept(conn):
     assert [c["task"] for c in jev.calls] == [P1, P2, edit], "an edited piece is relabeled"
     assert jev.calls[2]["task_id"] == plan["pieces"][1]["id"]
     assert out.count("Run these 2 pieces? [y/N/e]") == 0  # the prompt goes to ask(), not out
-    assert ask.prompts == ["Run these 2 pieces? [y/N/e] ", "Edit which piece? [1-2] ", "New text for piece 2: ",
+    assert ask.prompts == ["Run these 2 pieces? [y/N/e] ", "Edit which piece? [1-2] ",
+                           "New text for piece 2 (Enter keeps it): ",
+                           "Team for piece 2 (route, research-build, collab, versus, redteam, vote) [route]: ",
                            "Run these 2 pieces? [y/N/e] "]
-    assert out.count(f"2. {edit}  → writing · claude / chatgpt") == 1, "the edit is shown before the yes"
+    assert out.count(f"2. {edit}\n   team: route → writing · claude / chatgpt") == 1, "the edit is shown before the yes"
 
 
 def test_an_edit_that_breaks_the_piece_rules_is_not_taken(conn):
@@ -224,7 +232,7 @@ def test_a_piece_below_jevs_floor_shows_ask_and_the_owner_names_its_skill_at_the
     jev = Jev({P2: LOW})
     ask = Ask("y", "writing")
     code, out, worker, chat, jev, _ = _split(conn, ask=ask, jev=jev)
-    assert f"2. {P2}  → ask" in out
+    assert f"2. {P2}\n   team: route → your skill (Jev was unsure)" in out
     assert "Piece 2: " in out and "Which skill does this task need?" in out
     piece2 = next(p for p in _pieces(conn) if p["task"] == P2)
     assert (piece2["jev_status"], piece2["jev_label"], piece2["skill"], piece2["skill_source"], piece2["agent"]) == (
@@ -240,7 +248,7 @@ def test_a_piece_the_owner_answers_none_for_comes_back_and_still_gets_its_row(co
 def test_a_piece_whose_skill_isnt_routed_shows_that_it_comes_back(conn):
     jev = Jev({P2: {"status": "ok", "label": "computer_use", "confidence": 0.9, "tokens": 5}})
     code, out, *_ = _split(conn, jev=jev)
-    assert f"2. {P2}  → comes back: skill not routed in version 2" in out
+    assert f"2. {P2}\n   team: route → comes back: skill not routed in version 2" in out
 
 
 # ---------- the plan's contract ----------
@@ -268,7 +276,8 @@ def test_go_approves_a_plan_that_waited_and_reuses_the_stored_labels(conn):
     n = _split_row(conn)["n"]
     code, out, worker, chat, jev = _go(conn, [str(n)], ask=Ask("y"))
     assert code == 0, out
-    assert len(_pieces(conn)) == 2 and jev.calls == [] and worker.prompts[:2] == [P1, P2], "no second plan call"
+    doer = [f"{p}\n\n{checking.DELIVERABLE_LINE}" for p in (P1, P2)]  # brief 29.1 (decision 20): each piece's doer line
+    assert len(_pieces(conn)) == 2 and jev.calls == [] and worker.prompts[:2] == doer, "no second plan call"
     assert f"Task {n} · split · plan" in out
 
 

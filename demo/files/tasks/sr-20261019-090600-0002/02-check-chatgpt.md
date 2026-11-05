@@ -1,2 +1,2 @@
 FIX
-1. Say the 7 am opening is on weekdays only.
+1. [must] Say the 7 am opening is on weekdays only.

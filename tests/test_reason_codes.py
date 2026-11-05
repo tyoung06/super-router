@@ -134,7 +134,7 @@ def test_a_key_like_handoff_line_writes_handoff_key(project, conn):  # noqa: F81
 
 def test_a_handoff_gone_before_the_call_writes_handoff_unreadable(project, conn):  # noqa: F811
     class Gone(Scripted):
-        def __call__(self, prompt):
+        def __call__(self, prompt, **kwargs):  # brief 33.3: the worker gets choice=
             raise AssertionError("no call is made")
     real_attach = context.attach
 

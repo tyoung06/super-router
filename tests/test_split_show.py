@@ -6,12 +6,13 @@ import pytest
 
 from router import __main__ as cli
 from router import jsonview, log, page, split
+from tests.helpers import teamed
 from tests.test_relay import ROSTER
 from tests.test_split_approve import JOIN, P1, P2, Ask
 from tests.test_split_wait import R1, R2, JOINED, Env, _blocked_split
 
 TASK = "Write an intro and a checklist. No prices."
-PLAN = f"## Pieces\n1. {P1}\n2. {P2}\n\n## Join\n{JOIN}\n"
+PLAN = teamed(f"## Pieces\n1. {P1}\n2. {P2}\n\n## Join\n{JOIN}\n")  # brief 29: a team and a why per piece
 
 
 @pytest.fixture
@@ -79,7 +80,7 @@ def test_show_a_plan_waiting_for_approval_shows_where_each_piece_would_go(conn):
 def test_show_an_edited_piece_shows_both_texts(conn):
     edit = "Write a 5-item checklist for a heat mat. No prices."
     env = Env(claude=(PLAN, R1, R2, JOINED), chatgpt=("PASS", "PASS", "PASS"))
-    env.split(conn, TASK, ask=Ask("e", "2", edit, "y"))
+    env.split(conn, TASK, ask=Ask("e", "2", edit, "", "y"))  # brief 29: then its team, Enter keeping it
     code, out = _show(conn, [str(_split_row(conn)["n"])])
     assert f": {edit}" in out and f"     (edited; the planner wrote: {P2})" in out
 

@@ -5,17 +5,22 @@ list as the stage before, its revision and the fix list (decision 8). The task's
 deliverable without `## Answered`; `sr show` prints it, then `--- attacks ---` and `--- answered ---`.
 Every value here is fake."""
 import json
+from pathlib import Path
 
 import pytest
 
 from router import __main__ as cli
 from router import checking, log, presets, relay
-from tests.helpers import shipped_roster
+from tests.helpers import shipped_roster, today
 from tests.test_relay import CONFIG, Chat, Clock, RelayHook, Scripted
+from tests.helpers import less_next
 
 SENDERS = tuple(cli.SENDERS)
 ROSTER = shipped_roster()
-LOADED = presets.load_presets(ROSTER, SENDERS, relay.CONTRACTS, roles=relay.ROLES, verdicts=relay.VERDICTS)
+# Brief 32: presets 1.6's three-stage redteam, the shape an old task still runs and is read in (decision 18); the shipped
+# presets 1.7, with the second attacker, is tests/test_redteam2_*.py's
+V16 = Path(__file__).parent / "fixtures" / "presets_v1_6.json"
+LOADED = presets.load_presets(ROSTER, SENDERS, relay.CONTRACTS, roles=relay.ROLES, verdicts=relay.VERDICTS, path=V16)
 TASK = "Write a one-page plan for a weekly budget review ritual. Plain text, under 400 words."
 BUILD = "## Deliverable\nReview on Sundays at 6pm.\nCheck groceries.\n\n## Unfinished\nnone"
 ATTACKS = ("## Attacks\n1. [high] No trigger for a change is defined.\n2. [medium] Groceries only.\n"
@@ -62,7 +67,7 @@ def test_each_stage_gets_exactly_its_inputs(conn):
     attack, check = chat.prompts
     assert build == relay.prompt_for("build", TASK, None, task_alone=True, deliverable_shape=True)
     assert attack == relay.prompt_for("attack", TASK, BUILD, search=True)
-    assert revise == relay.revise_prompt(TASK, BUILD, against=ATTACKS)
+    assert less_next(revise) == relay.revise_prompt(TASK, BUILD, against=ATTACKS)
     assert revise.count(BUILD) == 1 and revise.count(ATTACKS) == 1 and "PASS" not in revise
 
 
@@ -70,7 +75,7 @@ def test_the_checker_gets_the_whole_revision_and_the_attack_list_once_labeled_ap
     code, out, row, worker, chat = _relay(conn, claude=[BUILD, REVISION], chat=[ATTACKS, "PASS"])
     check = chat.prompts[1]
     assert check == checking.checker_prompt(TASK, REVISION, no_tools=False, can_browse=True, relay=True, search=True,
-                                            attacks=ATTACKS)
+                                            attacks=ATTACKS, sent_on=today())
     assert check.count(ATTACKS) == 1 and checking._block(checking.ATTACKS_LABEL, ATTACKS) in check
     assert check.index("===== RESULT =====") < check.index(f"===== {checking.ATTACKS_LABEL} =====")
     for words in ("[high] attack that is neither fixed", "Do not fail it for an open [medium] or [low] attack",
@@ -111,11 +116,13 @@ def test_a_fail_naming_attack_1_sends_the_fix_round_to_the_build_agent_with_the_
                                           chat=[ATTACKS, "FIX\n1. Attack 1 is neither fixed nor answered.", "PASS"])
     assert code == 0, out
     fix = worker.prompts[2]
-    assert fix == checking.fix_prompt(TASK, REVISION, "1. Attack 1 is neither fixed nor answered.", prior=ATTACKS,
+    assert less_next(fix) == checking.fix_prompt(TASK, REVISION, "1. Attack 1 is neither fixed nor answered.", prior=ATTACKS,
                                       prior_label=relay.ATTACK_LIST_LABEL, prior_lines=[relay.REDTEAM_FIX_LINE],
-                                      count=True)
+                                      count=True,  # brief 29.1 (decision 15): the musts in their own block
+                                      reading=checking.read_check("FIX\n1. Attack 1 is neither fixed nor answered."))
     assert chat.prompts[2] == checking.checker_prompt(TASK, fixed, no_tools=False, can_browse=True, relay=True,
-                                                      search=True, attacks=ATTACKS)
+                                                      search=True, attacks=ATTACKS,  # brief 29.1: the re-check's list
+                                                      first=checking.read_check("FIX\n1. Attack 1 is neither fixed nor answered."), sent_on=today())
     assert (row["check_state"], row["result"]) == ("fixed", fixed.split("\n\n## Answered")[0])
 
 
@@ -168,7 +175,7 @@ def test_search_is_on_for_every_stage_and_the_prompts_differ_only_by_the_search_
     row = log.recent_tasks(conn)[0]
     assert [json.loads(c["search"])["state"] for c in log.calls_for(conn, row["task_id"])] == ["allowed"] * 4
     line = "\n\n" + checking.SEARCH_LINE_GENERAL
-    assert worker.prompts[1].replace(line, "", 1) == relay.revise_prompt(TASK, BUILD, against=ATTACKS)
+    assert less_next(worker.prompts[1].replace(line, "", 1)) == relay.revise_prompt(TASK, BUILD, against=ATTACKS)
     assert worker.prompts[0].replace(line, "", 1) == relay.prompt_for("build", TASK, None, task_alone=True,
                                                                          deliverable_shape=True)
     assert chatgpt.prompts[0].replace(line, "", 1) == relay.prompt_for("attack", TASK, BUILD)

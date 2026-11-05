@@ -66,11 +66,11 @@ class FakeRun:
         if argv[0] == "codex":
             Path(argv[argv.index("--output-last-message") + 1]).write_text(self.codex_text)
             return subprocess.CompletedProcess(argv, 0, "", "")
-        if "--output-format" in argv:
+        if "--allowedTools" in argv:  # a search call: the stream with its tools and one search
             stream = self.claude_stream if self.claude_stream is not None else _stream(
                 argv[argv.index("--tools") + 1: argv.index("--allowedTools")], [("WebSearch", {"query": "q"}, False)])
             return subprocess.CompletedProcess(argv, 0, stream, "")
-        return subprocess.CompletedProcess(argv, 0, self.claude_text, "")
+        return subprocess.CompletedProcess(argv, 0, _stream((), result=self.claude_text), "")  # brief 33.3: stream-json too
 
 
 # ---------- the flag ----------
@@ -155,7 +155,8 @@ def test_a_file_task_without_web_makes_no_search_command_and_chatgpt_disabled(co
     task_id, run = _file_task(conn, tmp_path, web=False), FakeRun()
     assert _run(conn, task_id, run, ready=lambda *a: True) == 0
     claude_argv, codex_argv = run.calls[0][0], run.calls[1][0]
-    assert claude_argv == safety.claude_argv("sonnet", tools="Read") and "WebSearch" not in claude_argv
+    # brief 33.3 (decision 5): a routed call asks for the tracked default by its full id, never an alias
+    assert claude_argv == safety.claude_argv("claude-sonnet-5-5", tools="Read") and "WebSearch" not in claude_argv
     assert _web_search_setting(codex_argv) == 'web_search="disabled"'
     assert [log.search_of(c)["state"] for c in log.calls_for(conn, task_id)] == ["off (file without --web)"] * 2
     prompts = [c["text"] for c in log.calls_for(conn, task_id)]
@@ -166,7 +167,7 @@ def test_the_same_task_with_web_makes_the_web_file_command_and_chatgpt_live(conn
     task_id, run = _file_task(conn, tmp_path, web=True), FakeRun()
     assert _run(conn, task_id, run, ready=lambda *a: True) == 0
     claude_argv, claude_cwd, held = run.calls[0]
-    assert claude_argv == safety.claude_web_files_argv("sonnet") and held == ["photo.png"]
+    assert claude_argv == safety.claude_web_files_argv("claude-sonnet-5-5") and held == ["photo.png"]
     assert claude_cwd.name == f"task-{task_id}"
     assert _web_search_setting(run.calls[1][0]) == 'web_search="live"'
     assert [log.search_of(c)["state"] for c in log.calls_for(conn, task_id)] == ["allowed", "allowed"]
@@ -177,7 +178,7 @@ def test_without_the_web_file_probe_claude_works_with_no_search_and_chatgpt_stil
     task_id, run = _file_task(conn, tmp_path, web=True), FakeRun()
     gate = lambda mode=None: mode != search.WEB_FILES   # the search probe passed; the --web file probe did not
     assert _run(conn, task_id, run, ready=gate) == 0
-    assert run.calls[0][0] == safety.claude_argv("sonnet", tools="Read")
+    assert run.calls[0][0] == safety.claude_argv("claude-sonnet-5-5", tools="Read")
     assert _web_search_setting(run.calls[1][0]) == 'web_search="live"'
     assert [log.search_of(c)["state"] for c in log.calls_for(conn, task_id)] == [
         "off (--web file probe not passed)", "allowed"]
@@ -208,10 +209,19 @@ def test_a_read_inside_the_copy_folder_is_allowed(tmp_path, folders):
 
 @pytest.mark.parametrize("path", ["/etc/hosts", "../../.env", "sub/../../photo.png", None])
 def test_any_read_outside_the_copy_folder_fails_the_call_and_its_answer_is_never_used(tmp_path, path):
+    # brief 33.1 (decision 23c): a Read outside that ran (its result came back without the error mark) fails the call
     tool_input = {"file_path": path} if path else {}
     with pytest.raises(claude_worker.WorkerError, match=r"1 Read call\(s\) outside the task's copy folder") as e:
-        _web_call(tmp_path, _stream(("Read", "WebSearch"), [("Read", tool_input, True)], result="SECRET ANSWER"))
+        _web_call(tmp_path, _stream(("Read", "WebSearch"), [("Read", tool_input, False)], result="SECRET ANSWER"))
     assert "SECRET ANSWER" not in str(e.value) and (path or "x") not in str(e.value)
+
+
+@pytest.mark.parametrize("path", ["/etc/hosts", "../../.env"])
+def test_a_read_outside_that_claude_code_refused_never_ran_and_fails_nothing(tmp_path, folders, path):
+    # brief 33.1 (decision 23c, brief 32's D8): judged as the --web file probe judges it ("Read touched only the copy")
+    answer = _web_call(tmp_path, _stream(("Read", "WebSearch"), [("Read", {"file_path": path}, True),
+                                                                 ("WebSearch", {"query": "tray"}, False)]))
+    assert answer == "The answer." and answer.queries == ["tray"]
 
 
 def test_a_symlink_out_of_the_copy_folder_counts_as_outside(tmp_path, folders):
@@ -270,7 +280,9 @@ def test_the_probe_passes_when_the_image_was_read_a_search_ran_and_the_env_read_
     (lambda c, f: c[:2] + [("Read", {"file_path": "/repo/.env"}, False)], "Read touched only the copy folder (the .env read failed)"),
     (lambda c, f: c[1:], "Read opened the test image in the copy folder"),
     (lambda c, f: [c[0], c[2]], "WebSearch ran"),
-    (lambda c, f: c + [("Bash", {"command": "ls ~"}, True)], "no other tool ran"),
+    # the design chat's fix of 29 Oct: a refused Bash never ran (tests/test_claude_probe_refused.py); one that came back
+    # without the error mark did
+    (lambda c, f: c + [("Bash", {"command": "ls ~"}, False)], "no other tool ran"),
 ])
 def test_each_probe_failure_is_named(tmp_path, change, failed):
     checks, _ = _judge(tmp_path, change(GOOD_CALLS(tmp_path), tmp_path))

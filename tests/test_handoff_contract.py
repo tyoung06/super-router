@@ -144,7 +144,8 @@ def test_the_doer_prompt_ends_with_the_build_line_before_the_handoff_block(proje
     worker = Scripted(GOOD)
     code, out, row, _ = _route(conn, project="demo", worker=worker, chatgpt=Chat("PASS"))
     assert code == 0, out
-    assert worker.prompts[0] == f"{TASK}\n\n{context.HANDOFF_LINE}\n\n" + _block(HANDOFF_TEXT.rstrip("\n"))
+    assert worker.prompts[0] == (f"{TASK}\n\n{checking.DELIVERABLE_LINE}\n\n{context.HANDOFF_LINE}\n\n"  # brief 29.1
+                                 + _block(HANDOFF_TEXT.rstrip("\n")))
 
 
 def test_the_build_line_wording_is_decision_6():
@@ -175,7 +176,8 @@ def test_the_fix_prompt_carries_the_line_after_the_reply_line(project, conn):
     worker, chat = Scripted(GOOD, GOOD.replace("Line two.", "Line two, fixed.")), Chat("FIX\n1. fix line two", "PASS")
     code, out, row, _ = _route(conn, project="demo", worker=worker, chatgpt=chat)
     assert code == 0 and row["check_state"] == "fixed", out
-    assert f"{checking.FIX_REPLY_LINE}\n\n{context.HANDOFF_LINE}\n\n" in worker.prompts[1]
+    # brief 29.1 (decision 20): the deliverable line sits between the reply line and the handoff line
+    assert f"{checking.FIX_REPLY_LINE}\n\n{checking.DELIVERABLE_LINE}\n\n{context.HANDOFF_LINE}\n\n" in worker.prompts[1]
     assert worker.prompts[1].index(context.HANDOFF_LINE) < worker.prompts[1].index("===== TASK =====")
 
 

@@ -24,9 +24,9 @@ def conn():
 
 def test_a_new_log_is_version_11_with_the_three_columns_last():
     c = log.init_db(":memory:")
-    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 16
-    assert [r[1] for r in c.execute("PRAGMA table_info(tasks)")][-8:] == ["project", "handoff", "chat", "memory", "reason_code", "pid", "run_started_at", "answered_by"]
-    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-4:] == ["context", "memory", "served", "round_file"]
+    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 21
+    assert [r[1] for r in c.execute("PRAGMA table_info(tasks)")][-15:] == ["project", "handoff", "chat", "memory", "reason_code", "pid", "run_started_at", "answered_by", "project_files", "from_task", "idea", "plan", "plan_step", "models", "auto"]
+    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-8:] == ["context", "memory", "served", "round_file", "tests", "model", "effort", "time_limit"]
 
 
 def test_a_routed_task_stores_its_project_name(conn):
@@ -40,9 +40,16 @@ def test_a_relay_task_stores_its_project_name(conn):
     assert log.get_task(conn, "sr-r")["project"] == "demo"
 
 
-def test_a_split_or_a_piece_never_carries_a_project(conn):
-    with pytest.raises(ValueError, match="only a routed or relay task has a project"):
-        log.add_task(conn, "sr-s", "t", "cli", NOT_ASKED, mode="split", project="demo")
+def test_a_split_and_its_pieces_carry_a_project_but_never_a_chat(conn):
+    """Brief 29 (decision 12) changed it: a split on a project carries it, and so do its pieces; neither takes a chat."""
+    log.add_task(conn, "sr-s", "t", "cli", NOT_ASKED, mode="split", project="demo")
+    log.add_task(conn, "sr-p", "t", "split", JEV_OK, mode="piece", parent="sr-s", project="demo")
+    log.add_task(conn, "sr-r", "t", "split", NOT_ASKED, mode="relay", preset="redteam", parent="sr-s", project="demo")
+    assert [log.project_of(log.get_task(conn, i)) for i in ("sr-s", "sr-p", "sr-r")] == ["demo"] * 3
+    with pytest.raises(ValueError, match="never a split or a piece"):
+        log.add_task(conn, "sr-s2", "t", "cli", NOT_ASKED, mode="split", chat="garden")
+    with pytest.raises(ValueError, match="never a split or a piece"):
+        log.add_task(conn, "sr-r2", "t", "split", NOT_ASKED, mode="relay", preset="vote", parent="sr-s", chat="garden")
 
 
 def test_a_project_name_is_plain(conn):
@@ -121,21 +128,21 @@ def _make_v10(path):
 def test_upgrade_from_version_10_adds_the_columns_and_keeps_every_row(tmp_path):
     db, backups = tmp_path / "router.db", tmp_path / "backups"
     _make_v10(db)
-    with pytest.raises(log.VersionError, match=r"version 10 log.*sr migrate.*version 16 \(project and handoff columns"):
+    with pytest.raises(log.VersionError, match=r"version 10 log.*sr migrate.*version 21 \(project and handoff columns"):
         log.init_db(db)
     done = log.migrate(db, backups)
     assert done["added"] == log.UPGRADES[10]["added"] == ("project and handoff columns added to tasks; "
-                                                          "context column added to calls; chat and memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task")
+                                                          "context column added to calls; chat and memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task; project_files column added to tasks; tests column added to calls; from_task and idea columns added to tasks; ideas table added; plan and plan_step columns added to tasks; models column added to tasks; model, effort and time_limit columns added to calls; auto column added to tasks")
     assert (done["rows"], done["calls"], done["highest"]) == (3, 1, 3)
     assert done["backup"].name.startswith("router-v10-") and done["backup"].exists()
     c = log.init_db(db)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert c.execute("PRAGMA user_version").fetchone()[0] == 21
     assert [tuple(r) for r in c.execute("SELECT project, handoff FROM tasks")] == [(None, None)] * 3
     assert [tuple(r) for r in c.execute("SELECT context FROM calls")] == [(None,)]
     rows = [log.get_task(c, f"sr-{i}") for i in (1, 2, 3)]
     assert [log.project_of(r) for r in rows] == [None] * 3 and [log.handoff_of(r) for r in rows] == [[]] * 3
     c.close()
-    with pytest.raises(log.MigrateRefused, match="already a version 16"):
+    with pytest.raises(log.MigrateRefused, match="already a version 21"):
         log.migrate(db, backups)
 
 
@@ -147,12 +154,12 @@ def test_sr_migrate_prints_the_10_to_11_upgrade(tmp_path):
     out = "\n".join(lines)
     assert "version 10, 3 rows (highest #3)" in out
     assert ("Upgraded in place: project and handoff columns added to tasks; context column added to calls; chat and memory "
-            "columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task, now version 16.") in out
+            "columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task; project_files column added to tasks; tests column added to calls; from_task and idea columns added to tasks; ideas table added; plan and plan_step columns added to tasks; models column added to tasks; model, effort and time_limit columns added to calls; auto column added to tasks, now version 21.") in out
 
 
 def test_every_older_upgrade_lands_on_11_with_the_three_columns():
     for version, plan in log.UPGRADES.items():
-        if version in (11, 12, 13, 14, 15):  # brief 19's 11 -> 12 adds the chat and memory columns only; brief 20's 12 -> 13 the served column only; brief 21's 13 -> 14 reason_code and round_file only; brief 22's 14 -> 15 the run columns only; brief 25's 15 -> 16 renames a stored value only
+        if version in (11, 12, 13, 14, 15, 16, 17, 18, 19, 20):  # briefs 28's 16 -> 17 and 33's 17 -> 18 add later columns only; brief 19's 11 -> 12 adds the chat and memory columns only; brief 20's 12 -> 13 the served column only; brief 21's 13 -> 14 reason_code and round_file only; brief 22's 14 -> 15 the run columns only; brief 25's 15 -> 16 renames a stored value only
             continue
         assert "ADD COLUMN project TEXT" in plan["statements"], version
         assert "ADD COLUMN handoff TEXT" in plan["statements"], version

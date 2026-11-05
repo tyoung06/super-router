@@ -31,9 +31,9 @@ def _columns(conn, table):
 
 def test_a_new_log_has_the_relay_columns_and_version_5(tmp_path):
     c = log.init_db(tmp_path / "router.db")
-    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 16
-    assert _columns(c, "tasks")[-17:] == ["check_note", "files", "mode", "preset", "failed_stage", "parent", "split_plan", "slots", "web", "project", "handoff", "chat", "memory", "reason_code", "pid", "run_started_at", "answered_by"]
-    assert _columns(c, "calls")[-10:] == ["stage", "role", "reason_code", "resume_of", "search", "fallback_of", "context", "memory", "served", "round_file"]
+    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 21
+    assert _columns(c, "tasks")[-24:] == ["check_note", "files", "mode", "preset", "failed_stage", "parent", "split_plan", "slots", "web", "project", "handoff", "chat", "memory", "reason_code", "pid", "run_started_at", "answered_by", "project_files", "from_task", "idea", "plan", "plan_step", "models", "auto"]
+    assert _columns(c, "calls")[-14:] == ["stage", "role", "reason_code", "resume_of", "search", "fallback_of", "context", "memory", "served", "round_file", "tests", "model", "effort", "time_limit"]
     assert log.V4_COLUMNS == log.V3_COLUMNS + ("files",)
     assert log.V4_CALL_COLUMNS == ("call_id", "task_id", "kind", "agent", "status", "sent_at", "finished_at",
                                    "run_uuid", "text", "verdict", "url")
@@ -41,10 +41,10 @@ def test_a_new_log_has_the_relay_columns_and_version_5(tmp_path):
 
 
 def test_the_lists_grew_by_the_relay_values_only():
-    assert log.MODES == ("route", "relay", "split", "piece")
+    assert log.MODES == ("route", "relay", "split", "piece", "plan", "auto", "suggest")  # brief 34: a run; brief 33.4: a suggest
     # brief 24 (decision 13) adds not_set_up: no JEV_API_KEY, so Jev isn't called (code-checked; no migration)
     assert log.JEV_STATUSES == ("ok", "below_floor", "none_of_these", "error", "over_cap", "not_asked", "not_set_up")
-    assert log.CALL_KINDS == ("do", "check", "fix", "recheck", "stage", "reask")
+    assert log.CALL_KINDS == ("do", "check", "fix", "recheck", "stage", "reask", "questions")  # brief 33.4
     assert log.STAGE_KINDS == ("stage", "reask")
     assert log.MAX_STAGES == 4
     assert log.STATUSES == ("queued", "sent", "done", "failed", "timed_out", "cancelled", "returned")
@@ -197,9 +197,9 @@ def test_upgrade_adds_the_relay_columns_to_a_version_4_log_and_keeps_every_row(t
     assert done["backup"] == backups / BACKUP_V4 and before_hash == done["sha256"] and done["backup_check"]["content"] == "same"  # brief 22: checked by content
     assert stat.S_IMODE((backups / BACKUP_V4).stat().st_mode) == 0o600
     c = sqlite3.connect(db)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 16
-    assert [r[1] for r in c.execute("PRAGMA table_info(tasks)")][-15:] == ["mode", "preset", "failed_stage", "parent", "split_plan", "slots", "web", "project", "handoff", "chat", "memory", "reason_code", "pid", "run_started_at", "answered_by"]
-    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-10:] == ["stage", "role", "reason_code", "resume_of", "search", "fallback_of", "context", "memory", "served", "round_file"]
+    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 21
+    assert [r[1] for r in c.execute("PRAGMA table_info(tasks)")][-22:] == ["mode", "preset", "failed_stage", "parent", "split_plan", "slots", "web", "project", "handoff", "chat", "memory", "reason_code", "pid", "run_started_at", "answered_by", "project_files", "from_task", "idea", "plan", "plan_step", "models", "auto"]
+    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-14:] == ["stage", "role", "reason_code", "resume_of", "search", "fallback_of", "context", "memory", "served", "round_file", "tests", "model", "effort", "time_limit"]
     assert c.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == 5
     assert c.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 2
     assert c.execute("SELECT DISTINCT mode FROM tasks").fetchall() == [("route",)]
@@ -216,7 +216,7 @@ def test_upgrade_adds_the_relay_columns_to_a_version_4_log_and_keeps_every_row(t
 def test_init_db_refuses_a_version_4_log_and_names_the_upgrade(tmp_path):
     db = tmp_path / "router.db"
     make_v4_log(db)
-    with pytest.raises(log.VersionError, match=r"version 4 log.*sr migrate.*version 16.*mode, preset"):
+    with pytest.raises(log.VersionError, match=r"version 4 log.*sr migrate.*version 21.*mode, preset"):
         log.init_db(db)
     assert sqlite3.connect(db).execute("PRAGMA user_version").fetchone()[0] == 4
 
@@ -236,7 +236,7 @@ def test_cmd_migrate_prints_the_version_4_upgrade(tmp_path):
     lines = []
     assert cli.cmd_migrate(db_path=db, backups_dir=backups, now=T0, out=lines.append) == 0
     out = "\n".join(lines)
-    assert "version 4, 5 rows (highest #5)" in out and f"Upgraded in place: {log.UPGRADES[4]['added']}, now version 16." in out
+    assert "version 4, 5 rows (highest #5)" in out and f"Upgraded in place: {log.UPGRADES[4]['added']}, now version 21." in out
     assert BACKUP_V4 in out and "every version 4 column unchanged" in out and "0 calls" in out
 
 
@@ -244,7 +244,7 @@ def test_a_second_migrate_of_a_version_5_log_is_refused(tmp_path):
     db, backups = tmp_path / "router.db", tmp_path / "backups"
     make_v4_log(db)
     log.migrate(db, backups, now=T0)
-    with pytest.raises(log.MigrateRefused, match="already a version 16"):
+    with pytest.raises(log.MigrateRefused, match="already a version 21"):
         log.migrate(db, backups, now=T0)
 
 

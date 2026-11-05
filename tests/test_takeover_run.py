@@ -121,7 +121,7 @@ def test_bulk_text_goes_to_grok_bot_whose_takeover_call_is_collected_by_sr_check
         "done", "grok", "chatgpt", "passed", "Ten product lines.")
 
 
-def test_a_check_round_whose_grok_send_fails_goes_to_the_next_checker(conn):
+def test_a_check_round_whose_grok_send_fails_goes_to_the_next_checker(conn, grok_room):
     hook = Webhook(fail=("c1",))
     code, out, row, *_ = _route(conn, "write ten product lines", "bulk_text", worker=Scripted("Ten lines."),
                                 chat=Chat("PASS"), hook=hook)

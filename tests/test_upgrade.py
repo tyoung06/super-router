@@ -43,10 +43,11 @@ def test_upgrade_adds_calls_and_check_note_and_keeps_every_row(tmp_path):
     assert done["backup_check"]["content"] == "same" and _snapshot(backup) == before_rows  # brief 22: the backup API copy, checked by content
     assert stat.S_IMODE(backup.stat().st_mode) == 0o600
     c = log.init_db(db)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 16
-    assert [r["name"] for r in c.execute("PRAGMA table_info(tasks)")][-17:] == ["check_note", "files", "mode", "preset", "failed_stage",
+    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 21
+    assert [r["name"] for r in c.execute("PRAGMA table_info(tasks)")][-24:] == ["check_note", "files", "mode", "preset", "failed_stage",
                                                                                    "parent", "split_plan", "slots", "web", "project", "handoff", "chat", "memory", "reason_code",
-                                                                                   "pid", "run_started_at", "answered_by"]
+                                                                                   "pid", "run_started_at", "answered_by", "project_files",
+                                                                                   "from_task", "idea", "plan", "plan_step", "models", "auto"]  # brief 33
     assert c.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 0
     assert _snapshot(db) == before_rows, "rowids and every version 2 column are unchanged"
     assert [r["n"] for r in log.recent_tasks(c)] == [4, 3, 2, 1]
@@ -90,7 +91,7 @@ def test_upgrade_refuses_when_the_backup_name_is_taken(tmp_path):
 def test_upgrade_refuses_a_current_version_log(tmp_path):
     db, backups = _paths(tmp_path)
     log.init_db(db).close()
-    with pytest.raises(log.MigrateRefused, match="already a version 16"):
+    with pytest.raises(log.MigrateRefused, match="already a version 21"):
         log.migrate(db, backups, now=T0)
     assert not backups.exists()
 
@@ -151,16 +152,16 @@ def test_cmd_migrate_prints_the_upgrade(tmp_path):
     out = "\n".join(lines)
     assert "version 2" in out and "4 rows" in out and "integrity ok" in out
     assert f"backups/{BACKUP}" in out and before in out
-    assert "version 2" in out and "now version 16" in out and "calls" in out and "check_note" in out and "files" in out and "#4" in out
+    assert "version 2" in out and "now version 21" in out and "calls" in out and "check_note" in out and "files" in out and "#4" in out
 
 
 def test_main_migrate_upgrades_a_version_2_log(capsys):
     make_v2_log(cli.DB_PATH, ROWS[:1])
     assert cli.main(["migrate"], platform="darwin") == 0
     assert any(p.name.startswith("router-v2-") for p in cli.BACKUPS_DIR.iterdir())
-    assert "now version 16" in capsys.readouterr().out
+    assert "now version 21" in capsys.readouterr().out
     c = log.init_db(cli.DB_PATH)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 16
+    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 21
     c.close()
 
 
@@ -201,9 +202,9 @@ def test_upgrade_adds_the_files_column_to_a_version_3_log_and_keeps_every_row(tm
     assert done["backup"] == backups / BACKUP_V3 and before_hash == done["sha256"] and done["backup_check"]["content"] == "same"  # brief 22: checked by content
     assert stat.S_IMODE((backups / BACKUP_V3).stat().st_mode) == 0o600
     c = sqlite3.connect(db)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 16
+    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 21
     assert "files" in [r[1] for r in c.execute("PRAGMA table_info(tasks)")]
-    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-10:] == ["stage", "role", "reason_code", "resume_of", "search", "fallback_of", "context", "memory", "served", "round_file"]
+    assert [r[1] for r in c.execute("PRAGMA table_info(calls)")][-14:] == ["stage", "role", "reason_code", "resume_of", "search", "fallback_of", "context", "memory", "served", "round_file", "tests", "model", "effort", "time_limit"]
     c.close()
     assert _snapshot_v3(db) == before
     conn = log.init_db(db)
@@ -214,7 +215,7 @@ def test_upgrade_adds_the_files_column_to_a_version_3_log_and_keeps_every_row(tm
 def test_init_db_refuses_a_version_3_log_and_names_the_upgrade(tmp_path):
     db, _ = _paths(tmp_path)
     make_v3_log(db)
-    with pytest.raises(log.VersionError, match=r"version 3 log.*sr migrate.*version 16 \(files, mode"):
+    with pytest.raises(log.VersionError, match=r"version 3 log.*sr migrate.*version 21 \(files, mode"):
         log.init_db(db)
     assert sqlite3.connect(db).execute("PRAGMA user_version").fetchone()[0] == 3
 
@@ -225,7 +226,7 @@ def test_cmd_migrate_prints_the_version_3_upgrade(tmp_path):
     lines = []
     assert cli.cmd_migrate(db_path=db, backups_dir=backups, now=T0, out=lines.append) == 0
     out = "\n".join(lines)
-    assert "version 3, 4 rows (highest #4)" in out and f"Upgraded in place: {log.UPGRADES[3]['added']}, now version 16." in out
+    assert "version 3, 4 rows (highest #4)" in out and f"Upgraded in place: {log.UPGRADES[3]['added']}, now version 21." in out
     assert BACKUP_V3 in out and "every version 3 column unchanged" in out
 
 
@@ -233,5 +234,5 @@ def test_a_second_migrate_of_a_version_5_log_is_refused(tmp_path):
     db, backups = _paths(tmp_path)
     make_v3_log(db)
     log.migrate(db, backups, now=T0)
-    with pytest.raises(log.MigrateRefused, match="already a version 16"):
+    with pytest.raises(log.MigrateRefused, match="already a version 21"):
         log.migrate(db, backups, now=T0)

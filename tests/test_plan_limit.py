@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers import claude_stream
+
 from router import chatgpt_worker, claude_worker, plan_limit
 
 CLAUDE_SESSION = "You've hit your session limit · resets 3pm (Etc/UTC)"
@@ -150,7 +152,7 @@ def test_the_injected_limit_fails_one_call_through_the_real_worker_then_lets_cal
                                                                                            monkeypatch):
     """The hook sits at the worker's process boundary, so the worker's own detector sees the limit."""
     monkeypatch.setattr(claude_worker, "WORKSPACE", tmp_path / "workspace")
-    real = fake_run(stdout="a real answer")
+    real = fake_run(stdout=claude_stream("a real answer"))  # brief 33.3: every Claude call is stream-json
     hook = plan_limit.injected("claude", tmp_path / "scratch.db", root=tmp_path, run=Git(tmp_path / "main" / ".git"))
     run = hook(real)
     with pytest.raises(claude_worker.WorkerError) as err:

@@ -39,6 +39,10 @@
  },
  "slots": null,
  "working": null,
+ "steps": {
+  "chain": null,
+  "now": null
+ },
  "fallback": {
   "ok": false,
   "agent": null,
@@ -59,6 +63,37 @@
  "card_line": null,
  "takeover": null,
  "late": null,
+ "project_files": null,
+ "notes": [],
+ "open_musts": [],
+ "land_anyway": false,
+ "no_split": null,
+ "piece_of": null,
+ "router_notes": {
+  "hash": "8b61a57199701a87",
+  "chars": 330,
+  "file": "tasks/sr-20261019-112400-0020/router-notes.md"
+ },
+ "spec": null,
+ "forgotten": null,
+ "save_path": null,
+ "text_only": false,
+ "save_spec": null,
+ "card_actions": {
+  "pin": false,
+  "save": false,
+  "forget": false,
+  "remember": false
+ },
+ "next": [],
+ "from": null,
+ "idea": null,
+ "plan": null,
+ "plan_step": null,
+ "one_step": null,
+ "questions": null,
+ "models": null,
+ "auto": null,
  "calls": [],
  "handoff": null,
  "memory_stored": [],
@@ -70,6 +105,9 @@
  "attacks": null,
  "pieces": null,
  "join": null,
+ "estimate": null,
+ "menu": null,
  "original_file": null,
- "result_file": null
+ "result_file": null,
+ "from_given": null
 }

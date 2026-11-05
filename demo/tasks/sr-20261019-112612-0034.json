@@ -1,0 +1,306 @@
+{
+ "api_version": 1,
+ "task_id": "sr-20261019-112612-0034",
+ "n": 47,
+ "created_at": "2026-10-19T11:26:18+00:00",
+ "updated_at": "2026-10-19T11:26:36+00:00",
+ "sent_at": null,
+ "source": "cli",
+ "text": "Three short lines for the seed library's door: open hours, how to borrow, how to return.",
+ "status": "done",
+ "waiting_on": null,
+ "outcome": "passed",
+ "reason_code": null,
+ "mode": "route",
+ "preset": null,
+ "parent": null,
+ "project": null,
+ "chat": "garden",
+ "tag": "chat:garden",
+ "skill": "writing",
+ "skill_source": "jev",
+ "agent": "claude",
+ "checker": "chatgpt",
+ "check_state": "passed",
+ "check_note": null,
+ "route_reason": "best",
+ "failed_stage": null,
+ "web": false,
+ "files": [],
+ "result": "Open Saturdays 9 to 12.\nBorrow a packet: sign the sheet.\nReturn what you saved: a few seeds go a long way.",
+ "result_url": null,
+ "jev": {
+  "status": "ok",
+  "label": "writing",
+  "confidence": 0.93,
+  "tokens": 640,
+  "needs_split": 0.08,
+  "error": null
+ },
+ "slots": null,
+ "working": null,
+ "steps": {
+  "chain": null,
+  "now": null
+ },
+ "fallback": {
+  "ok": false,
+  "agent": null,
+  "reason": "not a double fail: it passed"
+ },
+ "resume": {
+  "ok": false,
+  "substitute": null,
+  "agent": null,
+  "checker": null,
+  "reason": "it is done; only a task stopped by a plan limit or by a process that ended can be resumed"
+ },
+ "pid": null,
+ "run_started_at": null,
+ "answered_by": null,
+ "stand_in": null,
+ "filled": null,
+ "card_line": null,
+ "takeover": null,
+ "late": null,
+ "project_files": null,
+ "notes": [],
+ "open_musts": [],
+ "land_anyway": false,
+ "no_split": null,
+ "piece_of": null,
+ "router_notes": {
+  "hash": "8b61a57199701a87",
+  "chars": 330,
+  "file": "tasks/sr-20261019-112612-0034/router-notes.md"
+ },
+ "spec": null,
+ "forgotten": null,
+ "save_path": "docs/three-short-lines-for-the-seed.md",
+ "text_only": false,
+ "save_spec": null,
+ "card_actions": {
+  "pin": true,
+  "save": true,
+  "forget": true,
+  "remember": false
+ },
+ "next": [
+  {
+   "kind": "build_from",
+   "words": "Build from #47",
+   "later": false,
+   "fill": {
+    "team": "route",
+    "project": null,
+    "chat": "garden",
+    "text": "",
+    "from": "sr-20261019-112612-0034",
+    "idea": null,
+    "step": null
+   }
+  }
+ ],
+ "from": null,
+ "idea": null,
+ "plan": null,
+ "plan_step": null,
+ "one_step": null,
+ "questions": null,
+ "models": {
+  "claude": {
+   "effort": null,
+   "model": "claude-haiku-5-5"
+  }
+ },
+ "auto": null,
+ "calls": [
+  {
+   "call_id": "sr-20261019-112612-0034",
+   "order": 1,
+   "kind": "do",
+   "stage": null,
+   "role": null,
+   "agent": "claude",
+   "status": "done",
+   "verdict": null,
+   "sent_at": "2026-10-19T11:26:24+00:00",
+   "finished_at": "2026-10-19T11:26:27+00:00",
+   "round_file": "tasks/sr-20261019-112612-0034/01-do-claude.md",
+   "served": {
+    "asked": "claude-haiku-5-5",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "the task",
+    "key": null,
+    "layer": "task",
+    "model": "claude-haiku-5-5",
+    "note": null,
+    "source": "stream: init and modelUsage",
+    "time_limit": 600
+   },
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "off (probe not passed)",
+    "count": null
+   },
+   "memory": {
+    "state": "sent",
+    "sent": 4,
+    "found": 4,
+    "from": null,
+    "with": null,
+    "limit": null,
+    "query": "Three short lines for the seed library's door: open hours, how to borrow, how to return.\nand the same for the herb beds"
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": null,
+   "router_notes": {
+    "chars": 348,
+    "from": "sr-20261019-112612-0034",
+    "judge": false,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "claude": 25
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-112612-0034/01-do-claude-prompt.md",
+   "model": "claude-haiku-5-5",
+   "effort": null,
+   "time_limit": 600
+  },
+  {
+   "call_id": "sr-20261019-112612-0034-c1",
+   "order": 2,
+   "kind": "check",
+   "stage": null,
+   "role": null,
+   "agent": "chatgpt",
+   "status": "done",
+   "verdict": "PASS",
+   "sent_at": "2026-10-19T11:26:30+00:00",
+   "finished_at": "2026-10-19T11:26:33+00:00",
+   "round_file": "tasks/sr-20261019-112612-0034/02-check-chatgpt.md",
+   "served": {
+    "asked": "gpt-6.1-sol",
+    "credits": {
+     "seen": false
+    },
+    "differs": false,
+    "effort": null,
+    "file": "config/agents.json",
+    "key": null,
+    "layer": "agent",
+    "model": "gpt-6.1-sol",
+    "note": null,
+    "source": "codex header",
+    "time_limit": 600
+   },
+   "reason_code": null,
+   "resume_of": null,
+   "fallback_of": null,
+   "takeover_of": null,
+   "search": {
+    "state": "allowed",
+    "count": null
+   },
+   "memory": {
+    "state": "sent",
+    "sent": 4,
+    "found": 4,
+    "from": "sr-20261019-112612-0034",
+    "with": null,
+    "limit": null,
+    "query": null
+   },
+   "tests": null,
+   "cwd": null,
+   "tools": null,
+   "said": "PASS",
+   "router_notes": {
+    "chars": 603,
+    "from": "sr-20261019-112612-0034",
+    "judge": true,
+    "planner": false,
+    "sections": {
+     "all_agents": 58,
+     "chatgpt": 49
+    }
+   },
+   "spec": null,
+   "items": [],
+   "blocked": null,
+   "prompt_file": "tasks/sr-20261019-112612-0034/02-check-chatgpt-prompt.md",
+   "model": "gpt-6.1-sol",
+   "effort": null,
+   "time_limit": 600
+  }
+ ],
+ "handoff": null,
+ "memory_stored": [
+  {
+   "document_id": "task-sr-20261019-112612-0034",
+   "chars": 196,
+   "state": "done/passed/2",
+   "at": "2026-10-19T11:26:39+00:00"
+  }
+ ],
+ "memory_given": [
+  {
+   "n": 44,
+   "date": "2026-10-19",
+   "kind": "follow_up",
+   "doer": "claude",
+   "status": null,
+   "text": "and the same for the herb beds\n\nHerb beds: water at dawn, and cut chives and mint back by a third in June."
+  },
+  {
+   "n": 19,
+   "date": "2026-10-19",
+   "kind": "recall",
+   "doer": "claude",
+   "status": null,
+   "text": "What did we decide about the newsletter schedule?\n\nYou voted for a monthly newsletter (2 to 1); the tool shed notice went out for weekdays."
+  },
+  {
+   "n": 7,
+   "date": "2026-10-19",
+   "kind": "vote",
+   "doer": "claude",
+   "status": null,
+   "text": "One word: should the garden newsletter go out weekly or monthly? Then one line why.\n\n## Answer\nMonthly\n\n## Why\nVolunteers have time to write once a month.\n\n## Confidence\n75"
+  },
+  {
+   "n": 2,
+   "date": "2026-10-19",
+   "kind": "writing",
+   "doer": "claude",
+   "status": null,
+   "text": "Draft a 40-word notice that the garden's tool shed now opens at 7 am.\n\nFrom Monday, the tool shed opens at 7 am on weekdays."
+  }
+ ],
+ "candidates": null,
+ "pick": null,
+ "votes": null,
+ "tally": null,
+ "attacks": null,
+ "pieces": null,
+ "join": null,
+ "estimate": null,
+ "menu": null,
+ "original_file": "tasks/sr-20261019-112612-0034/01-do-claude.md",
+ "result_file": "tasks/sr-20261019-112612-0034/01-do-claude.md",
+ "from_given": null
+}

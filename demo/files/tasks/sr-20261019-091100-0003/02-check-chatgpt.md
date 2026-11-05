@@ -1,2 +1,2 @@
 FIX
-1. It returns 0 for every input.
+1. [must] It returns 0 for every input.

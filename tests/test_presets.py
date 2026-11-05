@@ -100,7 +100,8 @@ def test_research_builds_entry_is_unchanged_byte_for_byte():
 
 
 def test_the_file_versions_read_are_1_0_to_1_3():
-    assert presets.FILE_VERSIONS == ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6")  # brief 9: 1.2, 15: 1.3, 16: 1.4, 17: 1.5, 21: 1.6
+    assert presets.FILE_VERSIONS == ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7")  # brief 9: 1.2, 15: 1.3, 16: 1.4,
+    # 17: 1.5, 21: 1.6, 32: 1.7
 
 
 # ---------- the validator, one rule at a time ----------

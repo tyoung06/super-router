@@ -162,7 +162,7 @@ def test_the_run_stops_at_130_with_no_call_row_no_note_and_no_round_file(monkeyp
     world = World(monkeypatch, tmp_path, capsys)
     world.label = fake_label(jev("writing"))
 
-    def cancelled_mid_call(prompt):
+    def cancelled_mid_call(prompt, **kwargs):  # brief 33.3: the worker gets choice=
         conn = log.connect(cli.DB_PATH)  # what `sr cancel` does from the other window, then its SIGINT lands
         log.set_cancelled(conn, "sr-20261020-000001-ab01")
         conn.close()
@@ -178,7 +178,9 @@ def test_the_run_stops_at_130_with_no_call_row_no_note_and_no_round_file(monkeyp
     finally:
         conn.close()
     assert not (cli.DB_PATH.parent / "run" / "calls" / "sr-20261020-000001-ab01.json").exists()
-    assert not list((cli.DB_PATH.parent / "tasks").rglob("*.md")) if (cli.DB_PATH.parent / "tasks").exists() else True
+    # brief 30: every call's prompt is kept before the send, the cancelled doer's too; it has no row and no output file
+    kept = sorted(p.name for p in (cli.DB_PATH.parent / "tasks").rglob("*.md")) if (cli.DB_PATH.parent / "tasks").exists() else []
+    assert kept == ["01-do-claude-prompt.md"]
 
 
 def test_a_cancel_during_the_checkers_codex_call_reads_cancelled_not_a_failed_check(monkeypatch, tmp_path, capsys):
@@ -205,7 +207,9 @@ def test_a_cancel_during_the_checkers_codex_call_reads_cancelled_not_a_failed_ch
         assert [(c["kind"], c["agent"], c["status"]) for c in calls] == [("do", "claude", "done")]
     finally:
         conn.close()
-    assert sorted(p.name for p in (cli.DB_PATH.parent / "tasks").rglob("*.md")) == ["01-do-claude.md"]
+    # brief 29.1 (decision 22): the check's prompt is kept before the send; the cancelled check has no row or output
+    assert sorted(p.name for p in (cli.DB_PATH.parent / "tasks").rglob("*.md")) == [
+        "01-do-claude-prompt.md", "01-do-claude.md", "02-check-chatgpt-prompt.md"]  # brief 30: the doer's prompt kept too
 
 
 def test_cancel_answers_with_the_json_envelope(monkeypatch, tmp_path, capsys):

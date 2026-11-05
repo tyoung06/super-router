@@ -1,0 +1,17 @@
+{
+ "api_version": 1,
+ "project": {
+  "name": "herb-labels",
+  "run_status": {
+   "running": false,
+   "state": null,
+   "command": null,
+   "started": null,
+   "ended": null,
+   "exit": null,
+   "output": "",
+   "folder": "~/Projects/herb-labels",
+   "env_names": []
+  }
+ }
+}

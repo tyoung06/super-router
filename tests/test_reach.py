@@ -7,6 +7,7 @@ import pytest
 from router import __main__ as cli
 from router import checking, log
 from tests.helpers import ALL_AGENTS, JEV_OK
+from tests.helpers import less_next
 
 WEB = ("web_research", "x_social_pulse", "meta_social_trends")
 
@@ -69,7 +70,7 @@ def test_do_and_fix_calls_run_with_search_on_for_every_skill():
     # rules v2.22: before, only the web skills searched; now every skill does (no file on these calls)
     for skill in WEB + ("code", "writing", "planning", "bulk_text"):
         _, kind, agent, text, web_search = _planned(_task(skill, "chatgpt", "claude"), checking.Step("do"))
-        assert (kind, agent, text, web_search) == ("do", "chatgpt", "t\n\n" + checking.SEARCH_LINE_GENERAL, "live")
+        assert (kind, agent, less_next(text), web_search) == ("do", "chatgpt", "t\n\n" + checking.DELIVERABLE_LINE + "\n\n" + checking.SEARCH_LINE_GENERAL, "live")
         _, kind, _, _, web_search = _planned(_task(skill, "chatgpt", "claude"),
                                              checking.Step("fix", result="r", fix_list="1. x"))
         assert (kind, web_search) == ("fix", "live")

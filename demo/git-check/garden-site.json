@@ -1,0 +1,27 @@
+{
+ "api_version": 1,
+ "would": "turn_on",
+ "name": "garden-site",
+ "folder": "~/Projects/garden-site",
+ "files": 2,
+ "bytes": 412,
+ "names": [
+  ".gitignore",
+  "HANDOFF.md"
+ ],
+ "more": 0,
+ "gitignore": {
+  "exists": false,
+  "adds": [
+   ".env",
+   ".env.*",
+   ".venv/",
+   "venv/",
+   "__pycache__/",
+   "node_modules/",
+   ".DS_Store"
+  ]
+ },
+ "reason_code": null,
+ "message": "Would turn on undo for garden-site: makes .gitignore with .env, .env.*, .venv/, venv/, __pycache__/, node_modules/, .DS_Store; git init; one first commit of 2 files (412 bytes). Nothing was changed."
+}

@@ -8,6 +8,7 @@ import pytest
 
 from router import __main__ as cli
 from router import checking, relay, search
+from tests.helpers import less_next
 
 TASK = "Write a 120-word blurb for a seed tray."
 CANDIDATE = "CANDIDATE-TEXT-7f3: the SimTee fits any mat."
@@ -48,8 +49,9 @@ def test_the_review_role_is_known_and_its_shape_is_asked_again_on_a_reask():
 
 def test_the_task_alone_build_prompt_has_no_note_and_no_markers():
     prompt = relay.task_build_prompt(TASK)
-    assert prompt == "\n\n".join([TASK, checking.SCOPE_PARAGRAPH, TASK_BUILD_LINE])
-    assert "=====" not in prompt and "note" not in prompt.lower()
+    assert prompt == "\n\n".join([TASK, checking.SCOPE_PARAGRAPH, TASK_BUILD_LINE, checking.DELIVERABLE_LINE])  # 29.1
+    # brief 29.1: the deliverable line says "notes on memory", so the research note is checked by its words
+    assert "=====" not in prompt and "research note" not in prompt.lower() and "the note" not in prompt.lower()
 
 
 def test_prompt_for_a_build_stage_on_the_task_alone_uses_the_task_alone_prompt():
@@ -160,7 +162,7 @@ def test_a_build_stage_on_versus_searches_now():
                                                                input="task", review_of=None), agent="chatgpt")
     prompt, _, web_search, searching = cli._stage_call(VERSUS_TASK, step)
     assert web_search == "live" and searching == "allowed"
-    assert prompt == relay.task_build_prompt(TASK, search=True)
+    assert less_next(prompt) == relay.task_build_prompt(TASK, search=True)  # brief 33: the Next line, last
 
 
 # ---------- brief 10 phase A0 (rules v2.17): the builder's note apart from the deliverable ----------

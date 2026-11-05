@@ -34,7 +34,7 @@ test("while the page's own run to on is in flight the light reads starting from 
 });
 
 test("the details link: off turns it on in Setup, not installed sets it up, the rest link nothing", () => {
-  assert.equal(memoryLink(memoryView(OFF)), "Turn it on in Setup");
+  assert.equal(memoryLink(memoryView(OFF)), "Turn it on in Settings");  // UI B N5
   assert.equal(memoryLink(memoryView(MISSING)), "How to set it up");
   for (const m of [ON, READY, STARTING, null]) assert.equal(memoryLink(memoryView(m)), null);
 });

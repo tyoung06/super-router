@@ -23,8 +23,8 @@ def conn():
 
 def test_a_new_log_is_version_10_with_slots_and_web_last_on_tasks():
     c = log.init_db(":memory:")
-    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 16
-    assert [r[1] for r in c.execute("PRAGMA table_info(tasks)")][-10:] == ["slots", "web", "project", "handoff", "chat", "memory", "reason_code", "pid", "run_started_at", "answered_by"]  # briefs 18 and 19 added two each
+    assert c.execute("PRAGMA user_version").fetchone()[0] == log.VERSION == 21
+    assert [r[1] for r in c.execute("PRAGMA table_info(tasks)")][-17:] == ["slots", "web", "project", "handoff", "chat", "memory", "reason_code", "pid", "run_started_at", "answered_by", "project_files", "from_task", "idea", "plan", "plan_step", "models", "auto"]  # briefs 18 and 19 added two each
 
 
 def test_a_relay_task_stores_its_slot_map_whole(conn):
@@ -87,20 +87,20 @@ def _make_v9(path):
 def test_upgrade_from_version_9_adds_slots_and_web_and_keeps_every_row(tmp_path):
     db, backups = tmp_path / "router.db", tmp_path / "backups"
     _make_v9(db)
-    with pytest.raises(log.VersionError, match=r"version 9 log.*sr migrate.*version 16 \(slots and web columns added"):
+    with pytest.raises(log.VersionError, match=r"version 9 log.*sr migrate.*version 21 \(slots and web columns added"):
         log.init_db(db)
     done = log.migrate(db, backups)
     assert done["added"] == log.UPGRADES[9]["added"] == ("slots and web columns added to tasks; project and handoff "
                                                           "columns added to tasks; context column added to calls; chat and "
-                                                          "memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task")
+                                                          "memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task; project_files column added to tasks; tests column added to calls; from_task and idea columns added to tasks; ideas table added; plan and plan_step columns added to tasks; models column added to tasks; model, effort and time_limit columns added to calls; auto column added to tasks")
     assert (done["rows"], done["calls"], done["highest"]) == (3, 1, 3)
     assert done["backup"].name.startswith("router-v9-") and done["backup"].exists()
     c = log.init_db(db)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 16
+    assert c.execute("PRAGMA user_version").fetchone()[0] == 21
     assert [tuple(r) for r in c.execute("SELECT slots, web FROM tasks")] == [(None, None)] * 3
     assert [r["preset"] for r in c.execute("SELECT preset FROM tasks")] == [None, None, "versus"]
     c.close()
-    with pytest.raises(log.MigrateRefused, match="already a version 16"):
+    with pytest.raises(log.MigrateRefused, match="already a version 21"):
         log.migrate(db, backups)
 
 
@@ -112,12 +112,12 @@ def test_sr_migrate_prints_the_9_to_10_upgrade(tmp_path):
     out = "\n".join(lines)
     assert "version 9, 3 rows (highest #3)" in out
     assert ("Upgraded in place: slots and web columns added to tasks; project and handoff columns added to tasks; "
-            "context column added to calls; chat and memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task, now version 16.") in out
+            "context column added to calls; chat and memory columns added to tasks; memory column added to calls; served column added to calls; reason_code column added to tasks; round_file column added to calls; pid, run_started_at and answered_by columns added to tasks; skill_source set to owner where it named the one who labeled the task; project_files column added to tasks; tests column added to calls; from_task and idea columns added to tasks; ideas table added; plan and plan_step columns added to tasks; models column added to tasks; model, effort and time_limit columns added to calls; auto column added to tasks, now version 21.") in out
 
 
 def test_every_older_upgrade_lands_on_10_with_the_slots_and_web_columns():
     for version, plan in log.UPGRADES.items():
-        if version in (10, 11, 12, 13, 14, 15):  # brief 18's 10 -> 11, brief 19's 11 -> 12, brief 20's 12 -> 13, brief 21's 13 -> 14 and brief 22's 14 -> 15 add later columns only; brief 25's 15 -> 16 renames a stored value only
+        if version in (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20):  # briefs 28's 16 -> 17 and 33's 17 -> 18 add later columns only; brief 18's 10 -> 11, brief 19's 11 -> 12, brief 20's 12 -> 13, brief 21's 13 -> 14 and brief 22's 14 -> 15 add later columns only; brief 25's 15 -> 16 renames a stored value only
             continue
         assert "ADD COLUMN slots TEXT" in plan["statements"], version
         assert "ADD COLUMN web INTEGER" in plan["statements"], version

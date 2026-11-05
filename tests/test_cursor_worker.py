@@ -106,10 +106,14 @@ class AgentFake:
 
 @pytest.fixture(autouse=True)
 def tmp_workspace(tmp_path, monkeypatch):
+    """Brief 32 (R0): Cursor's scratch folders are made in the system's temporary folder, here a folder of the test's own
+    (the other workers' workspace/ is the test's too). Returns that folder."""
     workspace = tmp_path / "workspace"
-    monkeypatch.setattr(cursor_worker, "WORKSPACE", workspace)
     monkeypatch.setattr(safety, "WORKSPACE", workspace)
-    return workspace
+    root = tmp_path / "systemp"
+    root.mkdir()
+    monkeypatch.setattr(cursor_worker, "temp_root", lambda: root)
+    return root
 
 
 def _run(fake, prompt=PROMPT, model=MODEL, environ=ENVIRON, call_id="sr-x-s2", **kw):
@@ -130,7 +134,7 @@ def test_the_argv_is_flags_first_the_model_pinned_and_the_prompt_last():
 
 def test_the_deny_file_is_the_json_the_probes_ran_with():
     assert cursor_worker.DENY == {"permissions": {"allow": [], "deny": ["Shell(*)", "Read(**)", "Write(**)", "Read(/**)",
-                                                                         "Write(/**)"]}}
+                                                                         "Write(/**)", "Mcp(*:*)"]}}  # brief 32 (R0): MCP too
     assert cursor_worker.deny_text() == json.dumps(cursor_worker.DENY, indent=2) + "\n"
 
 
@@ -185,12 +189,14 @@ def test_the_call_runs_from_a_fresh_scratch_folder_holding_only_the_deny_file(tm
     fake = AgentFake(during=during)
     _run(fake, call_id="sr-20261019-010203-ab12-s2")
     argv, kw = fake.prompt_calls[0]
-    assert seen["cwd"] == tmp_workspace / "cursor" / "sr-20261019-010203-ab12-s2" == Path(kw["cwd"])
+    # brief 32 (R0): a fresh folder in the system's temporary folder (here the test's), never inside the router's folder
+    assert seen["cwd"].parent == tmp_workspace and seen["cwd"] == Path(kw["cwd"])
+    assert seen["cwd"].name.startswith("sr-cursor-sr-20261019-010203-ab12-s2-")
     assert argv[argv.index("--workspace") + 1] == str(seen["cwd"])
     assert seen["files"] == [".cursor", ".cursor/cli.json"]
     assert seen["deny"] == cursor_worker.deny_text()
     assert not seen["cwd"].exists(), "the scratch folder is removed after the call"
-    assert not (tmp_workspace / "cursor").exists(), "and workspace/cursor/ with it when empty"
+    assert list(tmp_workspace.iterdir()) == [], "and nothing else is left where it was made"
 
 
 @pytest.mark.parametrize("case", ["failure", "exception", "wrong-model"])
@@ -231,6 +237,7 @@ def fake_agent(tmp_path, monkeypatch):
         "    print(case.get('status', 'Logged in as t@example.com')); sys.exit(case.get('status_code', 0))\n"
         "if sys.argv[1:2] == ['--version']:\n"
         "    print(case.get('version', '2026.10.16-e3cb207')); sys.exit(0)\n"
+        "sys.stdout.write(case.get('before', '')); sys.stdout.flush()\n"
         "if case.get('sleep'):\n"
         "    time.sleep(case['sleep'])\n"
         "sys.stdout.write(case.get('stdout', '')); sys.stderr.write(case.get('stderr', '')); sys.exit(case.get('code', 0))\n")
@@ -258,14 +265,14 @@ def test_the_real_process_gets_the_argv_the_scratch_cwd_and_the_five_names_only(
     answer = cursor_worker.run(PROMPT, model=MODEL, run=subprocess.run, environ=fake_agent.environ, call_id="sr-x-s2")
     assert answer == "ok"
     seen = fake_agent.seen()
-    scratch = tmp_workspace / "cursor" / "sr-x-s2"
+    scratch = Path(seen["cwd"])  # brief 32 (R0): made fresh in the system's temporary folder (here the test's)
+    assert scratch.resolve().parent == tmp_workspace.resolve() and scratch.name.startswith("sr-cursor-sr-x-s2-")
     assert seen["argv"][1:] == cursor_worker.argv(MODEL, scratch, PROMPT)[1:]
-    assert Path(seen["cwd"]).resolve() == scratch.resolve()
     assert set(seen["env"]) - RUNTIME_ADDED == {"HOME", "PATH", "USER", "LANG", "TMPDIR"}
     assert seen["env"]["HOME"] == fake_agent.environ["HOME"] and seen["env"]["TMPDIR"] == fake_agent.environ["TMPDIR"]
     assert not any(name.endswith("_API_KEY") or name.startswith("GROK_WEBHOOK") or name == "CURSOR_API_ENDPOINT"
                    for name in seen["env"])
-    assert not scratch.exists() and not (tmp_workspace / "cursor").exists()
+    assert not scratch.exists() and list(tmp_workspace.iterdir()) == []
 
 
 def test_a_slow_agent_times_out_and_the_scratch_folder_is_gone(fake_agent, tmp_workspace, monkeypatch):
@@ -274,6 +281,46 @@ def test_a_slow_agent_times_out_and_the_scratch_folder_is_gone(fake_agent, tmp_w
     with pytest.raises(cursor_worker.WorkerError, match="cursor timed out after 1 s"):
         cursor_worker.run(PROMPT, model=MODEL, run=subprocess.run, environ=fake_agent.environ, call_id="sr-x-s2")
     assert not (tmp_workspace / "cursor").exists()
+
+
+# ---------- Cleanup 1 (2.0a): a timeout keeps what it holds ----------
+
+PARTIAL = ('{"type":"system","subtype":"init","model":"Grok 4.7 High","permissionMode":"default"}\n'
+           '{"type":"thinking","subtype":"delta","text":"still reasoning"}\n')
+
+
+def test_a_real_timeout_holds_the_partial_output_and_the_row_is_told_it_is_partial(fake_agent, tmp_workspace, monkeypatch):
+    """subprocess.run's own TimeoutExpired, from a real process: bytes in text mode, and the output is really there."""
+    monkeypatch.setattr(cursor_worker, "WORKER_TIMEOUT", 1)
+    fake_agent.case(before=PARTIAL, sleep=5, stdout=PIN)
+    with pytest.raises(cursor_worker.WorkerError, match="cursor timed out after 1 s") as caught:
+        cursor_worker.run(PROMPT, model=MODEL, run=subprocess.run, environ=fake_agent.environ, call_id="sr-x-s2")
+    e = caught.value
+    assert e.stream == PARTIAL and "partial" in str(e)
+    assert e.served == {**e.served, "partial": True, "asked": MODEL, "model": "Grok 4.7 High"} and "usage" not in e.served
+
+
+@pytest.mark.parametrize("held, stream", [
+    (b'{"type":"thinking"}\n', '{"type":"thinking"}\n'),
+    ('{"type":"thinking"}\n', '{"type":"thinking"}\n'),
+    (b'{"type":"thinking"}\n\xff', '{"type":"thinking"}\n\ufffd'),
+])
+def test_a_timeout_holding_output_keeps_it_whatever_shape_it_is_in(held, stream):
+    def times_out(args, **kw):
+        raise subprocess.TimeoutExpired(args, kw["timeout"], output=held)
+    with pytest.raises(cursor_worker.WorkerError) as caught:
+        cursor_worker.call(PROMPT, model=MODEL, run=times_out, environ=ENVIRON, call_id="sr-x-s2")
+    assert caught.value.stream == stream and caught.value.served["partial"] is True and caught.value.served["asked"] == MODEL
+
+
+@pytest.mark.parametrize("held", [None, b"", ""])
+def test_a_timeout_holding_nothing_keeps_todays_failure(held):
+    def times_out(args, **kw):
+        raise subprocess.TimeoutExpired(args, kw["timeout"], output=held)
+    with pytest.raises(cursor_worker.WorkerError) as caught:
+        cursor_worker.call(PROMPT, model=MODEL, run=times_out, environ=ENVIRON, call_id="sr-x-s2")
+    e = caught.value
+    assert e.stream is None and e.served is None and str(e) == f"cursor timed out after {cursor_worker.WORKER_TIMEOUT} s"
 
 
 def test_the_real_process_login_and_version_reads_make_no_model_call(fake_agent):
@@ -494,7 +541,7 @@ def _state(tmp_path, name, version=None):
     folder.mkdir()
     path = folder / "probe_state.json"
     if version is not None:
-        search.record_pass(path, version, key=cursor_worker.SANDBOX_KEY)
+        cursor_worker.record_pass(path, version)  # brief 32 (R0): a pass names the canaries it ran
     return path
 
 
