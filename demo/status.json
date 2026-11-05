@@ -17,7 +17,7 @@
     "web_files": "passed",
     "files": "missing"
    },
-   "calls_this_week": 90,
+   "calls_this_week": 88,
    "available": true,
    "why": null,
    "why_code": null
@@ -37,7 +37,7 @@
     "current": "0.162.1",
     "state": "missing"
    },
-   "calls_this_week": 77,
+   "calls_this_week": 76,
    "available": false,
    "why": "ChatGPT is signed out (codex login)",
    "why_code": "signed_out"
@@ -1308,8 +1308,8 @@
     },
     {
      "name": "--demo",
-     "kind": "flag",
-     "help": "show the page on invented sample tasks; nothing runs (works with no setup)"
+     "kind": "option",
+     "help": "show the page on invented sample tasks; nothing runs (works with no setup); all-up shows the same sample with every agent up"
     }
    ]
   },
@@ -4025,7 +4025,7 @@
    "task_id": "sr-20261019-112724-0048",
    "n": 67,
    "created_at": "2026-10-19T11:27:27+00:00",
-   "updated_at": "2026-10-19T11:28:09+00:00",
+   "updated_at": "2026-10-19T11:28:06+00:00",
    "sent_at": null,
    "source": "ui",
    "text": "Auto: plan #65, steps 2 to 3",
@@ -4044,8 +4044,8 @@
    "agent": null,
    "checker": null,
    "check_state": null,
-   "check_note": "auto stopped: the budget is reached: 17 of 17 calls used",
-   "route_reason": "returned: the budget is reached: 17 of 17 calls used",
+   "check_note": "auto stopped: the budget is reached: 14 of 14 calls used",
+   "route_reason": "returned: the budget is reached: 14 of 14 calls used",
    "failed_stage": null,
    "web": false,
    "files": [],
@@ -4169,7 +4169,7 @@
       "outcome": "passed",
       "waiting_on": null,
       "verdict": "passed",
-      "calls": 8,
+      "calls": 7,
       "covered": true
      },
      {
@@ -4187,16 +4187,16 @@
       "covered": true
      }
     ],
-    "budget": 17,
-    "used": 17,
+    "budget": 14,
+    "used": 14,
     "estimate": {
      "calls": 7,
-     "max_calls": 11,
+     "max_calls": 9,
      "jev_labels": 1
     },
     "stop": {
      "code": "budget",
-     "why": "the budget is reached: 17 of 17 calls used",
+     "why": "the budget is reached: 14 of 14 calls used",
      "step": 3
     },
     "passed_marks": [],
@@ -4204,7 +4204,7 @@
     "hook": false,
     "copy": true,
     "next": 3,
-    "words": "Auto stopped: the budget is reached: 17 of 17 calls used",
+    "words": "Auto stopped: the budget is reached: 14 of 14 calls used",
     "tests": "No tests ran: no test command",
     "spec_hash": null,
     "ways": null
@@ -5314,14 +5314,14 @@
      "task_id": "sr-20261019-112724-0048",
      "n": 67,
      "state": "stopped",
-     "words": "Auto stopped: the budget is reached: 17 of 17 calls used",
+     "words": "Auto stopped: the budget is reached: 14 of 14 calls used",
      "stop": {
       "code": "budget",
-      "why": "the budget is reached: 17 of 17 calls used",
+      "why": "the budget is reached: 14 of 14 calls used",
       "step": 3
      },
-     "used": 17,
-     "budget": 17,
+     "used": 14,
+     "budget": 14,
      "next": 3
     },
     "switch": "off",
@@ -6177,7 +6177,11 @@
    "skills": [
     {
      "key": "x_social_pulse",
-     "agent": "claude",
+     "agent": "grok",
+     "doer": null,
+     "state": "service",
+     "comes_back": true,
+     "unused": [],
      "model": null,
      "effort": null,
      "name": null
@@ -6185,6 +6189,10 @@
     {
      "key": "meta_social_trends",
      "agent": "claude",
+     "doer": "claude",
+     "state": "choice",
+     "comes_back": false,
+     "unused": [],
      "model": null,
      "effort": null,
      "name": null
@@ -6192,6 +6200,10 @@
     {
      "key": "read_media",
      "agent": "claude",
+     "doer": "claude",
+     "state": "choice",
+     "comes_back": false,
+     "unused": [],
      "model": null,
      "effort": null,
      "name": null
@@ -6199,6 +6211,10 @@
     {
      "key": "web_research",
      "agent": "claude",
+     "doer": "claude",
+     "state": "choice",
+     "comes_back": false,
+     "unused": [],
      "model": null,
      "effort": null,
      "name": null
@@ -6206,6 +6222,10 @@
     {
      "key": "code",
      "agent": "claude",
+     "doer": "claude",
+     "state": "choice",
+     "comes_back": false,
+     "unused": [],
      "model": "claude-opus-5-5",
      "effort": null,
      "name": "Opus 5.5"
@@ -6213,6 +6233,10 @@
     {
      "key": "writing",
      "agent": "claude",
+     "doer": "claude",
+     "state": "choice",
+     "comes_back": false,
+     "unused": [],
      "model": null,
      "effort": null,
      "name": null
@@ -6220,20 +6244,32 @@
     {
      "key": "planning",
      "agent": "claude",
+     "doer": "claude",
+     "state": "choice",
+     "comes_back": false,
+     "unused": [],
      "model": null,
      "effort": null,
      "name": null
     },
     {
      "key": "computer_use",
-     "agent": "claude",
+     "agent": null,
+     "doer": null,
+     "state": "not_routed",
+     "comes_back": true,
+     "unused": [],
      "model": null,
      "effort": null,
      "name": null
     },
     {
      "key": "make_media",
-     "agent": "claude",
+     "agent": "grok",
+     "doer": null,
+     "state": "service",
+     "comes_back": true,
+     "unused": [],
      "model": null,
      "effort": null,
      "name": null
@@ -6241,6 +6277,10 @@
     {
      "key": "bulk_text",
      "agent": "claude",
+     "doer": "claude",
+     "state": "choice",
+     "comes_back": false,
+     "unused": [],
      "model": null,
      "effort": null,
      "name": null
@@ -6248,6 +6288,10 @@
     {
      "key": "quick_answer",
      "agent": "claude",
+     "doer": "claude",
+     "state": "choice",
+     "comes_back": false,
+     "unused": [],
      "model": "claude-sonnet-5-5",
      "effort": null,
      "name": "Sonnet 5.5"
@@ -6255,6 +6299,10 @@
     {
      "key": "recall",
      "agent": "claude",
+     "doer": "claude",
+     "state": "choice",
+     "comes_back": false,
+     "unused": [],
      "model": null,
      "effort": null,
      "name": null
@@ -6784,7 +6832,7 @@
  "serve_port": 8765,
  "projects_root": "~/Projects",
  "report_path": "~/Downloads/claude-code-report.md",
- "version": "2.32",
+ "version": "2.55",
  "log_version": 21,
  "api_version": 1
 }

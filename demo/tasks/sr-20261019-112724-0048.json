@@ -3,7 +3,7 @@
  "task_id": "sr-20261019-112724-0048",
  "n": 67,
  "created_at": "2026-10-19T11:27:27+00:00",
- "updated_at": "2026-10-19T11:28:09+00:00",
+ "updated_at": "2026-10-19T11:28:06+00:00",
  "sent_at": null,
  "source": "ui",
  "text": "Auto: plan #65, steps 2 to 3",
@@ -22,8 +22,8 @@
  "agent": null,
  "checker": null,
  "check_state": null,
- "check_note": "auto stopped: the budget is reached: 17 of 17 calls used",
- "route_reason": "returned: the budget is reached: 17 of 17 calls used",
+ "check_note": "auto stopped: the budget is reached: 14 of 14 calls used",
+ "route_reason": "returned: the budget is reached: 14 of 14 calls used",
  "failed_stage": null,
  "web": false,
  "files": [],
@@ -147,7 +147,7 @@
     "outcome": "passed",
     "waiting_on": null,
     "verdict": "passed",
-    "calls": 8,
+    "calls": 7,
     "covered": true
    },
    {
@@ -165,16 +165,16 @@
     "covered": true
    }
   ],
-  "budget": 17,
-  "used": 17,
+  "budget": 14,
+  "used": 14,
   "estimate": {
    "calls": 7,
-   "max_calls": 11,
+   "max_calls": 9,
    "jev_labels": 1
   },
   "stop": {
    "code": "budget",
-   "why": "the budget is reached: 17 of 17 calls used",
+   "why": "the budget is reached: 14 of 14 calls used",
    "step": 3
   },
   "passed_marks": [],
@@ -182,7 +182,7 @@
   "hook": false,
   "copy": true,
   "next": 3,
-  "words": "Auto stopped: the budget is reached: 17 of 17 calls used",
+  "words": "Auto stopped: the budget is reached: 14 of 14 calls used",
   "tests": "No tests ran: no test command",
   "spec_hash": null,
   "ways": null

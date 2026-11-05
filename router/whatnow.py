@@ -169,5 +169,6 @@ def _plan_rung(conn, project, rows):
     from router import spec  # spec reads settings; kept local
     folder = _folder_of(project)
     done_when = folder is not None and spec.parse(spec.read_text(folder) or "").has_done_when  # brief 33.2 (decision 8)
-    chips = plan.finish_chips(project, run_command_set=bool(projrun.run_command_of(project)), done_when=done_when)
+    chips = plan.finish_chips(project, run_command_set=bool(projrun.run_command_of(project)), done_when=done_when,
+                              readme_exists=folder is not None and (folder / "README.md").is_file())
     return _line(FINISH, f"All {total} steps done", "chips", found, None, chips=chips, **said)

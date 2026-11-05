@@ -51,11 +51,11 @@ test("the page's own run in flight shows the switch busy with its direction, and
 // ---------- the confirm from the dry run (decision 10) ----------
 
 const DRY = { api_version: 1, task_id: null, n: null, status: null, waiting_on: null, outcome: null, reason_code: null, exit: 0,
-  message: "Auto runs steps 2 to 4 of plan #12, 14 calls at most, stopping before step 3 (stop here).",
+  message: "Auto runs step 2 of plan #12, 14 calls at most, then stops before step 3 (stop here).",
   auto: { plan: { task_id: "sr-p", n: 12 }, from_step: 2, to_step: 4, steps: [2, 3, 4], budget: 14, used: 0,
     estimate: { calls: 9, max_calls: 9, jev_labels: 2 }, first_stop_here: 3,
     overrun: "A step already started finishes, so the run can pass its budget by up to one step's calls.",
-    words: "Auto runs steps 2 to 4 of plan #12, 14 calls at most, stopping before step 3 (stop here)." } };
+    words: "Auto runs step 2 of plan #12, 14 calls at most, then stops before step 3 (stop here)." } };
 
 test("the confirm's numbers are the router's: the steps, the budget, the first stop-here and the overrun, never worked out here", () => {
   const view = autoConfirmView(DRY, "seed-trays");

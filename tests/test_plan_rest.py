@@ -80,7 +80,8 @@ def test_the_finish_line_shows_until_a_newer_task(project, conn, runner):
     line = _now(conn)
     assert (line["rung"], line["words"], line["control"]) == ("finish", "All 2 steps done", "chips")
     assert [c["kind"] for c in line["chips"]] == ["readme", "run_command", "what_next"]
-    assert line["chips"][0]["fill"]["text"] == plan.README_TEXT and line["chips"][2]["fill"]["team"] == "plan"
+    # Cleanup 2, row 15: this project's folder has a README.md, so the chip reads Update
+    assert line["chips"][0]["fill"]["text"] == plan.README_UPDATE_TEXT and line["chips"][2]["fill"]["team"] == "plan"
     code, said, newer = _route_step(conn, None, worker=CopyWorker(RESEARCH), task="Tidy the help text.")
     assert _now(conn)["rung"] != "finish"
 

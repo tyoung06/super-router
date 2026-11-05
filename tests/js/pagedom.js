@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 
 const SOURCE = readFileSync(new URL("../../static/app.js", import.meta.url), "utf8");
-const OWN = ["state", "renderStream", "onKey", "createProject", "flipAuto", "wire", "renderComposer", "renderTeam", "setTeam", "send", "render", "renderStrip", "renderSidebar", "cycleTheme", "openNewProject", "openSecrets", "openIdeas", "openNotesEditor", "openProjectNotes", "openPinSheet", "openSaveSheet", "renderRail", "openSetup", "openSettings", "newChat", "toggleNav", "fitHead", "readSidePrefs", "loadShow"];
+const OWN = ["state", "renderStream", "onKey", "createProject", "flipAuto", "wire", "renderComposer", "renderTeam", "setTeam", "send", "render", "renderStrip", "renderSidebar", "cycleTheme", "openNewProject", "openSecrets", "openIdeas", "openNotesEditor", "openProjectNotes", "openPinSheet", "openSaveSheet", "renderRail", "openSetup", "openSettings", "newChat", "toggleNav", "fitHead", "readSidePrefs", "loadShow", "poll", "loadHistory", "loadViewRead", "syncViewRead", "openChat", "openProject", "openHistory", "goToTask", "goToSource", "jumpToTask", "openPieceCard", "taskById", "renderSetup"];
 
 class FakeNode {
   constructor(tag, doc) { this.tag = String(tag).toLowerCase(); this.doc = doc; this.kids = []; this.parent = null; this.attrs = {}; this.on = {};
@@ -138,6 +138,7 @@ export async function loadPage({ answers = {} } = {}) {
     if (options.method === "POST") posts.push({ path, body: JSON.parse(options.body || "{}") }); else gets.push(path);
     const key = Object.keys(answers).find((k) => path.startsWith(k));
     const doc2 = key ? answers[key] : { run_id: "run-1", pid: 1, display: "sr …", copy: "sr …", parts: [], argv: [], exit: 0, code: 0, tasks: [], runs: [] };
+    if (doc2 && doc2.httpStatus) return { ok: false, status: doc2.httpStatus, json: async () => doc2, text: async () => JSON.stringify(doc2), headers: { get: () => "application/json" } };
     return { ok: true, status: 200, json: async () => doc2, text: async () => JSON.stringify(doc2), headers: { get: () => "application/json" } };
   };
   // Each page has its own document, fetch and timers, so one test's late work never lands in the next test's page. The

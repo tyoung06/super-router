@@ -54,13 +54,17 @@ def claude(returncode, stdout, stderr):
     return None
 
 
-def codex(returncode, stdout, stderr):
+def codex(returncode, stdout, stderr, prompt=""):
     """The limit line when a `codex exec` call stopped on a plan limit, else None. Exit 0 is an
-    answer (it is read from the output file), never a limit."""
+    answer (it is read from the output file), never a limit. Codex echoes the prompt into its output, so a line that is one
+    of the prompt's own lines isn't read: a task about usage limits isn't a limit (Cleanup 2, row 4). By whole lines, since a
+    short prompt can sit inside a real limit line ("hi" in "You've hit").
+    [GUESS: Codex echoes the prompt unchanged, as failure_text assumes; an echo it changed reads as it did before this fix.]"""
     if returncode == 0:
         return None
+    asked = {line.strip() for line in _plain(prompt).splitlines()}
     for line in (_plain(stdout) + "\n" + _plain(stderr)).splitlines():
-        if CODEX_MARK in line.lower():
+        if CODEX_MARK in line.lower() and line.strip() not in asked:
             return line.strip()
     return None
 

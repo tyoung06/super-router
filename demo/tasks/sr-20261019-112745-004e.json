@@ -211,7 +211,7 @@
    "role": null,
    "agent": "chatgpt",
    "status": "done",
-   "verdict": "PASS",
+   "verdict": "FIX",
    "sent_at": "2026-10-19T11:27:57+00:00",
    "finished_at": "2026-10-19T11:27:57+00:00",
    "round_file": "tasks/sr-20261019-112745-004e/02-check-chatgpt.md",
@@ -233,10 +233,17 @@
    "tests": null,
    "cwd": null,
    "tools": null,
-   "said": "PASS",
+   "said": "FIX",
    "router_notes": null,
    "spec": null,
-   "items": [],
+   "items": [
+    {
+     "n": 1,
+     "tag": "must",
+     "text": "test_beans_and_peas doesn't cover peas.",
+     "state": null
+    }
+   ],
    "blocked": null,
    "prompt_file": null,
    "model": "gpt-6.1-sol",

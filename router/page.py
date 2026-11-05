@@ -40,6 +40,7 @@ STATUS_SECONDS = 60   # brief 20 (amendment 4) and brief 21: the checks at most 
 FRESH_SECONDS = 10    # brief 23 (decision 16): "Check again" reads a fresh status at most once per 10 s
 GROK_CHECK_SECONDS = 60  # brief 23 (decision 7): `sr check` once a minute while any open task waits on Grok
 LOG_LIMIT = 50
+ALL_UP_STATUS = "status-all-up.json"  # Cleanup 2, row 13: the demo with every agent up, for the README's picture
 COMMAND_TIMEOUT = 120
 CHECK_TIMEOUT = 60 * 60  # brief 22: `sr check` may make an agent call while it moves tasks on; brief 24 (C21): a
                          # takeover adds one call of up to 600 s to a check that can already make four
@@ -231,10 +232,12 @@ class Reader:
 
 class DemoReader:
     """Brief 23 (decision 15): the demo's documents, read from the invented files in demo/ (made by
-    scripts/make_demo.py). Runs nothing. (HTTP code, body bytes), 404 when the file is missing."""
+    scripts/make_demo.py). Runs nothing. (HTTP code, body bytes), 404 when the file is missing. `status_name`: which status
+    it serves (Cleanup 2, row 13: `sr serve --demo all-up`'s, every agent up)."""
 
-    def __init__(self, root=None):
+    def __init__(self, root=None, status_name="status.json"):
         self.root = Path(root) if root is not None else ROOT / "demo"
+        self.status_name = status_name
 
     def _file(self, name):
         try:
@@ -243,7 +246,7 @@ class DemoReader:
             return 404, json.dumps({"error": f"demo file {name} is missing"}).encode()
 
     def status(self, fresh=False):
-        return self._file("status.json")
+        return self._file(self.status_name)
 
     def status_doc(self):
         code, body = self.status()
@@ -720,7 +723,7 @@ def _run_on(request):
     return {"action": request.get("action"), "task_id": request["task_id"]}
 
 
-def make_server(port, reader=None, *, runs=None, demo=False, demo_root=None, root=None, platform=None, token=None):
+def make_server(port, reader=None, *, runs=None, demo=False, demo_root=None, root=None, platform=None, token=None, status_name="status.json"):
     server = PageServer((HOST, port), _Handler)
     server.token = token or secrets.token_urlsafe(32)  # decision 2: in the served page only; never printed or written
     server.demo, server.root = demo, Path(root) if root is not None else ROOT
@@ -728,7 +731,7 @@ def make_server(port, reader=None, *, runs=None, demo=False, demo_root=None, roo
     server.platform = platform or sys.platform
     server.reveal_run = subprocess.run  # decision 11: `open -R` (tests hand their own)
     server.runs = runs if runs is not None or demo else page_runs.Runs(root=server.root)
-    server.reader = reader or (DemoReader(server.demo_root) if demo else Reader(root=server.root, runs=server.runs))
+    server.reader = reader or (DemoReader(server.demo_root, status_name=status_name) if demo else Reader(root=server.root, runs=server.runs))
     if server.runs is not None and hasattr(server.reader, "forget_status"):
         server.runs.on_finished = lambda run, code: _after_run(server.reader, run, code)
     return server
@@ -795,9 +798,10 @@ def ticker(reader, *, sleep=time.sleep, every=GROK_CHECK_SECONDS, rounds=None):
         done += 1
 
 
-def serve_demo(port=DEFAULT_PORT, out=print, root=None):
-    """`sr serve --demo`: the page on the invented sample; no command runs, no file is written."""
-    server = make_server(port, demo=True, demo_root=root)
+def serve_demo(port=DEFAULT_PORT, out=print, root=None, status_name="status.json"):
+    """`sr serve --demo`: the page on the invented sample; no command runs, no file is written. `--demo all-up` hands it
+    the status with every agent up."""
+    server = make_server(port, demo=True, demo_root=root, status_name=status_name)
     out(demo_line(server.server_address[1]))
     try:
         server.serve_forever()

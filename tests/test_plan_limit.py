@@ -180,3 +180,30 @@ def test_the_injected_limit_reads_as_a_plan_limit_on_a_claude_search_call_too(fa
     with pytest.raises(claude_worker.WorkerError) as err:
         claude_worker.run("first", run=hook(real), environ=ENVIRON, search=True)
     assert err.value.code == "plan_limit" and "You've hit your session limit" in str(err.value) and real.calls == []
+
+
+# ---------- Cleanup 2, row 4: the prompt comes out of Codex's output before it's read for a plan limit ----------
+
+PROMPT_WITH_THE_WORDS = "Write a page about what to do when you hit your usage limit on a plan.\nKeep it short."
+CAPACITY = "ERROR: Selected model is at capacity. Please try a different model."
+
+
+def test_a_prompt_holding_the_limit_words_with_a_capacity_error_after_it_is_not_a_limit():
+    stderr = f"{PROMPT_WITH_THE_WORDS}\n{CAPACITY}\n"
+    assert plan_limit.codex(1, "", stderr, PROMPT_WITH_THE_WORDS) is None
+    assert plan_limit.codex(1, PROMPT_WITH_THE_WORDS, CAPACITY, PROMPT_WITH_THE_WORDS) is None
+
+
+def test_the_same_prompt_with_a_real_limit_line_is_a_limit_reading_that_line():
+    stderr = f"{PROMPT_WITH_THE_WORDS}\n{CODEX_LIMIT}\n"
+    assert plan_limit.codex(1, "", stderr, PROMPT_WITH_THE_WORDS) == CODEX_LIMIT.replace("’", "'")
+
+
+def test_the_worker_names_the_capacity_error_rather_than_a_plan_limit():
+    def run(argv, **kw):
+        return subprocess.CompletedProcess(argv, 1, stdout="", stderr=f"{kw['input']}\n{CAPACITY}\n")
+
+    with pytest.raises(chatgpt_worker.WorkerError) as e:
+        chatgpt_worker.run(PROMPT_WITH_THE_WORDS, model="gpt-6.1-sol", web_search="disabled", run=run, environ=ENVIRON)
+    assert e.value.code != plan_limit.CODE
+    assert "at capacity" in str(e.value) and "plan limit" not in str(e.value)

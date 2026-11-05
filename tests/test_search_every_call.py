@@ -35,6 +35,7 @@ def _without_count(snapshot):
     return found
 
 
+SENT_ON = prompt_snapshot.today()  # note 13: one date, read once, so a suite that crosses midnight still compares like with like
 NOW = _without_count(prompt_snapshot.snapshot(LOADED))
 OPEN = _without_count(prompt_snapshot.snapshot(LOADED, ready=lambda: True))
 LINE = "\n\n" + checking.SEARCH_LINE_GENERAL
@@ -101,7 +102,7 @@ def _as_brief_29(key, prompt, searching=None):
         assert prompt.count(MAINS_PLAN_WORDS) == 1
         return prompt.replace(MAINS_PLAN_WORDS, split.PLAN_INSTRUCTIONS + "\n\n" + menu, 1)
     if kind in ("check", "recheck"):
-        return prompt_snapshot.as_check(prompt, recheck=kind == "recheck")
+        return prompt_snapshot.as_check(prompt, recheck=kind == "recheck", sent_on=SENT_ON)
     if kind == "fix":
         return prompt_snapshot.as_fix(prompt, could=searching == search.ALLOWED, musts=prompt_snapshot.FIXES)
     if kind == "do":
@@ -255,3 +256,13 @@ def test_a_check_row_from_before_reads_by_the_old_rule():
 
 def test_sr_show_prints_the_file_state(conn):
     assert cli._search_text({"state": "off (file without --web)"}) == "search: off (file without --web)"
+
+
+def test_a_run_that_crosses_midnight_compares_with_the_date_the_snapshot_was_made_on(monkeypatch):
+    """Cleanup 2, row 7 (note 13): NOW and OPEN are built when this file loads, so the comparison uses that day's date, not
+    the clock's at the moment the test runs."""
+    from router import memory
+    monkeypatch.setattr(memory, "local_date", lambda *a, **k: "2099-01-02")  # the next day, as far as today() can tell
+    key = "writing-chatgpt-does/check"
+    assert key in FIXTURE
+    assert NOW[key]["prompt"] == _as_brief_29(key, FIXTURE[key]["prompt"], NOW[key]["searching"]), key

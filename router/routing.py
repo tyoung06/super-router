@@ -32,6 +32,10 @@ NO_STORE_FOR_RECALL_OFF = "memory unavailable (memory is off in settings): nothi
 # brief 24 (decision 3): Grok's alone, nothing stands in for it; x_social_pulse too since the owner's decision of 21 Oct, after
 # F (#106, #112: web search can't see X posts, and both stand-ins ended failed_check)
 ONLY = {"make_media": "grok", "x_social_pulse": "grok"}
+# Cleanup 2, row 3: the skills' plain names, for the refusal's words; the page has its own (`SKILL_NAMES`), and a test holds them alike
+SKILL_WORDS = {"x_social_pulse": "X research", "meta_social_trends": "Meta research", "make_media": "Make media",
+               "computer_use": "Computer use", "web_research": "Web research", "read_media": "Read media", "code": "Code",
+               "writing": "Writing", "planning": "Planning", "bulk_text": "Bulk text", "quick_answer": "Quick answer", "recall": "Recall"}
 NEVER_CHECKS = ("cursor",)       # rules v2.28: Cursor never checks
 STAND_IN = "stand-in for "       # route_reason of a stand-in: `stand-in for <agent>: <why>` (brief 24, decision 3)
 NO_CHECKER = "no other agent available to check"
@@ -161,6 +165,36 @@ def _decide(jev, roster, *, override, answer, can_ask, tagged, table):
 def doers(row):
     """Decision 3's order for a skill: best, interim (when set), second, then Claude; once each."""
     return list(dict.fromkeys(a for a in (row.get("best"), row.get("interim"), row.get("second"), "claude") if a))
+
+
+def pick_agents(skill, roster):
+    """Cleanup 2, row 3: the agents the router itself can ever send this skill's do or fix calls to: its doers, then what a
+    takeover or a fallback can reach (second, Claude, ChatGPT; never Cursor). None on a skill that is Grok Bot's alone or
+    isn't routed. `@agent` and `--no-files` are the person's own doors and aren't counted (the owner's option A, 4 Nov)."""
+    if skill in roster.not_routed or skill in ONLY:
+        return ()
+    row = roster.skills[skill]
+    return tuple(dict.fromkeys(a for a in [*doers(row), row.get("second"), "claude", "chatgpt"] if a))
+
+
+def skill_words(skill):
+    """A skill by its plain name; a clone's own key reads with spaces."""
+    return SKILL_WORDS.get(skill) or str(skill).replace("_", " ")
+
+
+def pick_refusal(skill, agent, roster, *, model=None, effort=None):
+    """The words `sr models set` refuses a pick that can never apply with, or None when it can apply."""
+    if agent in pick_agents(skill, roster):
+        return None
+    who, name = availability.name_of(agent), skill_words(skill)
+    if skill in ONLY:
+        why = f"{name} is {availability.name_of(ONLY[skill])}'s alone"
+    elif skill in roster.not_routed:
+        why = f"{name} isn't routed"
+    else:
+        why = f"The router never sends {name} to {who}"
+    flag = f"--model {agent}={model}" if model is not None else f"--effort {agent}={effort}"
+    return f"{why}, so a default for {who} can never apply. For one task, send it as `@{agent}` with `{flag}`"
 
 
 def checkers(row, first=None):

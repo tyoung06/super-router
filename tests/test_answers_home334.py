@@ -2,6 +2,7 @@
 call. At Approve, in the plan's own land commit: docs/PLAN.md's "Decided before planning" and the notes' one section, "Current
 plan's decisions", replaced by each new plan, cleared by one with no questions, kept by a revision, put back by Undo from
 the stored copy. Reject, discard or fail write nothing. Real git in temp folders, fake agents; every value is fake."""
+import json
 import subprocess
 
 from router import log, plan, plansection, projects, projnotes
@@ -228,7 +229,7 @@ def test_the_hand_edit_line_shows_only_when_the_section_differs(project, conn, r
     w2 = World()
     code, row2 = w2.plan(conn)
     row2 = log.get_task(conn, row2["task_id"])
-    assert plan.section_edited(conn, row2) is False  # Undo put back the marker: that is what the router last wrote
+    assert plan.section_edited(conn, row2) is True  # Cleanup 2, row 6: Undo put your own words back, and the next plan would replace them
     (project / "HANDOFF.md").write_text(plansection.replaced(projects.read_handoff(project), f"{SECTION}\n\nedited again"))
     assert plan.section_edited(conn, row2) is True
 
@@ -244,3 +245,77 @@ def test_the_rest_of_the_notes_and_the_block_stay_byte_for_byte():
     assert plansection.replaced(middle, None) == f"# Mine\n\n## Later part\n\nkept\n\n{block}"
     assert plansection.read(middle) == f"{SECTION}\n\nold"
     assert plansection.replaced("".join(block), None) == block
+
+
+# ---------- Cleanup 2, row 6 (item 4): Approve warns about your own words after an Undo ----------
+
+def _commit_notes(project, words):
+    (project / "HANDOFF.md").write_text(plansection.replaced(projects.read_handoff(project), f"{SECTION}\n\n{words}"))
+    _git(project, "add", "HANDOFF.md")
+    _git(project, "commit", "-qm", "notes")
+
+
+def _next_plan(conn):
+    code, row = World().plan(conn)
+    return log.get_task(conn, row["task_id"])
+
+
+def _fake_plan(task_id, state, written, before=None):
+    """A plan's row as the walk reads it, newest first in the list: a second landed plan is only a new plan once the first has
+    no open step, so these rows stand in for that long road."""
+    return {"task_id": task_id, "mode": "plan", "project": "garden", "project_files": json.dumps({"state": state}),
+            "plan": json.dumps({"section_written": plansection.digest(written), "section_before": before})}
+
+
+def _walks(monkeypatch, project, notes_words, rows):
+    (project / "HANDOFF.md").write_text(plansection.replaced(projects.read_handoff(project), notes_words))
+    monkeypatch.setattr(log, "project_tasks", lambda conn, name: rows)
+    now = {"task_id": "now", "mode": "plan", "project": "garden", "project_files": None, "plan": json.dumps({})}
+    return plan.section_edited(None, now)
+
+
+def test_hand_written_land_undo_then_the_next_plan_warns(project, conn, runner):
+    code, row = World().plan(conn)
+    row = log.get_task(conn, row["task_id"])
+    _commit_notes(project, "my own words")
+    assert _land(conn, row)[0] == 0
+    assert _land(conn, log.get_task(conn, row["task_id"]), verb="undo")[0] == 0
+    assert "my own words" in projects.read_handoff(project)  # Undo put them back
+    assert plan.section_edited(conn, _next_plan(conn)) is True
+
+
+def test_a_lands_b_lands_b_undone_no_warning(monkeypatch, project):
+    a = f"{SECTION}\n\nplan A's"
+    rows = [_fake_plan("b", "undone", f"{SECTION}\n\nplan B's", before=a), _fake_plan("a", "landed", a)]
+    assert _walks(monkeypatch, project, a, rows) is False  # the section is plan A's, which is the router's own
+
+
+def test_a_lands_a_hand_edit_b_lands_b_undone_warns(monkeypatch, project):
+    a, edited = f"{SECTION}\n\nplan A's", f"{SECTION}\n\nedited by hand"
+    rows = [_fake_plan("b", "undone", f"{SECTION}\n\nplan B's", before=edited), _fake_plan("a", "landed", a)]
+    assert _walks(monkeypatch, project, edited, rows) is True
+
+
+def test_every_plan_undone_warns_since_no_plan_still_landed_wrote_it(monkeypatch, project):
+    rows = [_fake_plan("a", "undone", f"{SECTION}\n\nplan A's", before=None)]
+    assert _walks(monkeypatch, project, f"{SECTION}\n\nanything", rows) is True
+
+
+# ---------- Cleanup 2, row 18 (item 3): a land past the notes limit says so and never fails ----------
+
+def test_a_land_that_takes_the_notes_past_the_limit_goes_through_and_says_so(project, conn, runner, monkeypatch):
+    w, row = _answered(conn)
+    notes = projnotes.parts_of(projects.read_handoff(project)).notes
+    monkeypatch.setattr(projnotes, "max_chars", lambda: len(notes) + 5)  # just under it now; the section takes it over
+    before = _commits(project)
+    code, text = _land(conn, row)
+    assert code == 0, text
+    assert _commits(project) == before + 1
+    assert "the notes are past their limit" in text and "trim them in Notes" in text
+
+
+def test_a_land_under_the_limit_has_no_such_line(project, conn, runner):
+    w, row = _answered(conn)
+    code, text = _land(conn, row)
+    assert code == 0, text
+    assert "past their limit" not in text

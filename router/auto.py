@@ -317,7 +317,8 @@ def dry_run_view(plan_row, record, plan_record, *, used=0, spec_changed=False):
     7.2): going on after SPEC.md changed, so the confirm says the remaining steps use the new one."""
     steps = covered(record)
     first = next_open(record)
-    mark = first_mark_ahead(record, plan_record, first) if first else None
+    # Cleanup 2, row 9: `--on` passes a mark on the step it starts at, so the confirm looks from the next step on
+    mark = first_mark_ahead(record, plan_record, first + 1) if first else None
     total = len(record.get("steps") or ())
     return {"plan": {"task_id": plan_row["task_id"], "n": plan_row["n"]}, "from_step": first, "to_step": total,
             "steps": [s["k"] for s in steps if s.get("state") in ("open", "retried", "stopped")], "budget": record.get("budget"),
@@ -330,11 +331,30 @@ def dry_run_view(plan_row, record, plan_record, *, used=0, spec_changed=False):
 def _dry_words(first, total, record, mark):
     if first is None:
         return "Every step is done: nothing to run."
-    span = f"step {first}" if first == total else f"steps {first} to {total}"
+    last = mark - 1 if mark else total  # Cleanup 2, row 9: with a mark ahead, the run stops before it
+    span = f"step {first}" if first == last else f"steps {first} to {last}"
     line = f"Auto runs {span} of plan #{record.get('n')}, {record.get('budget')} calls at most"
     if mark:
-        line += f", stopping before step {mark} (stop here)"
+        line += f", then stops before step {mark} (stop here)"
     return line + "."
+
+
+def so_far_words(record, change):
+    """Cleanup 2, row 10: Land the run so far's line when the copy needed no putting back. "Delivered unchecked" only for the
+    unchecked stop: any other stop came before its step, so the line names the steps that land."""
+    stop = record.get("stop") or {}
+    k = stop.get("step")
+    if stop.get("code") == "unchecked":
+        return (f"Land the run so far: the run stopped after step {k} (delivered unchecked), so it lands as it stands, that "
+                f"step included; {change}.")
+    done = [str(s["k"]) for s in record.get("steps") or () if s.get("state") == "done"]
+    if not done:
+        landing = "no step lands"
+    elif len(done) == 1:
+        landing = f"step {done[0]} lands"
+    else:
+        landing = f"steps {', '.join(done[:-1])} and {done[-1]} land"
+    return f"Land the run so far: the run stopped before step {k}, so {landing}; {change}."
 
 
 # ---------- the handoff entry at the land (decision 2) ----------

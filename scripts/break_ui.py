@@ -996,7 +996,7 @@ def _auto34(root, log, status, shows):
     projects_doc = _read("projects.json")
     projects_doc["projects"] = [p for p in projects_doc["projects"] if p.get("name") != LONG_PROJECT] + [bar]
     _write(root / "projects.json", projects_doc)
-    words = (f"Auto runs steps 10 to 12 of plan #12345, 103 calls at most, stopping before step 12 (stop here). "
+    words = (f"Auto runs steps 10 to 11 of plan #12345, 103 calls at most, then stops before step 12 (stop here). "
              + STEP_399)[:399]
     _write(root / "auto-check" / f"{LONG_PROJECT}.json", {"api_version": 1, "task_id": None, "n": None, "status": None,
            "waiting_on": None, "outcome": None, "reason_code": None, "exit": 0, "message": words,
@@ -1128,7 +1128,7 @@ def _spec332(root, log, status, shows):
     projects_doc = _read("projects.json")
     projects_doc["projects"] = [p for p in projects_doc["projects"] if p.get("name") != LONG_PROJECT] + [bar]
     _write(root / "projects.json", projects_doc)
-    words = f"Auto runs steps 3 to 12 of plan #12345, 70 calls at most, stopping before step 9 (stop here)."
+    words = f"Auto runs steps 3 to 8 of plan #12345, 70 calls at most, then stops before step 9 (stop here)."
     _write(root / "auto-check" / f"{LONG_PROJECT}.json", {"api_version": 1, "task_id": None, "n": None, "status": None,
            "waiting_on": None, "outcome": None, "reason_code": None, "exit": 0, "message": words,
            "auto": {"plan": {"task_id": card["task_id"], "n": 12345}, "from_step": 3, "to_step": 12, "steps": list(range(3, 13)),

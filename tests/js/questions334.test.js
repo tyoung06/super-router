@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { answersRequest, confirmExtra, needsConfirm, needsYou, PLANNING_LINE, questionsCardView, SECTION_EDITED_LINE } from "../../static/app.js";
+import { answersRequest, confirmExtra, needsConfirm, needsYou, PLANNING_LINE, questionsCardView, SECTION_EDITED_LINE, stateWords } from "../../static/app.js";
 
 const JS = readFileSync(new URL("../../static/app.js", import.meta.url), "utf8");
 const TASK = { task_id: "sr-1", n: 7, mode: "plan", waiting_on: "answers", questions: { k: 2, waiting: true, planning: false, answers: null,
@@ -91,4 +91,9 @@ test("the card is the plan task's own, drawn with no raw HTML, its answers one a
   assert.ok(!body.includes("innerHTML"));
   assert.ok(JS.includes("if (asked) return questionsCard(task, asked);"));
   assert.ok(body.includes("cardMainAction(") && body.includes('"Use your best guess"'));  // UI-1m (2.6): Send answers' label comes from cardMainAction
+});
+
+// Cleanup 2, row 12 (note 5): its row reads as the files line under it does
+test("a plan waiting on its questions reads waiting for your answers", () => {
+  assert.equal(stateWords({ waiting_on: "answers" }), "waiting for your answers");
 });

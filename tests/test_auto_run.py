@@ -212,7 +212,7 @@ def test_the_dry_run_names_the_steps_the_budget_and_the_first_stop_here_and_writ
     assert code == 0 and run is None and len(log.recent_tasks(conn, 50)) == rows
     doc = out.extra_any["auto"]
     assert doc["steps"] == [1, 2] and doc["first_stop_here"] == 2 and doc["budget"] == auto.budget_for(doc["estimate"]["max_calls"])
-    assert doc["words"].startswith("Auto runs steps 1 to 2 of plan #") and "stopping before step 2" in doc["words"]
+    assert doc["words"].startswith("Auto runs step 1 of plan #") and "then stops before step 2" in doc["words"]
     assert "up to one step's calls" in doc["overrun"]
 
 

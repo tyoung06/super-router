@@ -168,8 +168,8 @@ test("Setup's Models row: the defaults read only and how many of your own; an ig
 test("Setup's selects: one per skill and per team, role and agent, Default first by name, the saved value selected", () => {
   const found = modelsSetupSelects(WITH);
   assert.deepEqual(found.skills.map((s) => [s.key, s.agent, s.chosen, s.label, s.selector]), [
-    ["code", "claude", OPUS, "code", { skill: "code" }], ["writing", "claude", "", "writing", { skill: "writing" }],
-    ["web_research", "chatgpt", "", "web research", { skill: "web_research" }]]);
+    ["code", "claude", OPUS, "Code · Claude", { skill: "code" }], ["writing", "claude", "", "Writing · Claude", { skill: "writing" }],
+    ["web_research", "chatgpt", "", "Web research · ChatGPT", { skill: "web_research" }]]);
   assert.deepEqual(found.skills[0].options.map((o) => [o.value, o.label, o.selected]).slice(0, 2),
     [["", "Default (Sonnet 5.5)", false], [HAIKU, "Haiku 5.5", false]]);
   assert.equal(found.skills[0].options.find((o) => o.value === OPUS).selected, true);

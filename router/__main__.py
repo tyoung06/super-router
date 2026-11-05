@@ -1210,6 +1210,9 @@ def _auto_finish(conn, run_id, plan_row, out):
         log.update_project_files(conn, run_id, state="waiting")
         log.set_done(conn, run_id, "Auto finished: every step passed; the run waits to land.", check_state="passed")
         _auto_note(conn, run_id, auto.FINISHED_NOTE)
+        # Cleanup 2, row 8: an earlier stop's words go, so Details stops printing them; Land the run so far keeps them, as that run did stop
+        conn.execute("UPDATE tasks SET route_reason = NULL WHERE task_id = ?", (run_id,))
+        conn.commit()
     out(f"Auto finished: every step of plan #{plan_row['n']} passed. {filecalls.change_words(log.project_files_of(log.get_task(conn, run_id)))}. "
         f"Land run: sr land {run['n']} puts the whole change in the folder as one commit; sr discard {run['n']} drops it.")
     return 0
@@ -1260,8 +1263,7 @@ def _auto_land_so_far(conn, row, out):
     if put_back:
         out(f"Land the run so far: the copy is back at the start of step {k}; {change}.")
     else:
-        out(f"Land the run so far: the run stopped after step {k} (delivered unchecked), so it lands as it stands, that "
-            f"step included; {change}.")
+        out(auto.so_far_words(record, change))
     return None
 
 
@@ -6937,9 +6939,25 @@ def cmd_land(words, *, conn, config, verb, out=print, anyway=False, hindsight=No
             "HANDOFF.md, one commit.")
     if note is not None and note.get("why"):  # brief 33.1 (decision 14): docs/PLAN.md left out, or written over
         out(note["why"] + ".")
+    if verb == "land" and plan_mod.is_plan(row):  # Cleanup 2, row 18 (item 3): a land never fails over notes; it says so
+        past = _notes_past_limit(row)
+        if past:
+            out(past)
     if _mode(row) == auto.MODE and verb == "land":  # brief 34 (decision 2): each step's memory, once the run landed
         _auto_memory_store(conn, row["task_id"], out, hindsight=hindsight, secrets=secrets)
     return 0
+
+
+def _notes_past_limit(row):
+    """The line a plan's land adds when its "Current plan's decisions" took the project's notes past `project_notes_max`, else None."""
+    try:
+        chars = len(projnotes.parts_of(projects.read_handoff(projects.folder_of(log.project_of(row)))).notes)
+        limit = projnotes.max_chars()
+    except (projects.ProjectError, OSError, ValueError):
+        return None
+    if chars <= limit:
+        return None
+    return f"Landed, but the notes are past their limit ({chars:,} of {limit:,} characters): trim them in Notes before the next save."
 
 
 def _plan_section(conn, row, verb):
@@ -8303,6 +8321,11 @@ def cmd_models(words, *, roster, loaded=None, as_json=False, skill=None, team=No
                                          skills=tuple(roster.skills) if roster is not None else (),
                                          teams=tuple(loaded.presets) if loaded is not None else (), stages=stages)
         if verb == "set":
+            # Cleanup 2, row 3: a skill's pick that can never apply is refused here; an agent with no choice keeps set_default's words
+            if skill and agent in models.AGENTS and (model is not None or effort is not None):
+                never = routing.pick_refusal(skill, agent, roster, model=model, effort=effort)
+                if never:
+                    raise models.ModelsError(never)
             entry = models.set_default(selector, agent, model=model, effort=effort, lock_folder=DB_PATH.parent / runs.FOLDER_NAME)
         else:
             if model is not None or effort is not None:
@@ -8899,8 +8922,9 @@ def _parser(roster, quiet=False):
     p_serve = sub.add_parser("serve", help="the page on 127.0.0.1: shows the log and runs sr commands with buttons "
                                            "(Ctrl+C stops the page; tasks it started keep running)")
     p_serve.add_argument("--port", type=int, default=None, help="the port (default: serve_port in config/settings.json)")
-    p_serve.add_argument("--demo", action="store_true",
-                         help="show the page on invented sample tasks; nothing runs (works with no setup)")
+    p_serve.add_argument("--demo", nargs="?", const=True, default=False, choices=["all-up"],
+                         help="show the page on invented sample tasks; nothing runs (works with no setup); "
+                              "all-up shows the same sample with every agent up")
     sub.add_parser("migrate", help="one time: move a version 1 log into backups/ and start fresh, "
                                    "or upgrade a version 2 log in place after a backup copy")
     p_project = sub.add_parser("project", help="the project registry (rules v2.25): sr project add <name> <path>, "
@@ -9072,7 +9096,7 @@ def _take_slot_flags(argv):
 
 
 def _serve_demo(argv, out):
-    """`sr serve --demo` (build brief 23, decision 15): the page on the invented sample in demo/, with nothing run,
+    """`sr serve --demo [all-up]` (build brief 23, decision 15): the page on the invented sample in demo/, with nothing run,
     started before anything that needs setup (the config, the host check, the billing switches, .env, the log), so a
     fresh clone with its requirements installed shows it on any system. The port: --port, else serve_port, else 8765."""
     args = _parser(None).parse_args(argv)
@@ -9082,7 +9106,8 @@ def _serve_demo(argv, out):
             port = settings.serve_port()
         except (OSError, ValueError):
             port = page.DEFAULT_PORT
-    return page.serve_demo(port, out=out)
+    # Cleanup 2, row 13: `--demo all-up` only when asked, so plain `--demo` stays exactly as it is
+    return page.serve_demo(port, out=out, **({"status_name": page.ALL_UP_STATUS} if args.demo == "all-up" else {}))
 
 
 def _slot_flag_elsewhere(argv):

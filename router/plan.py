@@ -1307,8 +1307,9 @@ def decided_of(record):
 
 def section_edited(conn, row):
     """Decision 6b: whether Approve would replace words the router didn't write: a new plan waiting to land, with a
-    "Current plan's decisions" section that differs from what the router last wrote there (compared by hash: its last
-    land's section, or the copy its last Undo put back)."""
+    "Current plan's decisions" section that differs from what the router last wrote there (compared by hash with the newest
+    plan still landed that wrote it). An Undo isn't the router's own writing (Cleanup 2, row 6): it can put your words back, so
+    an undone plan is skipped, and with no plan still landed that wrote it, the section is yours."""
     from router import plansection, projects  # both read the notes; kept local
     if not is_plan(row) or inherited_of(record_of(row)) is not None:
         return False
@@ -1325,11 +1326,8 @@ def section_edited(conn, row):
         found = record_of(other) if is_plan(other) and other["task_id"] != row["task_id"] else None
         if not found or "section_written" not in found:
             continue
-        state = (log.project_files_of(other) or {}).get("state")
-        if state == "landed":
+        if (log.project_files_of(other) or {}).get("state") == "landed":
             return plansection.digest(now) != found["section_written"]
-        if state == "undone":
-            return plansection.digest(now) != plansection.digest(found.get("section_before"))
     return True
 
 
@@ -1551,6 +1549,7 @@ def dumps(record):
 # ---------- the router's moves (decisions 6, 17 and 18) ----------
 
 README_TEXT = ("Write README.md for this project: what it does, how to set it up, how to run it and how to test it.")
+README_UPDATE_TEXT = "Update README.md for this project: what it does, how to set it up, how to run it and how to test it."
 WHAT_NEXT_TEXT = "Plan what to build next."
 
 
@@ -1601,17 +1600,18 @@ SPEC_CHECK_TEXT = ("Check the project against SPEC.md's `## Done when` list: for
                    "with the evidence (the test or the file), then what is missing. Change no files; report only.")
 
 
-def finish_chips(project, *, run_command_set, done_when=False):
+def finish_chips(project, *, run_command_set, done_when=False, readme_exists=False):
     """Decision 17 (c), the finish line: Write the README, Set the run command (only when none is set) and What next.
     Brief 33.2 (decision 8): with a `## Done when` list in SPEC.md, Check against the spec comes first (Route, the project,
     SPEC_CHECK_TEXT), and the three-chip cap holds by dropping Set the run command from this line (it stays in Project
-    tools)."""
+    tools). Cleanup 2, row 15: with a README.md in the folder (a step's change lands there, so that's covered too), Update the
+    README in place of Write."""
     found = []
     if done_when:
         found.append({"kind": "spec_check", "words": "Check against the spec", "later": False,
                       "fill": _fill(project, teams.ROUTE, SPEC_CHECK_TEXT)})
-    found.append({"kind": "readme", "words": "Write the README", "later": False,
-                  "fill": _fill(project, teams.ROUTE, README_TEXT)})
+    found.append({"kind": "readme", "words": "Update the README" if readme_exists else "Write the README", "later": False,
+                  "fill": _fill(project, teams.ROUTE, README_UPDATE_TEXT if readme_exists else README_TEXT)})
     if not run_command_set and not done_when:
         found.append({"kind": "run_command", "words": "Set the run command", "later": False, "fill": None,
                       "opens": "run_command"})

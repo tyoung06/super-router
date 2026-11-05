@@ -85,7 +85,7 @@ def run(prompt, *, model, web_search, run=subprocess.run, environ=os.environ, fi
             proc = _call(run, prompt, environ, safety.codex_argv(model, web_search, out_file, effort=effort), WORKSPACE,
                          timeout)
         served = models.codex_served(proc.stdout, proc.stderr, choice)
-        limit = plan_limit.codex(proc.returncode, proc.stdout, proc.stderr)
+        limit = plan_limit.codex(proc.returncode, proc.stdout, proc.stderr, prompt)
         if limit:
             raise WorkerError(f"plan limit on chatgpt: {limit[:300]}", code=plan_limit.CODE, served=served)
         if proc.returncode != 0:

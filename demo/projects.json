@@ -707,7 +707,7 @@
    "secrets": null,
    "what_now": {
     "rung": "auto_stopped",
-    "words": "Auto stopped: the budget is reached: 17 of 17 calls used",
+    "words": "Auto stopped: the budget is reached: 14 of 14 calls used",
     "control": "open",
     "task_id": "sr-20261019-112724-0048",
     "n": 67,
@@ -722,14 +722,14 @@
      "task_id": "sr-20261019-112724-0048",
      "n": 67,
      "state": "stopped",
-     "words": "Auto stopped: the budget is reached: 17 of 17 calls used",
+     "words": "Auto stopped: the budget is reached: 14 of 14 calls used",
      "stop": {
       "code": "budget",
-      "why": "the budget is reached: 17 of 17 calls used",
+      "why": "the budget is reached: 14 of 14 calls used",
       "step": 3
      },
-     "used": 17,
-     "budget": 17,
+     "used": 14,
+     "budget": 14,
      "next": 3
     },
     "switch": "off",

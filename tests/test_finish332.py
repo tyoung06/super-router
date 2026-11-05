@@ -61,3 +61,28 @@ def test_without_a_done_when_list_the_finish_line_is_as_today(project, conn, run
 def test_without_a_spec_the_finish_line_is_as_today(project, conn, runner):
     line = _finished(conn, project)
     assert [c["kind"] for c in line["chips"]] == ["readme", "run_command", "what_next"]
+
+
+# ---------- Cleanup 2, row 15 (item 6): Update the README ----------
+
+def test_the_chip_reads_update_once_a_readme_exists():
+    written = plan.finish_chips("garden", run_command_set=True)
+    assert [(c["kind"], c["words"], c["fill"]["text"]) for c in written if c["kind"] == "readme"] == [("readme", "Write the README", plan.README_TEXT)]
+    update = plan.finish_chips("garden", run_command_set=True, readme_exists=True)
+    chip = next(c for c in update if c["kind"] == "readme")
+    assert chip["words"] == "Update the README"
+    assert chip["fill"]["text"].startswith("Update README.md")
+    assert chip["fill"]["team"] == written[0]["fill"]["team"]
+
+
+def test_the_finish_line_reads_the_projects_folder(project, conn, runner):
+    (project / "README.md").write_text("# Garden\n")
+    line = _finished(conn, project)
+    assert "Update the README" in [c["words"] for c in line["chips"]]
+
+
+def test_the_finish_line_goes_back_to_write_once_the_readme_is_gone(project, conn, runner):
+    _finished(conn, project)
+    (project / "README.md").unlink()  # as a step that deleted it leaves the folder
+    line = whatnow.for_project(conn, "garden")
+    assert "Write the README" in [c["words"] for c in line["chips"]]

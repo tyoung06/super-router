@@ -802,6 +802,22 @@ def lines(doc):
                + ("" if fable["on"] else f"; a Fable default runs on {fable['fallback_name']} (sr models fable on)"))
     for problem in doc["problems"]:
         out.append(f"  ignored: {problem}")
+    out.extend(_unused_lines(doc))
+    return out
+
+
+def _unused_lines(doc):
+    """Cleanup 2, row 3: one line per pick already in the file that the router itself can never reach, with the command to clear it."""
+    from router import availability, routing  # local, as in _skill_row
+
+    out = []
+    for row in ((doc.get("setup") or {}).get("skills") or []):
+        for pick in row.get("unused") or []:
+            who = availability.name_of(pick["agent"])
+            what = pick["name"] or (f"effort {pick['effort']}" if pick["effort"] else pick["model"])
+            draft = ", or a text-only draft" if pick["agent"] == "claude" else ""
+            out.append(f"  {routing.skill_words(row['key'])}: your earlier pick for {who} ({what}) isn't used: it reaches only a task "
+                       f"you send as @{pick['agent']}{draft}. To clear it: sr models clear --skill {row['key']} --agent {pick['agent']}")
     return out
 
 
@@ -871,17 +887,35 @@ def now_view(found, local_doc, roster, loaded, table, *, send_paths, pins, skill
 
 # The roles each team's calls can have, with the agent that makes them as the chain is filled now, for Setup's selects
 # (decision 12): read from `now` so nothing here types a chain.
-def setup_rows(now, local_doc, found, skills=(), skills_now=None):
-    """Setup's Models row (decision 12): one row per skill (its doer's do and fix calls, the doer as the skill table
-    picks it now), one per team, role and agent, and one per numbered stage of a preset (and of a plan), each with the
-    local default in force (model, effort) or none."""
+def _skill_row(key, local_doc, found, now, roster):
+    """Cleanup 2, row 3: one skill's row, telling the truth about who does the work. `agent` is the doer now, or Grok for a
+    skill that's Grok Bot's alone; `state` is `choice` (a doer with a model choice), `service` (its service picks the model) or
+    `not_routed`; `unused` lists a pick already in the file that the router itself can never reach (never written now)."""
+    from router import routing  # local, as a module-level import would tie the two together
+
+    doer = now.get("doer")
+    not_routed = roster is not None and key in roster.not_routed
+    agent = None if not_routed else doer or routing.ONLY.get(key) or "claude"
+    state = "not_routed" if not_routed else "choice" if agent in AGENTS else "service"
+    entry = (local_doc.entry("skills", key, agent) or {}) if state == "choice" else {}
+    reach = routing.pick_agents(key, roster) if roster is not None and key in roster.skills else AGENTS
+    unused = []
+    for other in AGENTS:
+        pick = local_doc.entry("skills", key, other)
+        if pick and other not in reach:
+            unused.append({"agent": other, "model": pick.get("model"), "effort": pick.get("effort"),
+                           "name": found.display(other, pick.get("model")) if pick.get("model") else None})
+    return {"key": key, "agent": agent, "doer": doer, "state": state, "comes_back": bool(now.get("comes_back")), "unused": unused,
+            "model": entry.get("model"), "effort": entry.get("effort"),
+            "name": found.display(agent, entry.get("model")) if entry.get("model") else None}
+
+
+def setup_rows(now, local_doc, found, skills=(), skills_now=None, roster=None):
+    """Setup's Models row (decision 12): one row per skill (`_skill_row`), one per team, role and agent, and one per numbered
+    stage of a preset (and of a plan), each with the local default in force (model, effort) or none."""
     rows = {"skills": [], "roles": [], "stages": []}
     for key in skills:
-        doer = ((skills_now or {}).get(key) or {}).get("doer")
-        agent = doer if doer in AGENTS else "claude"
-        entry = local_doc.entry("skills", key, agent) or {}
-        rows["skills"].append({"key": key, "agent": agent, "model": entry.get("model"), "effort": entry.get("effort"),
-                               "name": found.display(agent, entry.get("model")) if entry.get("model") else None})
+        rows["skills"].append(_skill_row(key, local_doc, found, (skills_now or {}).get(key) or {}, roster))
     for team, entries in (now.get("teams") or {}).items():
         if team in TEAMS_FIXED and team != "plan":  # route, split and file have no numbered stages (check_selector)
             continue
@@ -930,5 +964,5 @@ def status_view(conn, roster, loaded, table, *, send_paths, since, skills_now=No
     doc["claude"] = {"opus_calls_this_week": opus, "fable_calls_this_week": fable}
     doc["now"] = now_view(found, local_doc, roster, loaded, table, send_paths=send_paths, pins=pins, skills_now=skills_now)
     doc["setup"] = setup_rows(doc["now"], local_doc, found, skills=tuple(roster.skills) if roster is not None else (),
-                              skills_now=skills_now)
+                              skills_now=skills_now, roster=roster)
     return doc

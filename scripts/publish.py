@@ -50,7 +50,7 @@ NEVER_DIRS = ("labeltest/", ".claude/", "publish/")  # publish/: the workflow's 
 MADE = {"docs/RULES.md": "SUPER-ROUTER.md", ".github/workflows/ci.yml": "publish/ci.yml"}
 
 # The owner's rule of 21 Oct: a file that isn't text goes public only when named here with its SHA-256. The demo's samples
-# are drawn by scripts/make_demo.py; docs/demo.png is the README's picture of `sr serve --demo`. Any other binary, or one
+# are drawn by scripts/make_demo.py; docs/demo.png is the README's picture of `sr serve --demo all-up`. Any other binary, or one
 # of these whose bytes changed, stops the publish.
 KNOWN_BINARIES = {
     "demo/files/media/frames/sr-20261019-105100-0019/frame_01.png": "2195bbbcdc962ced111b27e2cc68182cabda0c9d0d34abb693494a6bbd4a4dd4",
@@ -60,7 +60,7 @@ KNOWN_BINARIES = {
     "demo/files/media/out/sr-20261019-105600-001a/tomato-badge.png": "5b6d018556c09b7c05953d2c8ea88ea30103fd3cd5cb4f4da127f970ec5291c1",
     "demo/files/media/pages/sr-20261019-104600-0018/menu/page-1.png": "c58e61bb5e37cee3954e4a1ddac9b26f49cd0dcb4c67fcaf18047989efec7397",
     "demo/files/media/pages/sr-20261019-104600-0018/menu/page-2.png": "d3df550903bd830d6509f57233475416170d618a8a22f37090e58f94ce8b569a",
-    "docs/demo.png": "68914ce3655bf458249d208494b65f70aae2e027d880c6a01c75601a8fb5267d",
+    "docs/demo.png": "2a20032c4136b4f473744262d186a2f89b8049449da1e2bd81e9ea1cd92362ab",
 }
 
 # The CI's gitleaks config, byte for byte (publish/ci.yml carries the same text): the default rules, and one allowlist on

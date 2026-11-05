@@ -782,3 +782,65 @@ test("row 12: Land stays where it is, above the result", async () => {
   assert.ok(files > 0 && (result === -1 || files < result));
   assert.ok(card.querySelector(`#act-${t.task_id}-land`));
 });
+
+// ---- Cleanup 2, row 16 (note 3): a click on a box closes an open menu first ----
+
+test("row 16: a box's click closes an open ⋯ and opens the list", async () => {
+  const t = { ...byN(1), chat: null, project: null };
+  const page = await streamOf([t]);
+  page.el(`card-${t.task_id}`).querySelector(".more-btn").click();
+  assert.ok(page.el("stream").querySelector(".menu-list"));
+  page.el("agent-box-claude").click();
+  assert.equal(page.state.menu, null);
+  assert.equal(page.el("stream").querySelectorAll(".menu-list").length, 0);
+  assert.equal(page.state.stripOpen, "claude");
+});
+
+test("row 16: a box's click closes an open Project menu", async () => {
+  const page = await streamOf([], { project: STATUS.projects[0].name });
+  page.el("stream").querySelector(".project-menu button").click();
+  assert.ok(page.el("stream").querySelector(".project-menu .menu-list"));
+  page.el("agent-box-claude").click();
+  assert.equal(page.state.menu, null);
+  assert.equal(page.el("stream").querySelectorAll(".project-menu .menu-list").length, 0);
+});
+
+test("row 16: a box's click closes an open Run again as…", async () => {
+  const failed = { ...byN(3), chat: null, project: null };
+  const page = await streamOf([failed], { shows: { [failed.task_id]: showOf(3) } });
+  const again = () => page.el(`card-${failed.task_id}`).querySelector(".row-actions .menu");
+  again().querySelector("button").click();
+  assert.ok(again().querySelector(".menu-list"));
+  page.el("agent-box-claude").click();
+  assert.equal(page.state.menu, null);
+  assert.equal(again().querySelectorAll(".menu-list").length, 0);
+});
+
+test("row 16: with no menu open, a box's click doesn't redraw the stream", async () => {
+  const page = await streamOf([byN(1)]);
+  const before = page.el("stream").children[0];
+  page.el("agent-box-claude").click();
+  assert.ok(page.el("stream").children[0] === before);
+});
+
+// ---- Cleanup 2, row 17 (note 2): focus stays on its box across a status redraw ----
+
+test("row 17: focus on a box stays there when the status redraws", async () => {
+  const page = await streamOf([byN(1)]);
+  page.el("agent-box-claude").focus();
+  const old = page.el("agent-box-claude");
+  page.renderStrip();
+  const now = page.el("agent-box-claude");
+  assert.ok(now !== old, "the box was drawn again");
+  assert.ok(page.doc.activeElement === now);
+});
+
+test("row 17: a redraw takes no focus when it wasn't on a box", async () => {
+  const page = await streamOf([byN(1)]);
+  page.el("prompt").focus();
+  page.renderStrip();
+  assert.ok(page.doc.activeElement === page.el("prompt"));
+  page.doc.activeElement = page.doc.body;
+  page.renderStrip();
+  assert.ok(page.doc.activeElement === page.doc.body);
+});

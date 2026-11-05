@@ -7,7 +7,7 @@
  "outcome": null,
  "reason_code": null,
  "exit": 0,
- "message": "Auto runs step 3 of plan #65, 23 calls at most.\nA step already started finishes, so the run can pass its budget by up to one step's calls.",
+ "message": "Auto runs step 3 of plan #65, 20 calls at most.\nA step already started finishes, so the run can pass its budget by up to one step's calls.",
  "auto": {
   "plan": {
    "task_id": "sr-20261019-112718-0046",
@@ -18,8 +18,8 @@
   "steps": [
    3
   ],
-  "budget": 23,
-  "used": 17,
+  "budget": 20,
+  "used": 14,
   "estimate": {
    "calls": 4,
    "max_calls": 4,
@@ -27,7 +27,7 @@
   },
   "first_stop_here": null,
   "overrun": "A step already started finishes, so the run can pass its budget by up to one step's calls.",
-  "words": "Auto runs step 3 of plan #65, 23 calls at most.",
+  "words": "Auto runs step 3 of plan #65, 20 calls at most.",
   "spec_changed": false,
   "spec_line": null
  }

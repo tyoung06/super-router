@@ -184,6 +184,8 @@ svg.icon { width: 15px; height: 15px; flex-shrink: 0; fill: none; stroke: curren
 .empty { padding: 28px 16px; border-radius: 12px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line);
   color: var(--muted); text-align: center; font-size: 13px; }
 .load-earlier { align-self: center; }
+.chat-name-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex-basis: 100%; min-width: 0; }
+.stream-head .chat-name-row .chat-name { flex: 0 1 18em; min-width: 0; }
 
 .task { display: flex; flex-direction: column; gap: 8px; }
 .bubble-row { display: flex; justify-content: flex-end; }
@@ -1410,6 +1412,8 @@ span.agent-box { cursor: default; flex: none; }
 .models-row-pick { display: flex; gap: 8px; align-items: center; min-width: 0; }
 .models-row-pick .select { flex: 1 1 auto; min-width: 0; max-width: 100%; }
 .models-said.ok { color: var(--ok-text); }
+.models-unused { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.models-unused .np-hint { flex: 1 1 14em; min-width: 0; }
 .models-fold > summary { min-height: 36px; display: flex; align-items: center; gap: 6px; color: var(--muted); cursor: pointer; }
 @media (max-width: 600px) {
   .sheet-backdrop:has(> .models-sheet) { padding: 0; }

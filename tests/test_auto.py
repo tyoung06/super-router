@@ -150,7 +150,7 @@ def test_the_dry_run_names_the_steps_the_budget_the_first_stop_here_and_the_over
     plan_record = auto.with_mark({"steps": STEPS}, 2, True)
     found = auto.dry_run_view(PLAN, rec, plan_record)
     assert (found["from_step"], found["to_step"], found["steps"], found["budget"], found["first_stop_here"]) == (1, 3, [1, 2, 3], 23, 2)
-    assert found["words"] == "Auto runs steps 1 to 3 of plan #7, 23 calls at most, stopping before step 2 (stop here)."
+    assert found["words"] == "Auto runs step 1 of plan #7, 23 calls at most, then stops before step 2 (stop here)."
     assert "up to one step's calls" in found["overrun"]
     later = _record(from_step=3)
     assert auto.dry_run_view(PLAN, later, {"steps": STEPS})["words"] == "Auto runs step 3 of plan #7, 6 calls at most."

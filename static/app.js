@@ -44,6 +44,18 @@ export function newChatName(date = new Date()) {
   return `chat-${date.getFullYear()}${p(date.getMonth() + 1)}${p(date.getDate())}-${p(date.getHours())}${p(date.getMinutes())}`;
 }
 
+export function isAutoChatName(name) {
+  // the shape newChatName makes (Cleanup 2, row 14): only such a chat, with no tasks yet, can still be named
+  return /^chat-\d{8}-\d{4}$/.test(name || "");
+}
+
+export function chatNameHint(typed, status) {
+  const saved = projectSlug(typed || "");
+  if (!saved) return { saved: "", text: "" };
+  const taken = ((status && status.chats) || []).some((c) => c.name === saved);
+  return { saved, text: taken ? "That chat exists: this adds to it" : `Reads as ${saved}` };
+}
+
 export function isOpenTask(task) {
   return !!task && task.outcome == null && ["queued", "sent", "returned"].includes(task.status);
 }
@@ -358,15 +370,43 @@ export function fableSwitchView(models, run = null, failure = null) {
     cmdLabel: busy ? "Running" : "The switch runs", failure: failure ? { exit: failure.exit, message: failure.message } : null };
 }
 
+// Cleanup 2, row 3: the skills' plain names. A key not here (a clone's own skill) reads with spaces. The router has its own for
+// its refusal's words (routing.SKILL_WORDS); a test holds the two alike.
+const SKILL_NAMES = { x_social_pulse: "X research", meta_social_trends: "Meta research", make_media: "Make media", computer_use: "Computer use",
+  web_research: "Web research", read_media: "Read media", code: "Code", writing: "Writing", planning: "Planning", bulk_text: "Bulk text",
+  quick_answer: "Quick answer", recall: "Recall" };
+
+export function skillName(key) {
+  return SKILL_NAMES[key] || String(key || "").replace(/_/g, " ");
+}
+
+export function skillRowWords(s) {
+  // what a row without a choice reads in place of a model
+  if (s.state === "not_routed") return "not routed";
+  if (s.state !== "service") return null;
+  return s.comes_back ? `its service picks the model · comes back without ${agentLabel(s.agent)}` : "its service picks the model";
+}
+
+export function unusedPickWords(pick) {
+  // a pick already in the file that the router itself can never reach: it stays until it's cleared (option A: the two doors)
+  const what = pick.name || (pick.effort ? `effort ${pick.effort}` : pick.model);
+  return `Your earlier pick for ${agentLabel(pick.agent)} (${what}) isn't used: it reaches only a task you send as @${pick.agent}${pick.agent === "claude" ? ", or a text-only draft" : ""}.`;
+}
+
 export function modelsSetupSelects(status) {
-  // decision 12: Setup's selects from status's `models.setup`: one per skill (Claude's do and fix calls) and one per team,
-  // role and agent, each with Default first (that agent's default by name) and its allowlist; a change runs `sr models set`
+  // decision 12: Setup's selects from status's `models.setup`: one per skill, naming the agent that does it now (a skill with no
+  // choice has no select: Cleanup 2, row 3), and one per team, role and agent, each with Default first (that agent's default by
+  // name) and its allowlist; a change runs `sr models set`
   const models = status && status.models;
   if (!models) return { skills: [], roles: [], stages: [] };
   const setup = models.setup || {};
   const agentDefault = (agent) => ((models.agents || {})[agent] || {}).name || "the agent's default";
-  const skills = (setup.skills || []).map((s) => ({ key: s.key, agent: s.agent, chosen: s.model || "", label: s.key.replace(/_/g, " "),
-    selector: { skill: s.key }, options: modelOptions(s.agent, status, { chosen: s.model || "", defaults: `Default (${agentDefault(s.agent)})` }) }));
+  const skills = (setup.skills || []).map((s) => {
+    const state = s.state || "choice";
+    return { key: s.key, agent: s.agent, chosen: s.model || "", state, words: skillRowWords({ ...s, state }), unused: s.unused || [],
+      label: state === "not_routed" ? skillName(s.key) : `${skillName(s.key)} · ${agentLabel(s.agent)}`, selector: { skill: s.key },
+      options: state === "choice" ? modelOptions(s.agent, status, { chosen: s.model || "", defaults: `Default (${agentDefault(s.agent)})` }) : [] };
+  });
   const roles = (setup.roles || []).map((r) => ({ team: r.team, role: r.role, agent: r.agent, chosen: r.model || "",
     label: `${teamLabel(r.team)} · ${r.role} · ${agentLabel(r.agent)}`, selector: { team: r.team, role: r.role },
     options: modelOptions(r.agent, status, { chosen: r.model || "", defaults: `Default (${agentDefault(r.agent)})` }) }));
@@ -628,7 +668,8 @@ export function stateWords(task) {
     const words = { pick: "waiting for your pick", vote_pick: "a tie: waiting for your pick", needs_label: "waiting for your label",
       split_plan: "a split plan waiting for you", grok: "waiting on Grok", piece: "waiting on its pieces",
       probe: "waiting for a safety check", memory: "waiting for memory to start",
-      land: "waiting for you to land or discard its change" };  // brief 28
+      land: "waiting for you to land or discard its change",  // brief 28
+      answers: "waiting for your answers" };  // Cleanup 2, row 12 (note 5)
     return words[task.waiting_on] || `waiting on ${task.waiting_on.replace(/_/g, " ")}`;
   }
   if (task.outcome) {
@@ -2491,6 +2532,63 @@ export function mergeTasks(older, newer) {
   return [...byId.values()].sort((a, b) => a.n - b.n);
 }
 
+// Cleanup 2, row 1: a chat's or a project's view reads its own newest tasks. state.tasks stays the whole log's newest 50,
+// since Needs you, the agents' counts and the notifications read that.
+export function viewReadKey({ view, chat, project }) {
+  if (view !== "chat") return null;  // All tasks, Log files and Settings
+  if (project) return `project:${project}`;
+  return chat ? `chat:${chat}` : null;  // Quick tasks keep the whole log's read: `sr log` has no "untagged" filter
+}
+
+export function viewReadQuery(key) {
+  const at = key.indexOf(":");
+  return { [key.slice(0, at)]: key.slice(at + 1) };
+}
+
+export function takeViewPage(read, doc, { more = false, quiet = false } = {}) {
+  // as loadHistory merges: the first read replaces, a poll merges the first page and keeps older ones, more adds below
+  const found = (doc && doc.tasks) || [];
+  const next = (doc && doc.next_before) || null;
+  if (more) return { ...read, tasks: mergeTasks(found, read.tasks), next, pages: read.pages + 1, loading: false, error: null };
+  if (quiet) {
+    return { ...read, tasks: mergeTasks(read.tasks, found), next: read.pages > 1 ? read.next : next, pages: Math.max(read.pages, 1), error: null };
+  }
+  return { ...read, tasks: mergeTasks([], found), next, pages: 1, loading: false, error: null };
+}
+
+export function viewTasksKnown(read, tasks) {
+  return mergeTasks(read ? read.tasks : [], tasks);  // a row from either read counts; the whole log's is read last, so it wins
+}
+
+export function patchViewRow(read, show) {
+  // a poll only re-reads the first page, so an action on an older card comes back through its show: the row's own keys
+  if (!read || !show || !read.tasks.some((t) => t.task_id === show.task_id)) return read;
+  const patch = (t) => {
+    if (t.task_id !== show.task_id) return t;
+    const row = { ...t };
+    for (const key of Object.keys(t)) if (key in show) row[key] = show[key];
+    return row;
+  };
+  return { ...read, tasks: read.tasks.map(patch) };
+}
+
+function chatHeadWords(count, memory) {
+  return `chat · ${count} task${count === 1 ? "" : "s"} · ${chatMemoryWords(memory)}`;
+}
+
+export function jumpStep(rows, next, task) {
+  // Cleanup 2, row 2: one step of a jump: the card is loaded, it can't be (the oldest row is already older, or nothing is left), or read more
+  if ((rows || []).some((t) => t.task_id === task.task_id)) return "found";
+  if (!next) return "gone";
+  return (rows || []).some((t) => t.n < task.n) ? "gone" : "more";
+}
+
+export function chatCount(status, name, shown) {
+  // status is read once a minute, so its count can lag a task just sent: never lower than what's on screen
+  const chat = ((status && status.chats) || []).find((c) => c.name === name);
+  return Math.max(chat ? Number(chat.tasks) || 0 : 0, shown);
+}
+
 export const SETUP_PIECES = [["claude", "Claude"], ["chatgpt", "ChatGPT"], ["cursor", "Cursor"], ["grok", "Grok Bot"],
   ["jev", "Jev"], ["memory", "Memory"], ["git", "Git"],  // brief 28 (decision 20d): the Git row
   ["notes", "Router notes"],  // brief 30 (decision 10): the router notes' row and its editor
@@ -3241,10 +3339,12 @@ export function settingsTabFor(focus) {
 }
 
 export function modelRows(rows, { keep = 5 } = {}) {
-  // UI B row 14 (board 3): rows you've set read "yours" and sort first; the first few show, the rest fold
+  // UI B row 14 (board 3): rows you've set read "yours" and sort first, then rows with a choice (Cleanup 2, row 3); the first few
+  // show, the rest fold
   const read = (rows || []).map((row) => ({ ...row, yours: !!row.chosen,
-    current: (row.options.find((o) => o.selected) || row.options[0] || { label: "" }).label }));
-  const sorted = [...read.filter((r) => r.yours), ...read.filter((r) => !r.yours)];
+    current: row.words || (row.options.find((o) => o.selected) || row.options[0] || { label: "" }).label }));
+  const hasChoice = (r) => !r.state || r.state === "choice";
+  const sorted = [...read.filter((r) => r.yours), ...read.filter((r) => !r.yours && hasChoice(r)), ...read.filter((r) => !r.yours && !hasChoice(r))];
   return { shown: sorted.slice(0, keep), more: sorted.slice(keep), yours: read.filter((r) => r.yours).length };
 }
 
@@ -3321,6 +3421,8 @@ const state = {
   whatNow: null,  // brief 33 (decision 13): {project, line}, the router's What now? for the open project
   status: null, statusAt: 0, statusError: null,
   tasks: [], logError: null, nextBefore: null,
+  chatDraft: "",  // Cleanup 2, row 14: a new chat's typed name, used at its first send
+  viewRead: null,  // Cleanup 2, row 1: { key, tasks, next, pages, loading, error }, the open chat's or project's own read
   chat: null, project: null, quick: false, team: "route", slots: {}, view: "chat",
   historyQuery: { chat: null, project: null, search: "" }, historyTasks: [], historyNext: null, historyPages: 1, historyError: null,
   logFolders: [], logNext: null, logError: null, setupText: null, setupError: null, setupChecking: false, setupFocus: null,
@@ -3412,10 +3514,20 @@ function renderStrip() {
   const open = !!state.stripOpen;
   const linkOf = (item) => (item.key === "memory" ? item.link : item.tone === "bad" || item.tone === "muted" ? "How to set it up" : null);
   const said = (item) => [item.name, item.words, item.detail].filter(Boolean).join(" · ");
+  const active = document.activeElement;  // Cleanup 2, row 17 (note 2): a status redraw leaves the keyboard's focus on its box
+  const focused = active && active.id && String(active.id).startsWith("agent-box-") ? active.id : null;
   setChildren($("strip"), h("div", { class: "strip-row" }, headNav(),
     items.map((item) => h("button", { class: `agent-box tone-${item.tone}`, type: "button", id: `agent-box-${item.key}`, "aria-haspopup": "dialog",
       "aria-expanded": state.stripOpen === item.key ? "true" : "false", title: said(item), "aria-label": said(item),
-      onclick: (e) => { e.stopPropagation(); state.stripOpen = open ? null : item.key; renderStrip(); } },
+      onclick: (e) => {
+        e.stopPropagation();  // or the list would close itself as it opens, so an open ⋯, Project or Run again as… closes here (Cleanup 2, row 16)
+        const menuOpen = !!state.menu;
+        state.menu = null;
+        state.menuSub = null;
+        state.stripOpen = open ? null : item.key;
+        renderStrip();
+        if (menuOpen) renderStream({ follow: false });
+      } },
     h("span", { class: "light", "aria-hidden": "true" }), h("span", { class: "agent-name", text: item.name }),
     item.count ? h("span", { class: "agent-state", text: item.count }) : null)),
     open ? h("div", { class: "status-pop", role: "dialog", "aria-label": "Agent status" },
@@ -3427,6 +3539,10 @@ function renderStrip() {
           linkOf(item) ? [" · ", h("button", { class: "linklike", type: "button", dataset: { focusKey: `status-${item.key}` },
             onclick: () => { state.stripOpen = null; renderStrip(); openSetup(item.key); } }, linkOf(item))] : null))),
       h("div", { class: "status-foot", text: "A row's link opens its steps in Settings." })) : null));
+  if (focused) {
+    const box = document.getElementById(focused);
+    if (box) box.focus({ preventScroll: true });
+  }
 }
 
 function isNarrow() {
@@ -3605,7 +3721,7 @@ function toggleNav(open = !state.navOpen) {
 }
 
 function streamTasks() {
-  const all = state.tasks || [];
+  const all = viewTasksKnown(state.viewRead, state.tasks || []);  // Cleanup 2, row 1: the view's own read beside the whole log's
   if (state.view === "history") return state.historyTasks.slice().sort((a, b) => a.n - b.n);
   if (state.view === "logfiles" || state.view === "settings") return [];
   const mine = new Set(state.sessionTasks);
@@ -3762,7 +3878,7 @@ function runAgainOff() {
 
 function runAgainItems(task) {
   // the teams Run again as… offers, each today's runAgain (UI-1 row 4: shared by the card's button and its ⋯ menu)
-  const own = task.mode === "relay" ? task.preset : task.mode === "split" ? null : "route";  // a split has no chip: every team
+  const own = task.mode === "relay" ? task.preset : task.mode === "split" ? null : task.mode === "plan" ? "plan" : "route";  // a split has no chip: every team
   const fill = runAgainFill(task);  // brief 33.4 (decision 9b): a text-only card's Route item fills the box
   // the small UI cleanup, row 10 (note 22): any card with a project offers Plan; off a project it stays greyed with its reason
   const chips = chipViews(state.status, state.team, task.project ? { project: task.project } : {}).filter((c) => c.key !== own || fill);
@@ -4123,8 +4239,13 @@ async function loadWhatNow() {
   try {
     const doc = await api(historyPath({ project: name }));
     if (state.project === name) state.whatNow = { project: name, line: doc.what_now || null };
+    // Cleanup 2, row 1: this read is the project's first page too, so a project's view costs no extra process per poll
+    if (state.viewRead && state.viewRead.key === `project:${name}`) state.viewRead = takeViewPage(state.viewRead, doc, { quiet: true });
   } catch (e) {
     if (state.whatNow && state.whatNow.project !== name) state.whatNow = null;
+    if (e.status !== 403 && state.viewRead && state.viewRead.key === `project:${name}` && !state.viewRead.pages) {
+      state.viewRead = { ...state.viewRead, error: e.message };
+    }
   }
 }
 
@@ -4132,14 +4253,11 @@ function builtFromLine(task) {
   const found = builtFrom(task);
   if (!found) return null;
   return h("div", { class: "built-from" }, h("button", { class: "linklike", type: "button",
-    onclick: () => goToSource(found.id) }, found.text));
+    onclick: () => goToSource(found.id, task.from.n) }, found.text));
 }
 
-function goToSource(taskId) {
-  // the source's card where it is loaded; else All tasks, which draws it once its page loads
-  if ((state.tasks || []).some((t) => t.task_id === taskId)) { goToTask(taskId); return; }
-  state.focusTask = { id: taskId, until: Date.now() + 10000 };
-  openHistory();
+function goToSource(taskId, n = null) {
+  return jumpToTask(taskId, n);  // Cleanup 2, row 2: the card is found wherever it is, its pages read if they must be
 }
 
 // ---------- project files on the card and in the side panel (brief 28, decision 20a) ----------
@@ -6339,8 +6457,8 @@ function piecesList(task, pieces) {
 }
 
 function openPieceCard(found) {
-  // C4: the page's own way to a task's card (goToTask: its view, then the card, focused); a piece shown in this view
-  // is scrolled to at once, and one not loaded yet gets a word instead of nothing
+  // C4: the page's own way to a task's card (its view, then the card, focused); a piece shown in this view is scrolled to
+  // at once, and one not loaded yet is found by the jump (Cleanup 2, row 2)
   const card = document.getElementById(`card-${found.task_id}`);
   if (card) {
     card.scrollIntoView({ block: "start" });
@@ -6348,8 +6466,7 @@ function openPieceCard(found) {
     state.heldCard = { id: found.task_id, until: Date.now() + HOLD_MS };  // brief 32.1: as a jump from Needs you
     return;
   }
-  if ((state.tasks || []).some((t) => t.task_id === found.task_id)) { goToTask(found.task_id); return; }
-  toast(`#${found.n} isn't loaded on this page yet: find it in All tasks`);
+  return jumpToTask(found.task_id, found.n);
 }
 
 function noSplitCard(task, view) {
@@ -6433,7 +6550,7 @@ function autoBoardEl(task, show) {
         line.team ? h("span", { class: "auto-team", text: line.team }) : null,
         h("span", { class: `auto-state ${line.state}`, text: line.words }),
         line.attempt ? h("span", { class: "muted", text: line.attempt }) : null,
-        line.taskId ? h("button", { class: "linklike", type: "button", onclick: () => goToSource(line.taskId) }, `#${line.n}`) : null,
+        line.taskId ? h("button", { class: "linklike", type: "button", onclick: () => goToSource(line.taskId, line.n) }, `#${line.n}`) : null,
         h("span", { class: "auto-calls", text: line.calls })));
   });
   return h("div", { class: "auto-wrap" },
@@ -6695,12 +6812,52 @@ async function runAction(task, request) {
 }
 
 function goToTask(taskId) {
-  const task = (state.tasks || []).find((t) => t.task_id === taskId);
-  if (!task) return;
+  return jumpToTask(taskId);
+}
+
+let jumps = 0;
+async function jumpToTask(taskId, n = null) {
+  // Cleanup 2, row 2: find the row, open its view, read older pages until the card is loaded, focus it; or say it can't be found
+  const ticket = ++jumps;
+  let task = taskById(taskId);
+  if (!task) {
+    try { task = await api(`/api/task/${encodeURIComponent(taskId)}`); } catch (e) { task = null; }
+    if (ticket !== jumps) return;
+  }
+  const missing = () => {
+    state.focusTask = null;
+    const shown = n == null && task ? task.n : n;
+    toast(shown == null ? "That task could not be found" : `#${shown} could not be found`);
+  };
+  if (!task) { missing(); return; }
+  if (state.heldCard && state.heldCard.id === taskId) state.heldCard = null;
   state.focusTask = { id: taskId, until: Date.now() + 10000 };  // until its card is drawn (All tasks loads first)
-  if (task.chat) openChat(task.chat);
-  else if (task.project) openProject(task.project);
-  else openHistory();
+  const history = task.mode === "suggest" || (!task.chat && !task.project);  // a suggest has no card in its project's stream
+  if (history) {
+    const q = state.historyQuery;  // a filter that hides the card would read as "could not be found"
+    if (q.chat || q.project || q.search) state.historyQuery = { chat: null, project: null, search: "" };
+    await openHistory();
+  } else {
+    if (task.chat) openChat(task.chat);
+    else openProject(task.project);
+    await viewReading;
+  }
+  const where = viewReadKey(state);
+  const moved = () => ticket !== jumps || viewReadKey(state) !== where || (history && state.view !== "history");
+  const nextPage = () => (history ? state.historyNext : (state.viewRead || {}).next);
+  for (;;) {
+    if (moved()) return;  // the person went elsewhere, or jumped again
+    const next = nextPage();
+    const step = jumpStep(streamTasks(), next, task);
+    if (step === "found") break;
+    if (step === "gone") { missing(); return; }
+    await (history ? loadHistory({ more: true }) : (viewReading = loadViewRead({ more: true })));
+    if (moved()) return;
+    if (nextPage() === next) { missing(); return; }  // a read that failed moves nothing on
+  }
+  if (state.heldCard && state.heldCard.id === taskId) return;  // a read's own redraw already reached it
+  state.focusTask = { id: taskId, until: Date.now() + 10000 };  // the timer restarts after the last read
+  renderStream({ follow: false });
 }
 
 function focusCard() {
@@ -6834,6 +6991,19 @@ function restoreAnchor(anchor) {
   if (card) el.scrollTop += card.getBoundingClientRect().top - anchor.top;
 }
 
+function chatNameField(tasks) {
+  // Cleanup 2, row 14: optional, before a new chat's first send. Once a chat has tasks its name stays: the name is its memory tag
+  const listed = ((state.status && state.status.chats) || []).some((c) => c.name === state.chat);
+  if (!isAutoChatName(state.chat) || tasks.length || listed || state.pending.length) return null;
+  const hint = h("span", { class: "stream-sub", id: "chat-name-hint", role: "status", text: chatNameHint(state.chatDraft, state.status).text });
+  return h("div", { class: "chat-name-row" },
+    h("input", { class: "search chat-name", id: "chat-name", type: "text", placeholder: "Name this chat", "aria-label": "Name this chat (optional)", maxlength: "80",
+      value: state.chatDraft || "", oninput: (e) => {
+        state.chatDraft = e.target.value;
+        hint.textContent = chatNameHint(state.chatDraft, state.status).text;
+      } }), hint);
+}
+
 function renderStream({ follow = true } = {}) {
   if (observer) observer.disconnect();  // the cards are drawn again: the old ones are gone
   if (state.menu !== state.menuDrawn) state.menuDrawn = null;  // the small UI cleanup, row 7: it closed, or another opened
@@ -6871,8 +7041,9 @@ function renderStream({ follow = true } = {}) {
       whatNowLine(state.project),  // brief 33 (decision 13): under the title, never folded with the bar
       projectBar(state.project));  // brief 28 (decision 20b)
   } else if (state.chat) {
-    head.append(h("span", { class: "stream-title", text: state.chat }),
-      h("span", { class: "stream-sub", id: "chat-memory", text: `chat · ${tasks.length} task${tasks.length === 1 ? "" : "s"} · ${chatMemoryWords((state.status || {}).memory)}` }),
+    const nameField = chatNameField(tasks);  // append(null) would write the word "null"
+    head.append(h("span", { class: "stream-title", text: state.chat }), ...(nameField ? [nameField] : []),
+      h("span", { class: "stream-sub", id: "chat-memory", text: chatHeadWords(chatCount(state.status, state.chat, tasks.length), (state.status || {}).memory) }),
       h("span", { class: "stream-sub right", text: `every task here is sent with --chat ${state.chat}` }));
   } else {
     head.append(h("span", { class: "stream-title", text: "Quick tasks" }), h("span", { class: "stream-sub", text: "no chat, no memory" }));
@@ -6881,11 +7052,20 @@ function renderStream({ follow = true } = {}) {
   if (state.view === "history" && state.historyNext) {
     items.push(h("button", { class: "btn btn-quiet load-earlier", type: "button", onclick: () => loadHistory({ more: true }) }, "Load earlier tasks"));
   }
+  if (state.view === "chat" && state.viewRead && state.viewRead.next) {  // Cleanup 2, row 2: a chat's or a project's older tasks
+    items.push(h("button", { class: "btn btn-quiet load-earlier", type: "button", id: "show-older", disabled: state.viewRead.loading, onclick: () => {
+      viewReading = loadViewRead({ more: true });
+      renderStream({ follow: false });
+    } }, "Show older"));
+  }
   if (!tasks.length && !state.pending.length && !state.refused.length) {
     // brief 26 (decision 14): a project with no tasks says its HANDOFF.md goes with every task sent there
     const project = state.project && state.view === "chat" ? ((state.status && state.status.projects) || []).find((p) => p.name === state.project) : null;
-    items.push(h("div", { class: "empty", id: project ? "np-empty-card" : null, text: state.logError ? `The log could not be read: ${state.logError}`
-      : project ? emptyProjectWords(project) : "No tasks here yet. Type below and press Enter." }));
+    const read = state.viewRead;
+    const logError = state.logError || (read && read.error);
+    const reading = !logError && read && !read.pages && read.key.startsWith("chat:") && ((state.status && state.status.chats) || []).some((c) => c.name === state.chat);
+    items.push(h("div", { class: "empty", id: project ? "np-empty-card" : null, text: logError ? `The log could not be read: ${logError}`
+      : reading ? "Loading this chat's tasks…" : project ? emptyProjectWords(project) : "No tasks here yet. Type below and press Enter." }));
   }
   items.push(...tasks.map(taskCard));
   items.push(...state.pending.map(pendingCard));
@@ -7199,7 +7379,34 @@ function renderJev() {
   }
 }
 
+let viewReading = Promise.resolve();  // the view's newest read, so a jump can wait for it
+
+function syncViewRead() {
+  // Cleanup 2, row 1: every way into a view passes through render(), so a changed key is noticed here
+  const key = viewReadKey(state);
+  if ((state.viewRead ? state.viewRead.key : null) === key) return;
+  state.viewRead = key ? { key, tasks: [], next: null, pages: 0, loading: false, error: null } : null;
+  if (key) viewReading = loadViewRead();
+}
+
+async function loadViewRead({ more = false, quiet = false } = {}) {
+  const read = state.viewRead;
+  if (!read) return;
+  const { key } = read;
+  if (!quiet) state.viewRead = { ...read, loading: true };
+  try {
+    const doc = await api(historyPath(viewReadQuery(key), more ? read.next : null));
+    if (!state.viewRead || state.viewRead.key !== key) return;  // the person moved on, as loadHistory's check
+    state.viewRead = takeViewPage(state.viewRead, doc, { more, quiet });
+  } catch (e) {
+    if (!state.viewRead || state.viewRead.key !== key) return;
+    state.viewRead = { ...state.viewRead, loading: false, error: e.status === 403 ? state.viewRead.error : e.message };
+  }
+  if (!quiet && state.view === "chat") renderStream({ follow: !more });
+}
+
 function render() {
+  syncViewRead();
   renderBanners();
   renderRail();
   renderStrip();
@@ -7245,6 +7452,7 @@ async function loadShow(taskId, { quiet = false } = {}) {
       api(`/api/files/${encodeURIComponent(taskId)}`).catch(() => ({ files: [] }))]);
     state.shows.set(taskId, show);
     state.filesOf.set(taskId, files.files || []);
+    state.viewRead = patchViewRow(state.viewRead, show);  // Cleanup 2, row 1: Land, Undo or Forget on an older card shows at once
   } catch (e) {
     // a card without its details still shows the log row
   } finally {
@@ -7262,7 +7470,9 @@ async function loadShow(taskId, { quiet = false } = {}) {
 }
 
 function taskById(taskId) {
-  return (state.tasks || []).find((t) => t.task_id === taskId) || (state.shows.get(taskId) || null);
+  return (state.tasks || []).find((t) => t.task_id === taskId)
+    || (state.viewRead ? state.viewRead.tasks.find((t) => t.task_id === taskId) : null)
+    || (state.shows.get(taskId) || null);
 }
 
 function fileByPath(taskId, path) {
@@ -7514,6 +7724,7 @@ function setTeam(team) {
 
 function newChat() {
   state.view = "chat";
+  state.chatDraft = "";
   state.skill = null;  // UI A row 1 (A13)
   state.navOpen = false;
   state.chat = newChatName();
@@ -7532,7 +7743,7 @@ function openHistory() {
   state.navOpen = false;
   state.menu = null;
   render();
-  loadHistory();
+  return loadHistory();
 }
 
 function openLogFiles() {
@@ -7909,7 +8120,8 @@ function settingsRow(row, sections) {
   row.without ? h("p", { class: "setup-without", text: `Without it: ${row.without}` }) : null,
   view ? memoryNote(view) : null,
   h("div", { class: "setup-body result" }, sections[row.name] ? renderMarkdown(sections[row.name])
-    : h("p", { class: "panel-note", text: state.setupText == null ? "Loading the steps…" : "No section for it in docs/SETUP.md." })));
+    : h("p", { class: "panel-note", text: state.setupText != null ? "No section for it in docs/SETUP.md."
+      : state.setupError ? `The steps couldn't be read: ${state.setupError}` : "Loading the steps…" })));
   if (row.key === "models") {  // brief 33.3 (decision 12): the defaults read only, the selects and the Fable switch, in the body
     details.insertBefore(modelsRowBody(state.status), details.lastElementChild);
     return details;
@@ -8066,8 +8278,12 @@ function modelsRowBody(status) {
       h("div", { class: "np-hint", text: `Picking a model sets ${row.label} at once. A refusal keeps it as it was.` }), saidOn(id))
     : h("div", { class: "models-row" }, h("div", { class: "models-row-line" }, h("span", { class: "models-row-name", text: row.label }),
       h("span", { class: "models-row-now", text: row.current }), row.yours ? h("span", { class: "models-yours", text: "yours" }) : null,
-      h("button", { class: "btn btn-quiet btn-small", type: "button", dataset: { focusKey: `models-change-${id}` }, title: `Change ${row.label}`,
-        onclick: () => { state.modelsOpen = id; state.modelsSaid = null; renderSetup(); } }, "Change")), saidOn(id)));
+      !row.state || row.state === "choice" ? h("button", { class: "btn btn-quiet btn-small", type: "button", dataset: { focusKey: `models-change-${id}` }, title: `Change ${row.label}`,
+        onclick: () => { state.modelsOpen = id; state.modelsSaid = null; renderSetup(); } }, "Change") : null),
+    (row.unused || []).map((pick) => h("div", { class: "models-unused" }, h("span", { class: "np-hint", text: unusedPickWords(pick) }),
+      h("button", { class: "btn btn-quiet btn-small", type: "button", disabled: busy || state.restarted, dataset: { focusKey: `models-clear-${id}-${pick.agent}` },
+        title: `Clear your earlier pick for ${agentLabel(pick.agent)}`, onclick: () => setModelDefault({ ...row, agent: pick.agent }, "", id) }, "Clear"))),
+    saidOn(id)));
   const skillId = (row) => `models-skill-${row.key}`;
   const roleId = (row) => `models-role-${row.team}-${row.role}-${row.agent}`;
   const stageId = (row) => `models-stage-${row.team}-${row.stage}-${row.agent}`;
@@ -8222,6 +8438,7 @@ async function checkAgain() {
 
 function openChat(name) {
   state.view = "chat";
+  state.chatDraft = "";
   state.skill = null;  // UI A row 1 (A13)
   state.navOpen = false;
   state.chat = name;
@@ -8336,6 +8553,11 @@ async function send() {
   const pick = skillPick(state, state.status);
   if (pick.needed && !pick.chosen) { toast(pick.why); return; }  // brief 24: without Jev, your skill first
   if (!state.quick && !state.project && !state.chat) state.chat = newChatName();
+  const named = projectSlug(state.chatDraft || "");  // Cleanup 2, row 14: a split carries no chat, and a project or Quick send isn't one
+  if (named && !state.quick && !state.project && state.team !== "split" && isAutoChatName(state.chat)) {
+    state.chat = named;
+    state.chatDraft = "";
+  }
   const request = sendRequest({ ...state, text }, state.status);
   state.sending = true;
   try {
@@ -8482,8 +8704,9 @@ async function poll() {
   if (!state.demo) notifyNew();
   if (state.view === "history") await loadHistory({ quiet: true });
   if (state.project) await loadWhatNow();  // brief 33 (decision 13)
+  else if (state.viewRead) await loadViewRead({ quiet: true });  // Cleanup 2, row 1: a chat's own read; a project's is What now?'s
   const onScreen = new Set(streamTasks().map((t) => t.task_id));
-  for (const task of state.tasks) {
+  for (const task of viewTasksKnown(state.viewRead, state.tasks)) {  // an older open card keeps updating
     if (onScreen.has(task.task_id) && isOpenTask(task) && state.shows.has(task.task_id)) await loadShow(task.task_id, { quiet: true });
     else if (onScreen.has(task.task_id) && state.shows.has(task.task_id) && state.shows.get(task.task_id).updated_at !== task.updated_at) {
       await loadShow(task.task_id, { quiet: true });

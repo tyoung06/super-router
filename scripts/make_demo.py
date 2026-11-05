@@ -36,6 +36,8 @@ OUT = ROOT / "demo"
 START = datetime(2026, 10, 19, 9, 0, tzinfo=timezone.utc)
 CONFIG = {"GROK_WEBHOOK_URL": "https://example.invalid/hook", "GROK_WEBHOOK_KEY": "FAKE-WEBHOOK-KEY-00"}
 STATUS_ENV = {}  # the demo's status: Grok Bot has no webhook set ("not configured"); Jev has no key ("not set up")
+# `--demo all-up`'s: the names are what status reads, and these invented words are never printed (a test holds that)
+ALL_UP_ENV = {"JEV_API_KEY": "invented-key", "GROK_WEBHOOK_URL": "invented-hook", "GROK_WEBHOOK_KEY": "invented-key"}
 # Brief 30 (decision 20): the demo's router notes, placeholder lines in each section, kept with every demo task
 DEMO_NOTES = ("## All agents\n<a line every agent follows, such as how you like answers>\n\n"
               "## Claude\n<a line for Claude alone>\n\n## ChatGPT\n<a line for ChatGPT alone, such as how it checks>\n\n"
@@ -834,10 +836,13 @@ def _run_step_row(w, minute, run_row, plan_row, k, result, *, changed, calls=(("
                 call_id = task_id
             else:
                 call_id = f"{task_id}-{kind[0]}{i}"
-            verdict = ("PASS" if state == "done" else "FIX") if kind in ("check", "recheck") else None
+            fix_after = i + 1 < len(calls) and calls[i + 1][0] == "fix"  # a check with a fix after it found something
+            verdict = ("PASS" if state == "done" and not (kind == "check" and fix_after) else "FIX") if kind in ("check", "recheck") else None
             text = (verdict + ("\n1. [must] test_beans_and_peas doesn't cover peas." if verdict == "FIX" else "")) if verdict else result
             if kind == "stage":  # a redteam step's attack lists and its revise, so the card's board has rows
-                text = {"attack": TRELLIS_ATTACKS_A, "attack2": TRELLIS_ATTACKS_B, "revise": result + TRELLIS_ANSWERED}.get(role[0] if role else "", result)
+                # both attack stages have the role `attack`, as the router writes them (relay.attack_lists); the agent says whose list
+                attacks = TRELLIS_ATTACKS_B if agent == "cursor" else TRELLIS_ATTACKS_A
+                text = {"attack": attacks, "revise": result + TRELLIS_ANSWERED}.get(role[0] if role else "", result)
             ran = list(tests)[sum(1 for kind_, *_ in list(calls)[:i] if kind_ in ("do", "fix"))] if kind in ("do", "fix") and tests else None
             log.add_call(w.conn, call_id, task_id, kind, agent, status="done", text=text, verdict=verdict,
                          stage=stage if kind == "stage" else None, role=role[0] if role else None,
@@ -856,7 +861,7 @@ def _run_step_row(w, minute, run_row, plan_row, k, result, *, changed, calls=(("
     return log.get_task(w.conn, task_id)
 
 
-REDTEAM_ATTEMPT = (("stage", "claude", "build"), ("stage", "chatgpt", "attack"), ("stage", "cursor", "attack2"),
+REDTEAM_ATTEMPT = (("stage", "claude", "build"), ("stage", "chatgpt", "attack"), ("stage", "cursor", "attack"),
                    ("stage", "claude", "revise"), ("check", "chatgpt"), ("fix", "claude"), ("recheck", "chatgpt"))
 
 
@@ -897,17 +902,17 @@ def _autos(w):
                         commit="2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d")
     _step_row(w, 147.35, trellis, 1, STEP_DONE.format(files="trellis.py and test_trellis.py added", status="test_help passes",
                                                       next="The bed's plan."))
-    run, record = _run_row(w, 147.4, trellis, from_step=2, estimate={"calls": 7, "max_calls": 11, "jev_labels": 1},
+    run, record = _run_row(w, 147.4, trellis, from_step=2, estimate={"calls": 7, "max_calls": 9, "jev_labels": 1},
                            changed=[{"path": "trellis.py", "status": "changed", "plus": 31, "minus": 2},
                                     {"path": "test_trellis.py", "status": "changed", "plus": 14, "minus": 0}])
     first = _run_step_row(w, 147.45, run, trellis, 2, STEP_DONE.format(files="trellis.py and test_trellis.py changed",
                                                                         status="test_beans_and_peas fails on peas", next="Fix the spacing."),
-                          changed=[{"path": "trellis.py", "status": "changed", "plus": 20, "minus": 2}], calls=REDTEAM_ATTEMPT + (("fix", "claude"), ("recheck", "chatgpt")),
+                          changed=[{"path": "trellis.py", "status": "changed", "plus": 20, "minus": 2}], calls=REDTEAM_ATTEMPT,
                           state="failed", attempt=1)
     second = _run_step_row(w, 147.5, run, trellis, 2, STEP_DONE.format(files="trellis.py and test_trellis.py changed",
                                                                          status="test_beans_and_peas passes", next="Write the README."),
                            changed=[{"path": "trellis.py", "status": "changed", "plus": 31, "minus": 2}, {"path": "test_trellis.py", "status": "changed", "plus": 14, "minus": 0}],
-                           calls=REDTEAM_ATTEMPT + (("fix", "claude"),), state="done", attempt=2)
+                           calls=REDTEAM_ATTEMPT, state="done", attempt=2)
     auto.step_entry(record, 2).update(state="done", attempt=2, task_id=second["task_id"], calls=len(log.calls_for(w.conn, second["task_id"])), outcome="passed")
     used = auto.used_calls(w.conn, run["task_id"])
     record["used"] = used
@@ -1570,6 +1575,33 @@ def build(out_dir, *, tmp_root=None):
             time.tzset()
 
 
+def _all_up_status(conn, now, tmp, rules):
+    """Cleanup 2, row 13: `sr serve --demo all-up`'s status, for the README's picture: the same tasks through the same
+    status.build, with every agent online, no failed probe, Jev and Grok Bot set up and memory online. Only names reach `env`, and
+    status prints no value. The inbox repo is invented, and the demo's settings go back as they were."""
+    versions = {"claude": "2.1.306", "chatgpt": "0.162.1", "cursor": "2026.10.19-6bbf2c4"}
+    probe = tmp / "probe_state_all_up.json"
+    probe.write_text(json.dumps({
+        "claude_search": {"version": versions["claude"], "passed_at": "2026-10-19T08:00:00+00:00"},
+        "claude_web_files": {"version": versions["claude"], "passed_at": "2026-10-19T08:00:00+00:00"},
+        "codex_sandbox": {"version": versions["chatgpt"], "passed_at": "2026-10-19T08:00:00+00:00"},
+        "cursor_sandbox": {"version": versions["cursor"], "passed_at": "2026-10-19T08:00:00+00:00",
+                           "canaries": ["read", "list", "rules"], "mcp_tools": []}}))
+    online = {name: {"online": True, "reason": None, "checked_at": now.isoformat()} for name in ("claude", "chatgpt", "grok", "cursor")}
+    kept = settings.LOCAL_PATH.read_text(encoding="utf-8") if settings.LOCAL_PATH.exists() else None
+    settings.LOCAL_PATH.write_text(json.dumps({**json.loads(kept or "{}"), settings.INBOX_KEY: "garden-club/inbox"}), encoding="utf-8")
+    try:
+        return status.build(conn, roster=ROSTER, loaded=LOADED, env=ALL_UP_ENV, parser=cli._parser(ROSTER), online=online, versions=versions,
+                            state_path=probe, memory_client=FakeHindsight(online=True).client, drop_folder="~/Desktop/Router Drop",
+                            rules_path=rules, now=now, log_version=log.VERSION, memory_starting=False, memory_installed=True,
+                            send_paths=tuple(cli.SENDERS), contracts=relay.CONTRACTS, roles=relay.ROLES, verdicts=relay.VERDICTS)
+    finally:
+        if kept is None:
+            settings.LOCAL_PATH.unlink()
+        else:
+            settings.LOCAL_PATH.write_text(kept, encoding="utf-8")
+
+
 def _documents(w, tmp, out_dir):
     staging = Path(str(out_dir) + ".new")
     if staging.exists():
@@ -1600,13 +1632,15 @@ def _documents(w, tmp, out_dir):
                           "code": "signed_out"},  # brief 24: the check's code, as router/online.py gives it
               "cursor": {"online": True, "reason": None, "checked_at": stamp}}
     rules = tmp / "RULES.md"
-    rules.write_text("# The rules\n\nVersion 2.32 · the demo\n")
+    # typed, not read from SUPER-ROUTER.md: reading it would fail the drift test at every rules bump (Cleanup 2, F10)
+    rules.write_text("# The rules\n\nVersion 2.55 · the demo\n")
     doc = status.build(conn, roster=ROSTER, loaded=LOADED, env=STATUS_ENV, parser=cli._parser(ROSTER), online=online,
                        versions={"claude": "2.1.306", "chatgpt": "0.162.1", "cursor": "2026.10.19-6bbf2c4"},
                        state_path=probe, memory_client=FakeHindsight(online=False).client, drop_folder="~/Desktop/Router Drop",
                        rules_path=rules, now=now, log_version=log.VERSION, memory_starting=True, memory_installed=True,
                        send_paths=tuple(cli.SENDERS), contracts=relay.CONTRACTS, roles=relay.ROLES, verdicts=relay.VERDICTS)
     _write(staging / "status.json", doc, tmp)
+    _write(staging / cli.page.ALL_UP_STATUS, _all_up_status(conn, now, tmp, rules), tmp)
     _write(staging / "projects.json", {"api_version": jsonview.API_VERSION,
                                        # brief 33 (decision 13): each project's What now?, from the demo's log
                                        "projects": cli._projects_json(projects.read_registry(), {}, conn=conn,
