@@ -162,7 +162,7 @@ JEV_API_KEY=…
 
 **What it costs.** Nothing: Hindsight runs locally, with no model call and no key.
 
-**Without it.** Chat and project tasks run without what earlier tasks delivered, and a task that only recalls earlier work comes back with "nothing to recall from".
+**Without it.** Chat and project tasks get only their three newest earlier tasks, read from the router's log, with no search, and a task that only recalls earlier work comes back with "nothing to recall from".
 
 **Steps.** Install it once, into its own environment:
 
@@ -170,11 +170,11 @@ JEV_API_KEY=…
 python3 -m venv ~/.hindsight/venv && ~/.hindsight/venv/bin/pip install "hindsight-api-slim[local-onnx,embedded-db]"
 ```
 
-Its first start downloads one embedding model (about 470 MB). After that the router starts memory itself when a chat or project task needs it, and saves anything delivered while the store was down. Each task gets the chat's or project's three newest delivered tasks first, then up to five earlier ones the search finds; the search uses the task's text and the one before it.
+Its first start downloads one embedding model (about 470 MB). After that the router starts memory itself when a chat or project task needs it, and saves anything delivered while the store was down. Each task gets the chat's or project's three newest delivered tasks first, then up to five earlier ones the search finds: the three it ranks best and the two newest of the rest, each up to 8,000 characters. The search uses the task's text and the one before it. If the store is down when a task runs, the three newest still go, and a line says only those went.
 
 **On and off.** The switch in Settings → Memory turns memory on or off for this Mac. It runs `sr memory on` or `sr memory off`, which Terminal can run too. Off: tasks run without memory, nothing they deliver is saved (not even after you turn it back on), and the store is stopped; a project's `HANDOFF.md` still goes with its tasks. On: the store starts (about 35 seconds) and saves what it missed while it was down.
 
-**Ready on the page.** Memory's words read "online" (running), "ready" (installed; it starts itself when a task needs it), "starting" for up to a minute, or "off" when you switched it off. "Not installed" means the step above is still to do.
+**Ready on the page.** Memory's words read "online" (running), "ready" (installed; it starts itself when a task needs it), "starting" for up to a minute, or "off" when you switched it off. "Not installed" means the step above is still to do. A `memory` setting other than `auto` or `off` reads as off and says so, and a `memory_url` that isn't on this Mac reads offline and says so: the router never sends memory anywhere else.
 
 **The control page.** Settings → Memory has a plain link to Hindsight's own control page on 127.0.0.1:9999, in a new tab, with the command that starts it to copy. It's optional, and the router never starts it.
 

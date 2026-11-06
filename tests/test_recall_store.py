@@ -157,8 +157,12 @@ def test_a_writing_task_still_runs_without_the_store_as_decision_12_says(conn):
     worker = Scripted("two lines")
     code, out, row, _ = _route(conn, "write two lines about trays", chat="tray", jev=WRITING, worker=worker, chatgpt=Chat("PASS"),
                                hindsight=_offline().client)
-    assert code == 0 and row["status"] == "done" and [less_next(p) for p in worker.prompts] == [f"write two lines about trays\n\n{checking.DELIVERABLE_LINE}"]
-    assert out.count("memory: unavailable; this task runs without its memory block") == 1
+    # the memory brief, step 2: the newest delivered task still goes, from the log
+    one = log.get_task(conn, "sr-1")
+    assert code == 0 and row["status"] == "done" and worker.prompts == [
+        f"write two lines about trays\n\n{checking.DELIVERABLE_LINE}\n\n{checking.NEXT_LINE}\n\n{context.MEMORY_USE_LINE}"
+        f"\n\n{_block([_entry(one)])}"]
+    assert out.count("memory: the store is down; this task gets its 1 newest tasks from the log, with no search") == 1
 
 
 def test_an_untagged_override_recall_task_runs_as_the_overrides_section_says(conn):

@@ -117,7 +117,7 @@ def test_one_start_per_command_and_a_failed_start_leaves_the_recall_to_fail_as_t
         with pytest.raises(memory.Unavailable):
             store.recall("q", "chat:trays", max_tokens=100)
     assert starter.calls == [60]
-    assert "memory: could not start the store (no answer within 60 s); this task runs without its memory block" in out
+    assert "memory: could not start the store (no answer within 60 s); tasks get only their newest tasks from the log until it's up" in out
 
 
 def test_memory_off_never_starts_the_store():

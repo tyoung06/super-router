@@ -37,7 +37,7 @@ SERVER_ENV = {
 }
 INSTALL = ('python3 -m venv ~/.hindsight/venv && ~/.hindsight/venv/bin/pip install '
            '"hindsight-api-slim[local-onnx,embedded-db]"')
-LOOPBACK = ("127.0.0.1", "localhost")
+LOOPBACK = memory.LOOPBACK  # the memory brief (fix 2): one copy, in memory.py
 POLL_SECONDS = 2
 START_SECONDS = 180
 REPORT_EVERY = 20
@@ -66,7 +66,7 @@ def host_port(url):
     """(host, port) from `memory_url`; refused off the loopback address (rules: 127.0.0.1 and nowhere else)."""
     parsed = urlparse(url)
     host, port = parsed.hostname, parsed.port or 8888
-    if host not in LOOPBACK:
+    if not memory.on_this_mac(url):
         raise ServerError(f"memory_url must be on the loopback address (127.0.0.1), not {safety.one_line(str(host))}")
     return host, port
 
@@ -127,6 +127,8 @@ def status_lines(client, home):
     data = data_folder(home)
     size = (f"data: {folder_size(data)} {shown(data, home)}" if data is not None
             else f"data: none yet (~/{DATA_FOLDERS[0]} appears on the first start)")
+    if not memory.on_this_mac(client.url):  # the memory brief (fix 2): no request goes out; the reason is said
+        return [f"memory: offline ({client.url}): {memory.OFF_HOST}", size], False
     if not client.online():
         hint = "" if settings.memory_mode() == "off" else "; sr memory start starts it"  # refused while off (brief 27)
         return [f"memory: offline ({client.url}){hint}", size], False

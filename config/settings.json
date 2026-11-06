@@ -13,8 +13,9 @@
   "memory_bank": "super-router",
   "memory_newest": 3,
   "memory_matches": 5,
-  "memory_max_chars": 2000,
+  "memory_max_chars": 8000,
   "memory_query_chars": 1500,
+  "memory_fetch_tokens": 2000,
   "grok_timeout_minutes": 5,
   "memory": "auto",
   "serve_port": 8765

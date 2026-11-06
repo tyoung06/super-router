@@ -144,6 +144,8 @@ export function memoryView(memory, { turningOn = false } = {}) {
   // problem. While the page's own run to on is in flight the light reads starting from that run (the owner's choice 7).
   if (turningOn) return MEMORY_STARTING;
   if (!memory) return { tone: "muted", state: "unknown", detail: "", problem: false, off: false };
+  // the memory brief (fixes 1 and 2): a bad setting reads off, a memory_url off this Mac offline; the router's words say why
+  if (memory.problem) return { tone: "warn", state: memory.setting === "off" ? "off" : "offline", detail: memory.problem, problem: true, off: memory.setting === "off" };
   if (memory.setting === "off") return { tone: "muted", state: "off", detail: "you turned it off · tasks run without it and nothing is saved", problem: false, off: true };
   if (memory.starting) return MEMORY_STARTING;
   if (memory.online) {
@@ -2210,6 +2212,7 @@ export function memoryCallLines(calls) {
     const m = c.memory || {};
     const who = `${c.kind === "stage" || c.kind === "reask" ? `stage ${c.stage}${c.kind === "reask" ? " re-ask" : ""}` : roleWords(c.kind)} · ${agentLabel(c.agent)}`;
     let what = m.state === "off" ? "memory was off; the call ran without it"
+      : m.state === "unavailable" && m.sent ? `the store was down; the newest ${m.sent} went from the log`  // the memory brief, step 2
       : m.state === "unavailable" ? "the store was unavailable; the call ran without it"
       : m.state === "left_out" ? `left out: it could not fit Grok's prompt limit${m.with != null && m.limit != null ? ` (${m.with} > ${m.limit})` : ""}`
         : m.state === "sent" ? `sent ${m.sent} of ${m.found}` : "not kept";

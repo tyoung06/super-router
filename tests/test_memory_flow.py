@@ -1,5 +1,6 @@
 """Brief 29.1 (decisions 25 and 26, D18 fixes 3 and 4): the memory block starts with the tag's newest three delivered tasks,
-newest first, read from the log and never ranked; then up to five search matches not among them, newest first: at most
+newest first, read from the log and never ranked; then up to five search matches not among them (the memory brief, step 5:
+the three Hindsight ranks best and the two newest of the rest), shown newest first: at most
 eight memories, each at most 2,000 characters (`memory_newest` 3 and `memory_matches` 5 in config/settings.json, in place
 of `memory_max_items`). A Grok call trims the matches first, oldest first, then the newest tasks from the oldest, and
 leaves the block out only when the newest task alone can't fit. The recall query is the task's text, a line break and
@@ -28,15 +29,17 @@ def _results(*ns):
 def test_the_settings_are_newest_three_and_five_matches():
     doc = json.loads((settings.SETTINGS_PATH).read_text()) if settings.SETTINGS_PATH.exists() else {}
     assert (doc.get("memory_newest"), doc.get("memory_matches")) == (3, 5) and "memory_max_items" not in doc
-    assert memory.caps() == {"newest": 3, "matches": 5, "max_chars": 2000, "query_chars": 1500}
+    assert memory.caps() == {"newest": 3, "matches": 5, "max_chars": 8000, "query_chars": 1500,
+                             "fetch_tokens": 2000}  # the memory brief (steps 4 and 5)
 
 
-def test_the_block_is_the_newest_three_then_up_to_five_matches_never_ranked(conn):
+def test_the_block_is_the_newest_three_then_the_best_three_and_the_two_newest_matches(conn):
     rows = _rows(conn, 10)  # #1 .. #10, #10 the newest
     running = _queued(conn)
     fake = FakeHindsight(results=_results(1, 9, 2, 3, 4, 5, 6))  # #9 is among the newest three: deduped
     prompt, _, mem = _attach(conn, running, fake)
-    want = [_entry(rows[9]), _entry(rows[8]), _entry(rows[7])] + [_entry(rows[n - 1]) for n in (6, 5, 4, 3, 2)]
+    # the memory brief, step 5: the best three as ranked (#1, #2, #3), then the two newest of the rest (#6, #5); #4 out
+    want = [_entry(rows[9]), _entry(rows[8]), _entry(rows[7])] + [_entry(rows[n - 1]) for n in (6, 5, 3, 2, 1)]
     assert mem["text"] == memory.render(TAG, want, 2000)
     assert mem["sent"] == 8 and mem["found"] == 9  # the newest three and the six matches not among them, before the cap
 

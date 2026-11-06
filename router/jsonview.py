@@ -340,8 +340,10 @@ def _call_memory(call):
         return found
     if record.get("off"):  # brief 27: memory was off for this call
         found["state"] = "off"
-    elif record.get("unavailable"):
+    elif record.get("unavailable"):  # the memory brief, step 2: what a store-down block sent from the log
         found["state"] = "unavailable"
+        if record.get("sent"):
+            found.update(sent=record["sent"], found=record.get("found", record["sent"]))
     elif record.get("left_out"):
         found.update(state="left_out", found=record.get("found"), **{"with": record.get("with"), "limit": record.get("limit")})
     else:

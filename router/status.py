@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from router import (auto, availability, claude_worker, cursor_worker, filemode, files_probe, gitops, ideas, jev, jsonview, log,
-                    models, notes, plan, presets, probes, projects, projrun, projsecrets, projtest, routing, runs, safety,
+                    memory, models, notes, plan, presets, probes, projects, projrun, projsecrets, projtest, routing, runs, safety,
                     search, settings, teams, testrun, spec)
 
 AGENTS = ("claude", "chatgpt", "grok", "cursor")  # rules: Claude, ChatGPT, Grok Bot and Cursor; Muse is deferred
@@ -184,9 +184,14 @@ def memory_view(client, starting=False, installed=False):
              "installed": bool(installed),
              # brief 29.1 (decision 25): the block's newest tasks and its search matches, from config/settings.json
              "newest": settings.memory_setting("memory_newest")[0],
-             "matches": settings.memory_setting("memory_matches")[0]}
+             "matches": settings.memory_setting("memory_matches")[0],
+             # the memory brief (fixes 1 and 2): a bad setting, or a memory_url off this Mac, said; None when fine
+             "problem": settings.memory_problem()}
     if client is None:
         return found
+    url = getattr(client, "url", None)  # a stand-in client may carry none
+    if found["problem"] is None and url is not None and not memory.on_this_mac(url):
+        found["problem"] = memory.OFF_HOST
     try:
         found["online"] = bool(client.online())
         if found["online"]:
@@ -415,6 +420,7 @@ def lines(doc):
     out.append(f"Jev: {j['tokens_month']:,} of {j['cap']:,} input tokens this month" + (" (over the cap)" if j["over_cap"] else ""))
     m = doc["memory"]
     out.append(f"Memory: {m['setting']}, {'online' if m['online'] else 'offline'}"
-               + (f", {m['documents']} documents" if m["documents"] is not None else ""))
+               + (f", {m['documents']} documents" if m["documents"] is not None else "")
+               + (f" ({m['problem']})" if m.get("problem") else ""))
     out.append(f"Rules {doc['version'] or '?'}, log version {doc['log_version']}")
     return out

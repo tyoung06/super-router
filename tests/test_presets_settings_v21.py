@@ -96,7 +96,8 @@ def test_the_readers_and_their_defaults(files):
 @pytest.mark.parametrize("key, bad, reader, default", [
     ("grok_timeout_minutes", 0, "grok_timeout_minutes", None), ("grok_timeout_minutes", "5", "grok_timeout_minutes", None),
     ("grok_timeout_minutes", True, "grok_timeout_minutes", None), ("grok_timeout_minutes", 2.5, "grok_timeout_minutes", None),
-    ("memory", "sometimes", "memory_mode", "auto"), ("serve_port", 0, "serve_port", 8765),
+    # the memory brief (fix 1, rules 2.56): a bad memory value reads as off, never auto
+    ("memory", "sometimes", "memory_mode", "off"), ("serve_port", 0, "serve_port", 8765),
     ("serve_port", 70000, "serve_port", 8765), ("serve_port", "8765", "serve_port", 8765),
     ("report_path", "", "report_path", None), ("report_path", 5, "report_path", None)])
 def test_a_bad_value_reads_as_the_default(files, key, bad, reader, default):

@@ -4614,7 +4614,8 @@
   "documents": null,
   "installed": true,
   "newest": 3,
-  "matches": 5
+  "matches": 5,
+  "problem": null
  },
  "projects": [
   {

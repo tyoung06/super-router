@@ -85,7 +85,8 @@ STATUS = {
     "jev": {"configured": BOOL, "tokens_month": INT, "cap": INT, "over_cap": BOOL, "floor": (NUM, NULL), "tagged_floor": (NUM, NULL),  # brief 23; 29.1 (decision 24)
             "available": BOOL, "why": (STR, NULL)},  # brief 24 (decision 14)
     "memory": {"setting": STR, "online": BOOL, "starting": BOOL, "documents": (INT, NULL), "installed": BOOL,  # brief 27
-               "newest": INT, "matches": INT},  # brief 29.1 (decision 25)
+               "newest": INT, "matches": INT,  # brief 29.1 (decision 25)
+               "problem": (STR, NULL)},  # the memory brief (fixes 1 and 2): a bad setting or a memory_url off this Mac
     "projects": LIST, "chats": LIST, "drop_folder": (STR, NULL), "serve_port": INT,
     "projects_root": STR,  # brief 26 (decision 8): as written, ~/Projects when absent
     "git": {"installed": BOOL, "version": (STR, NULL)},  # brief 28 (decision 19)

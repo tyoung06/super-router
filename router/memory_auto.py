@@ -3,9 +3,10 @@
 (`memory_server.start`, waiting up to 60 s for `/health`), one start at a time by the `memory` lock beside the log; the
 task shows `waiting_on: memory` meanwhile and `sr status` shows `memory.starting`. After a start the backfill stores
 every delivered tagged task the bank is missing (`memory.backfill`), then the recall goes on. A start is tried once per
-command; a failed one leaves the recall to fail as it always did (the task runs without its block; a tagged `recall`
-comes back `memory_down`). `memory: off` never starts it. A retain at delivery never starts it: the next start's backfill
-fills in what it missed. Nothing here calls a model."""
+command; a failed one leaves the recall to fail (the task gets its newest tasks from the log alone, the memory
+brief's step 2; a tagged `recall` comes back `memory_down`). `memory: off` never starts it. A retain at delivery never
+starts it: the next start's backfill fills in what it missed. Nothing here calls a model."""
+import re
 import subprocess
 import time
 
@@ -20,9 +21,23 @@ def starter(*, environ, home, popen=subprocess.Popen, sleep=time.sleep, clock=ti
         try:
             return memory_server.start(client, environ=environ, home=home, popen=popen, sleep=sleep, clock=clock,
                                        out=out, limit=limit)
-        except memory_server.ServerError:
+        except memory_server.ServerError as e:  # the memory brief (fix 3): a refused URL says so, not "not installed"
+            out(str(e))
             return 2
     return start
+
+
+def why_not_started(code, said):
+    """The memory brief (fix 3, F5): the cause of a failed start from the start's own last line (a refused URL, not
+    installed, exited before answering, or no answer in time), its first clause without the `memory:` or `Refused:`
+    lead, so no Terminal command reaches the task's line (brief 23, decision 5); today's words when it said nothing."""
+    if said:
+        clause = re.split(r"; |\. ", said[-1].strip(), maxsplit=1)[0].rstrip(".")
+        for lead in ("memory: ", "Refused: "):
+            clause = clause[len(lead):] if clause.startswith(lead) else clause
+        if clause:
+            return clause
+    return "Hindsight is not installed" if code == 2 else f"no answer within {START_SECONDS} s"
 
 
 class AutoStore:
@@ -55,8 +70,9 @@ class AutoStore:
             said = []
             code = self._start(self._client, limit=START_SECONDS, out=said.append)
             if code != 0:
-                why = "Hindsight is not installed" if code == 2 else f"no answer within {START_SECONDS} s"
-                self._out(f"memory: could not start the store ({why}); this task runs without its memory block")
+                why = why_not_started(code, said)
+                self._out(f"memory: could not start the store ({why}); tasks get only their newest tasks from the log "
+                          "until it's up")
                 return
             self._out("memory: started")
             memory.backfill(self._conn, self._client, self._secrets, self._out)

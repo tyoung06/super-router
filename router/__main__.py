@@ -261,7 +261,11 @@ def _say_memory_unavailable(conn, task_id, record, out):
     if not record or not record.get("unavailable"):
         return
     earlier = [c for c in log.calls_for(conn, task_id) if (log.call_memory_of(c) or {}).get("unavailable")]
-    if not earlier:
+    if earlier:
+        return
+    if record.get("sent"):  # the memory brief, step 2: the newest tasks went from the log
+        out(f"memory: the store is down; this task gets its {record['sent']} newest tasks from the log, with no search")
+    else:
         out("memory: unavailable; this task runs without its memory block")  # brief 23 (decision 5): never "sr memory"
 
 
@@ -6047,6 +6051,9 @@ def _memory_lines(conn, row, secrets, tag, memory):
         lines.append("Memory block: none yet (the build call has not been made).")
     elif record is None:
         lines.append("Memory block: not kept (a call from before log version 12, or made with no store).")
+    elif record.get("unavailable") and record.get("sent"):  # the memory brief, step 2
+        lines += [f"Memory block: the store was down at {call['call_id']}; it sent the newest {record['sent']} from the log:",
+                  safety.for_terminal(record.get("text", ""), secrets)]
     elif record.get("unavailable"):
         lines.append(f"Memory block: the store was unavailable at {call['call_id']}; the call ran without it.")
     elif record.get("left_out"):
@@ -6102,7 +6109,7 @@ def _call_memory_lines(calls):
         elif record.get("off"):  # brief 27: memory was off for this call
             state = "off"
         elif record.get("unavailable"):
-            state = "unavailable"
+            state = f"unavailable, sent {record['sent']} from the log" if record.get("sent") else "unavailable"
         elif record.get("left_out"):
             state = "left out"
             if "with" in record and "limit" in record:
@@ -8146,7 +8153,9 @@ def cmd_memory(words, *, request, environ, home, popen, sleep, clock, kill, db_p
                               db_path=db_path, secrets=secrets, out=out)
     if verb == "rebuild":
         return _memory_rebuild(client, db_path=db_path, secrets=secrets, ask=ask, out=out)
-    if verb == "status" and settings.memory_mode() == "off":  # brief 27: status says so first, then the store's lines
+    if verb == "status" and settings.memory_problem():  # the memory brief (fix 1): the bad setting first, never its value
+        out(f"memory: {settings.memory_problem()}; sr memory on sets it to auto")
+    elif verb == "status" and settings.memory_mode() == "off":  # brief 27: status says so first, then the store's lines
         out("memory: off (sr memory on turns it on)")
     try:
         if verb == "start":  # brief 22 (decision 8): one start at a time by the lock; then what the bank is missing

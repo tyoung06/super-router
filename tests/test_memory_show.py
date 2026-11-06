@@ -59,7 +59,10 @@ def test_no_memory_line_without_a_tag_without_a_block_or_with_the_store_down(con
     _done(conn, "sr-1", "first task", "first result")
     chat = Chat("PASS")
     _route(conn, chat="tray", worker=Scripted("two lines"), chatgpt=chat, hindsight=FakeHindsight(online=False).client)
-    assert checking.CHECK_MEMORY_LINE not in chat.prompts[0]
+    assert checking.CHECK_MEMORY_LINE in chat.prompts[0]  # the memory brief, step 2: the newest went with the store down
+    chat = Chat("PASS")
+    _route(conn, chat="pots", worker=Scripted("two lines"), chatgpt=chat, hindsight=FakeHindsight(online=False).client)
+    assert checking.CHECK_MEMORY_LINE not in chat.prompts[0]  # store down and nothing delivered under pots: no block
 
 
 def test_the_memory_line_comes_after_the_project_line_on_a_project_task(conn, project):
@@ -144,7 +147,8 @@ def test_show_memory_on_an_untagged_task_and_on_an_unavailable_store(conn):
     code, out, row, _ = _route(conn, chat="tray", worker=Scripted("two lines"), chatgpt=Chat("PASS"),
                                hindsight=FakeHindsight(online=False).client)
     code, shown = _show(conn, str(row["n"]), memory_flag=True)
-    assert f"Memory block: the store was unavailable at {row['task_id']}; the call ran without it." in shown
+    # the memory brief, step 2: the newest delivered task went from the log
+    assert f"Memory block: the store was down at {row['task_id']}; it sent the newest 1 from the log:" in shown
     assert "memory: skipped: unavailable (" in shown
 
 

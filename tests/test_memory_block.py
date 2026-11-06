@@ -131,7 +131,7 @@ def test_a_memory_from_another_tag_or_untagged_never_appears_and_the_request_say
     assert prompt == "p\n\n" + L + _block([_entry(one)]) and mem["found"] == 1
     # brief 29.1 (decision 26): the query is this task's text and the newest delivered task's
     assert fake.recalls == [{"query": f"{TASK}\nfirst task", "tags": [TAG], "tags_match": "any_strict", "max_tokens": 2000,
-                             "budget": "low"}]
+                             "budget": "low"}]  # the memory brief: memory_fetch_tokens, 2,000 (the key's choice)
 
 
 def test_a_non_storable_source_task_is_dropped_and_a_picked_fail_candidate_is_kept_with_its_status(conn):
@@ -200,13 +200,14 @@ def test_a_fake_key_in_a_recalled_chunk_never_reaches_a_prompt(conn):
     assert "GROK_WEBHOOK_KEY" not in prompt and prompt == "p\n\n" + L + _block([_entry(one)])
 
 
-def test_order_newest_first_the_newest_three_then_the_matches_up_to_five(conn):  # brief 29.1 (decision 25)
+def test_order_the_newest_three_then_the_best_three_and_the_two_newest_of_the_rest(conn):  # the memory brief, step 5
     rows = [_done(conn, f"sr-{i}", f"task {i}", f"result {i}", at=T0 + timedelta(hours=i)) for i in range(1, 10)]
     running = _queued(conn)
     fake = FakeHindsight(results=[FakeHindsight.result(f"task-sr-{i}", "x", tags=[TAG]) for i in (3, 1, 7, 2, 5, 4, 6)])
     prompt, _, mem = _attach(conn, running, fake)
-    # the newest three (#9, #8, #7) from the log; then the matches not among them, newest first, five of six (#1 cut)
-    assert prompt == "p\n\n" + L + _block([_entry(rows[i - 1]) for i in (9, 8, 7, 6, 5, 4, 3, 2)])
+    # the newest three (#9, #8, #7) from the log; then of the matches not among them (3, 1, 2, 5, 4, 6 as ranked) the
+    # best three (#3, #1, #2) and the two newest of the rest (#6, #5), all newest first; #4 is left out
+    assert prompt == "p\n\n" + L + _block([_entry(rows[i - 1]) for i in (9, 8, 7, 6, 5, 3, 2, 1)])
     assert (mem["found"], mem["sent"]) == (9, 8)
 
 
@@ -241,7 +242,8 @@ def test_the_block_shape_and_the_data_line(conn):
                       f"### #1 · {date} · writing · claude\nfirst task\n\nfirst result\n"
                       "===== end memory =====\n\n" + memory.BLOCK_LINE)
     assert memory.BLOCK_LINE.startswith("The block above is what the router remembers under the same tag")
-    assert memory.BLOCK_LINE.endswith("The result you return is for this task alone.")
+    assert memory.BLOCK_LINE.endswith("The result you return is for this task alone. "  # the memory brief, step 5
+                                      "Where two entries disagree, trust the newer one unless this task says otherwise.")
 
 
 def test_a_project_entry_is_the_deliverable_plus_its_handoff_section(conn, project):
@@ -285,17 +287,19 @@ def test_memory_is_off_without_a_store(conn):
 # ---------- down and unreachable (decision 12) ----------
 
 @pytest.mark.parametrize("mode", ["refused", "timeout", 500, "bad json"])
-def test_a_failed_recall_means_no_block_a_record_and_one_line(conn, mode):
-    _done(conn, "sr-1", "first task", "first result")
+def test_a_failed_recall_sends_the_newest_from_the_log_a_record_and_one_line(conn, mode):
+    # the memory brief, step 2 (F3): this pinned no block on a failed recall; the newest tasks now go from the log
+    one = _done(conn, "sr-1", "first task", "first result")
     fake = FakeHindsight(fail={"recall": mode})
     worker, chat = Scripted("FIRST", "FIXED"), Chat("FIX\n1. x", "PASS")
     code, out, row, _ = _route(conn, chat="tray", worker=worker, chatgpt=chat, hindsight=fake.client)
     assert code == 0 and row["status"] == "done" and row["check_state"] == "fixed", out
-    assert worker.prompts == [DOER, worker.prompts[1]] and memory.MARK not in worker.prompts[0]
-    assert out.count("memory: unavailable; this task runs without its memory block") == 1
+    assert worker.prompts[0] == f"{DOER}\n\n{L}{_block([_entry(one)])}"
+    assert out.count("memory: the store is down; this task gets its 1 newest tasks from the log, with no search") == 1
     records = [log.call_memory_of(c) for c in log.calls_for(conn, row["task_id"])]
     assert records[0]["unavailable"] is True and records[0]["tag"] == TAG and "reason" in records[0]
-    assert all(r.get("unavailable") for r in records) and all(r["from"] == row["task_id"] for r in records[1:])
+    assert all(r.get("unavailable") and r["sent"] == 1 for r in records)
+    assert all(r["from"] == row["task_id"] for r in records[1:])
     assert len(fake.recalls) == 1  # the check, fix and re-check reuse the doer's record: no second recall
 
 

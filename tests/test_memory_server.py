@@ -379,7 +379,8 @@ def test_memory_settings_defaults_and_file(monkeypatch, tmp_path):
     assert settings.memory_setting("memory_bank") == ("super-router", "default")
     assert settings.memory_setting("memory_newest") == (3, "default")  # brief 29.1 (decision 25)
     assert settings.memory_setting("memory_matches") == (5, "default")
-    assert settings.memory_setting("memory_max_chars") == (2000, "default")
+    assert settings.memory_setting("memory_max_chars") == (8000, "default")  # the memory brief, step 6
+    assert settings.memory_setting("memory_fetch_tokens") == (2000, "default")  # the memory brief, steps 4 and 5
     assert settings.memory_setting("memory_query_chars") == (1500, "default")
     path = tmp_path / "settings.json"
     path.write_text(json.dumps({"memory_url": "http://127.0.0.1:8888", "memory_bank": "b", "memory_newest": 2,
@@ -387,7 +388,7 @@ def test_memory_settings_defaults_and_file(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "SETTINGS_PATH", path)
     assert settings.memory_setting("memory_newest") == (2, "config/settings.json")
     assert settings.memory_setting("memory_max_chars") == (
-        2000, "default; memory_max_chars in config/settings.json is not a positive whole number")
+        8000, "default; memory_max_chars in config/settings.json is not a positive whole number")
     assert settings.memory_setting("memory_query_chars")[0] == 1500
     assert settings.memory_setting("memory_bank") == ("b", "config/settings.json")
     with pytest.raises(KeyError):

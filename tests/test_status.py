@@ -161,7 +161,7 @@ def test_memory_projects_chats_and_the_settings(world, monkeypatch, tmp_path):
     monkeypatch.setattr(cli.Path, "home", classmethod(lambda cls: tmp_path / "home"))  # brief 27: no install there
     doc = _status(world)
     assert doc["memory"] == {"setting": "auto", "online": True, "starting": False, "documents": 13, "installed": False,
-                             "newest": 3, "matches": 5}  # brief 29.1 (decision 25)
+                             "newest": 3, "matches": 5, "problem": None}  # brief 29.1 (decision 25); the memory brief
     assert (doc["projects"], doc["chats"], doc["serve_port"]) == ([], [], 8765)
     assert "report_path" not in doc
     assert doc["projects_root"] == "~/Projects"  # brief 26 (decision 8): the default, from code
@@ -171,7 +171,8 @@ def test_memory_projects_chats_and_the_settings(world, monkeypatch, tmp_path):
     assert _status(world)["projects_root"] == "~/Desktop/garden-projects"  # as written, `~` and all
     monkeypatch.setattr(cli.memory, "client", lambda *a, **k: FakeStore(up=False))
     assert _status(world)["memory"] == {"setting": "auto", "online": False, "starting": False, "documents": None,
-                                        "installed": False, "newest": 3, "matches": 5}  # brief 29.1 (decision 25)
+                                        "installed": False, "newest": 3, "matches": 5,  # brief 29.1 (decision 25)
+                                        "problem": None}  # the memory brief
 
 
 def test_memory_installed_reads_the_hindsight_binary_in_the_home_folder(world, monkeypatch, tmp_path):

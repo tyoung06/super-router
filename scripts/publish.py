@@ -44,8 +44,11 @@ ALLOW_FILES = frozenset({"config/agents.json", "config/presets.json", "config/se
 LABEL_TESTS = ("tests/test_labeltest_claude.py", "tests/test_labeltest_jev.py", "tests/test_labeltest_report.py",
                "tests/test_labeltest_round3.py", "tests/test_labeltest_round4.py", "tests/test_labeltest_score.py",
                "tests/test_labeltest_proof4.py")  # brief 32, P: the Proof 4 harness lives in labeltest/ too
-NEVER_FILES = frozenset({"NOTES.md", "SUPER-ROUTER-HANDOFF.md", "SUPER-ROUTER.md", "CLAUDE.md", "AGENTS.md", *LABEL_TESTS})
-NEVER_DIRS = ("labeltest/", ".claude/", "publish/")  # publish/: the workflow's source, placed in the copy, never copied
+# The memory brief (F9): the answer key's replay and its tests need memtest/, so they stay private with it, as labeltest/'s do.
+MEMTEST_TESTS = ("tests/test_memtest_key.py", "tests/test_memtest_replay.py", "tests/test_memtest_jev.py")
+NEVER_FILES = frozenset({"NOTES.md", "SUPER-ROUTER-HANDOFF.md", "SUPER-ROUTER.md", "CLAUDE.md", "AGENTS.md", *LABEL_TESTS,
+                         *MEMTEST_TESTS})
+NEVER_DIRS = ("labeltest/", "memtest/", ".claude/", "publish/")  # publish/: the workflow's source, placed in the copy, never copied
 # Made at each publish, in the copy only: published path -> its source at HEAD.
 MADE = {"docs/RULES.md": "SUPER-ROUTER.md", ".github/workflows/ci.yml": "publish/ci.yml"}
 

@@ -137,10 +137,25 @@ def grok_timeout_minutes():
     return value if _positive_int(value) else None
 
 
+MEMORY_PROBLEM = "the memory setting isn't auto or off, so memory is off"
+
+
 def memory_mode():
-    """`auto` (the default) or `off` (rules v2.30, Memory, Down). Read and shown in brief 21; brief 22 acts on it."""
-    value = _read().get("memory")
-    return value if value in MEMORY_MODES else "auto"
+    """`auto` (the default) or `off` (rules v2.30, Memory, Down). Read and shown in brief 21; brief 22 acts on it. The
+    memory brief (fix 1, rules 2.56): a missing key means `auto`; any value but `auto` or `off` reads as `off`, so a typo
+    can never turn memory on (`memory_problem` says so)."""
+    doc = _read()
+    if "memory" not in doc:
+        return "auto"
+    value = doc["memory"]
+    return value if value in MEMORY_MODES else "off"
+
+
+def memory_problem():
+    """The memory brief (fix 1): the line for a `memory` value that is neither `auto` nor `off`, never echoing the value;
+    None when the setting is fine or missing."""
+    doc = _read()
+    return MEMORY_PROBLEM if "memory" in doc and doc["memory"] not in MEMORY_MODES else None
 
 
 class SettingsError(safety.SafeError):
@@ -176,7 +191,7 @@ def set_memory(mode):
             raise SettingsError(f"{LOCAL_NAME} is not a JSON object")
         perms = stat.S_IMODE(os.stat(path).st_mode)
     was = memory_mode()
-    if was == mode:
+    if was == mode and memory_problem() is None:  # the memory brief (fix 1): a bad value is rewritten as asked
         return was, False
     doc["memory"] = mode
     fd, temp = tempfile.mkstemp(dir=str(path.parent), prefix=".settings.local.", suffix=".tmp")
@@ -260,13 +275,15 @@ MEMORY_DEFAULTS = {
     "memory_bank": "super-router",
     "memory_newest": 3,   # brief 29.1 (decision 25): the tag's newest delivered tasks, first, never ranked
     "memory_matches": 5,  # ...then up to five search matches not among them (in place of memory_max_items 5)
-    "memory_max_chars": 2000,
+    "memory_max_chars": 8000,  # the memory brief (step 6): at 2,000, 20 of the 39 stored tasks were cut
     "memory_query_chars": 1500,
+    "memory_fetch_tokens": 2000,  # the memory brief (steps 4 and 5): the recall's token cap; 8,000 read 7 more Wrong
+    # memories on the answer key, so the owner chose 2,000 (option A at stop 3, 5 Nov)
 }
 
 
 def memory_setting(name):
-    """(value, where it came from) for one of the six memory keys. KeyError on any other name."""
+    """(value, where it came from) for one of the seven memory keys. KeyError on any other name."""
     default = MEMORY_DEFAULTS[name]
     doc = _read()
     if name not in doc:

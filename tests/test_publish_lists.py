@@ -53,6 +53,15 @@ def test_the_never_public_tests_are_exactly_the_ones_that_need_labeltest():
     assert sorted(publish.LABEL_TESTS) == needs
 
 
+@pytest.mark.skipif(not (ROOT / "memtest").exists(), reason="memtest/ is not in this copy")
+def test_the_never_public_tests_are_exactly_the_ones_that_need_memtest():
+    needs = sorted(f"tests/{p.name}" for p in (ROOT / "tests").glob("test_*.py")
+                   if re.search(r"^(from|import) memtest", p.read_text(), re.M))
+    assert sorted(publish.MEMTEST_TESTS) == needs and needs
+    assert all(publish.classify(path) == "never" for path in needs)
+    assert publish.classify("memtest/key.py") == "never"  # the memory brief (F9): private, like labeltest/
+
+
 def test_is_binary():
     assert publish.is_binary(b"\x89PNG\r\n\x1a\n\x00\x00")
     assert publish.is_binary(b"\xff\xfe not utf-8")

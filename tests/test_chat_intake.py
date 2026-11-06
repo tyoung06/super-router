@@ -184,6 +184,6 @@ def test_the_six_memory_keys_are_in_the_shipped_settings_file():  # brief 29.1 (
     assert settings.memory_setting("memory_bank") == ("super-router", "config/settings.json")
     assert settings.memory_setting("memory_newest") == (3, "config/settings.json")
     assert settings.memory_setting("memory_matches") == (5, "config/settings.json")
-    assert settings.memory_setting("memory_max_chars") == (2000, "config/settings.json")
+    assert settings.memory_setting("memory_max_chars") == (8000, "config/settings.json")  # the memory brief, step 6
     assert settings.memory_setting("memory_query_chars") == (1500, "config/settings.json")
     assert settings.grok_prompt_limit() == (3662, "config/settings.json")
